@@ -1,0 +1,8 @@
+{
+  "name": "Remix: Maxillofacial Implant CAD Verification",
+  "description": "Automated in-browser geometric and specification compliance checking for surgical maxillofacial implants using 3D solid modeling rules and AI RAG analysis.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
