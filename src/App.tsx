@@ -19,6 +19,78 @@ import { autoGenerateFaceMapping, classifyBRepFaces } from "./utils/geometryClas
 import CadCanvas3D from "./components/CadCanvas3D";
 import * as THREE from "three";
 
+const DATUM_PARSE_REVISION = "target-point-plane-projection-drf-v10";
+
+const getDatumRenderKind = (datum: any): "twoFaceDimension" | "medianPlane" | "multiface" => {
+  if (datum?.derivedDatum === "twoFaceDimension") return "twoFaceDimension";
+  if (datum?.derivedDatum === "medianPlane") return "medianPlane";
+
+  const semanticText = `${datum?.type || ""} ${datum?.targetName || ""} ${datum?.clinicalContext || ""}`;
+  if (/two-face|linear dimension|dimensional location|dimensioned planar faces/i.test(semanticText)) {
+    return "twoFaceDimension";
+  }
+  if (/median plane|centre of symmetry|center of symmetry/i.test(semanticText)) {
+    return "medianPlane";
+  }
+  return "multiface";
+};
+
+const getDatumRenderKindForFaces = (
+  datum: any,
+  mappedFaceNames: string[]
+): "twoFaceDimension" | "medianPlane" | "multiface" => {
+  const baseKind = getDatumRenderKind(datum);
+  if (baseKind !== "multiface") return baseKind;
+
+  const semanticText = `${datum?.type || ""} ${datum?.targetName || ""} ${datum?.clinicalContext || ""}`;
+  const typeText = `${datum?.type || ""}`;
+  const isTwoPlanarDatumFeature =
+    mappedFaceNames.length === 2 &&
+    /^Planar Datum Feature$/i.test(typeText.trim());
+  const isExplicitMultiFeature = /primary flat|pattern|cylind|hole|bore|target set/i.test(semanticText);
+  return isTwoPlanarDatumFeature && !isExplicitMultiFeature ? "twoFaceDimension" : "multiface";
+};
+
+const getDatumDisplayName = (datum: any, faceCount: number): string => {
+  const count = Math.max(faceCount, Array.isArray(datum?.targetIds) ? datum.targetIds.length : 0);
+  const datumName = datum?.name || (datum?.identifier ? `Datum ${datum.identifier}` : "Datum");
+  const kind = getDatumRenderKind(datum);
+
+  if (kind === "twoFaceDimension" && count > 1) {
+    return `${datumName} dimensional location (${count} faces)`;
+  }
+  if (kind === "medianPlane" && count > 1) {
+    return `${datumName} median plane (${count} faces)`;
+  }
+  if (count > 1) {
+    return `${datumName} pattern (${count} faces)`;
+  }
+  return datum?.targetName || datumName;
+};
+
+const normalizeSelectedDatumEntity = (entity: any | null, datums?: any[]): any | null => {
+  if (!entity) return entity;
+  const nameMatch = `${entity.name || ""}`.match(/^Datum\s+([A-Z])\s+(?:pattern|dimensional location|median plane)\s+\((\d+)\s+faces\)/i);
+  const identifier = entity.datumIdentifier || nameMatch?.[1];
+  if (!identifier) return entity;
+
+  const datum = datums?.find((candidate) => candidate.identifier === identifier);
+  const faceCount = entity.relatedFaces?.length || (nameMatch?.[2] ? Number(nameMatch[2]) : 0);
+  if (!datum) return entity;
+
+  const datumKind = getDatumRenderKindForFaces(datum, entity.relatedFaces || []);
+  const isDimensionDatum = (datumKind === "twoFaceDimension" || datumKind === "medianPlane") && faceCount > 1;
+
+  return {
+    ...entity,
+    id: isDimensionDatum ? `Datum-${identifier}-Dimension` : entity.id,
+    type: isDimensionDatum ? "datum" : entity.type,
+    datumIdentifier: identifier,
+    datumKind,
+    name: getDatumDisplayName(datum, faceCount),
+  };
+};
+
 // High-fidelity procedural generator that builds multiple discrete, selectable B-Rep Faces and Edges
 // This models a real OpenCascades CAD output with perfect monolithic extrusion topology.
 function generateProceduralReconPlate(
@@ -380,6 +452,7 @@ export default function App() {
   const [presetResetNonce, setPresetResetNonce] = useState<number>(0);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const parsedRevisionRef = useRef<string>("");
 
   // Dynamic Open Cascade kernel initialization
   useEffect(() => {
@@ -481,6 +554,18 @@ export default function App() {
     }
   }, [occtParsedResult, parsedMetadata]);
 
+  useEffect(() => {
+    if (!parsedMetadata?.rawText) return;
+
+    const revisionKey = `${parsedMetadata.fileName}|${parsedMetadata.rawText.length}|${DATUM_PARSE_REVISION}`;
+    if (parsedRevisionRef.current === revisionKey) return;
+    parsedRevisionRef.current = revisionKey;
+
+    const reparsed = parseStepFile(parsedMetadata.fileName, parsedMetadata.rawText);
+    setParsedMetadata(reparsed);
+    setSelectedEntity(null);
+  }, [parsedMetadata?.fileName, parsedMetadata?.rawText, DATUM_PARSE_REVISION]);
+
   // Standard preset models
   const loadDefaultPreset = () => {
     setIsTessellating(true);
@@ -554,6 +639,9 @@ export default function App() {
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
   };
+
+  const selectedEntityView = normalizeSelectedDatumEntity(selectedEntity, parsedMetadata?.datums);
+  const datumCanvasKey = `${parsedMetadata?.fileName || "no-file"}:${parsedMetadata?.rawText?.length || 0}:${DATUM_PARSE_REVISION}`;
 
   return (
     <div className="h-screen w-screen bg-slate-50 text-slate-800 flex flex-col font-sans selection:bg-blue-100 selection:text-blue-900 overflow-hidden" id="app_root_viewport">
@@ -657,14 +745,15 @@ export default function App() {
             </div>
           )}
           <CadCanvas3D
+            key={datumCanvasKey}
             occtResult={occtParsedResult}
             isLoading={isTessellating}
             viewMode={viewMode}
             wireframeOverlay={wireframeOverlay}
             materialType={materialType}
             autoRotate={autoRotate}
-            selectedEntityId={selectedEntity ? selectedEntity.id : null}
-            selectedRelatedEntityIds={selectedEntity?.relatedFaces || []}
+            selectedEntityId={selectedEntityView ? selectedEntityView.id : null}
+            selectedRelatedEntityIds={selectedEntityView?.relatedFaces || []}
             hoveredEntityId={hoveredEntityId}
             focusEntityRequest={focusEntityRequest}
             measurementMode={measurementMode && !bindingMode}
@@ -682,7 +771,7 @@ export default function App() {
                 setBindingMode(null);
                 return;
               }
-              setSelectedEntity(entity);
+              setSelectedEntity(normalizeSelectedDatumEntity(entity, parsedMetadata?.datums));
               if (entity) {
                 setMobileView("inspector");
                 if (entity.id.startsWith("BRepFace-") || entity.id.startsWith("BRepEdge-")) {
@@ -700,9 +789,12 @@ export default function App() {
             }}
             datums={parsedMetadata?.datums}
             datumTargets={parsedMetadata?.datumTargets}
+            datumReferenceFrames={parsedMetadata?.datumReferenceFrames}
+            tolerances={parsedMetadata?.tolerances}
             faceRecords={parsedMetadata?.faceRecords}
             cylinderIds={parsedMetadata?.cylinderIds}
             customFaceMapping={customFaceMapping}
+            showBrepOverlays={activeTab === "brep"}
           />
 
           {/* FLOATING VIEWPORT UTILITY DECK */}
@@ -893,15 +985,26 @@ export default function App() {
                         </span>
                       </div>
                       <div className="min-w-0">
-                        <div className="truncate text-xs font-black text-slate-800 font-mono" title={selectedEntity.name}>
-                          {selectedEntity.name}
+                        <div className="truncate text-xs font-black text-slate-800 font-mono" title={selectedEntityView?.name || selectedEntity.name}>
+                          {selectedEntityView?.name || selectedEntity.name}
                         </div>
                         <div className="mt-0.5 truncate text-[10px] font-bold text-slate-500 font-mono" title={selectedEntity.id}>
                           {selectedEntity.id}
                         </div>
                       </div>
                       <div className="grid grid-cols-2 gap-2 text-[10px] font-mono">
-                        {selectedEntity.type === "face" ? (
+                        {selectedEntity.type === "datum" ? (
+                          <>
+                            <div className="rounded border border-slate-100 bg-slate-50 p-1.5">
+                              <span className="block text-[8px] font-black uppercase text-slate-400">Kind</span>
+                              <span className="font-black text-slate-800">{selectedEntity.datumKind || "datum"}</span>
+                            </div>
+                            <div className="rounded border border-slate-100 bg-slate-50 p-1.5">
+                              <span className="block text-[8px] font-black uppercase text-slate-400">Refs</span>
+                              <span className="font-black text-slate-800">{selectedEntity.relatedFaces?.length || 0} faces</span>
+                            </div>
+                          </>
+                        ) : selectedEntity.type === "face" ? (
                           <>
                             <div className="rounded border border-slate-100 bg-slate-50 p-1.5">
                               <span className="block text-[8px] font-black uppercase text-slate-400">Triangles</span>
@@ -1211,16 +1314,6 @@ export default function App() {
                                 const tId = targetId ? (targetId.startsWith("#") ? targetId : `#${targetId}`) : "";
                                 if (!tId) return "";
 
-                                const directIdx = currentFaceRecords.findIndex(f => f.id === tId);
-                                if (directIdx !== -1) {
-                                  return `BRepFace-${directIdx}`;
-                                }
-
-                                const indirectIdx = currentFaceRecords.findIndex(f => f.referencedIds.includes(tId));
-                                if (indirectIdx !== -1) {
-                                  return `BRepFace-${indirectIdx}`;
-                                }
-
                                 if (customFaceMapping[tId]) {
                                   return customFaceMapping[tId];
                                 }
@@ -1229,6 +1322,16 @@ export default function App() {
                                 }
                                 if (allowIdentifierFallback && customFaceMapping[d.identifier]) {
                                   return customFaceMapping[d.identifier];
+                                }
+
+                                const directIdx = currentFaceRecords.findIndex(f => f.id === tId);
+                                if (directIdx !== -1) {
+                                  return `BRepFace-${directIdx}`;
+                                }
+
+                                const indirectIdx = currentFaceRecords.findIndex(f => f.referencedIds.includes(tId));
+                                if (indirectIdx !== -1) {
+                                  return `BRepFace-${indirectIdx}`;
                                 }
 
                                 const cylIdx = currentCylinderIds.indexOf(tId);
@@ -1244,9 +1347,13 @@ export default function App() {
                                 .filter((faceId, index, all) => !!faceId && all.indexOf(faceId) === index);
 
                               let resolvedId = relatedFaces[0] || d.targetId || "";
-                              let resolvedName = datumTargetIds.length > 1
-                                ? `${d.name} pattern (${datumTargetIds.length} faces)`
-                                : d.targetName || d.name;
+                              const datumRenderKind = getDatumRenderKindForFaces(d, relatedFaces);
+                              const faceCount = Math.max(relatedFaces.length, datumTargetIds.length);
+                              let resolvedName = datumRenderKind === "twoFaceDimension" && faceCount > 1
+                                ? `${d.name} dimensional location (${faceCount} faces)`
+                                : datumRenderKind === "medianPlane" && faceCount > 1
+                                ? `${d.name} median plane (${faceCount} faces)`
+                                : getDatumDisplayName(d, faceCount);
 
                               if (customFaceMapping[d.identifier]) {
                                 resolvedId = customFaceMapping[d.identifier];
@@ -1256,7 +1363,16 @@ export default function App() {
                                 resolvedId = resolveDatumTargetToFace(d.targetId || "", true) || d.targetId || "";
                               }
 
-                              setSelectedEntity({ id: resolvedId, name: resolvedName, type: "face", relatedFaces });
+                              setSelectedEntity({
+                                id: datumRenderKind === "twoFaceDimension" || datumRenderKind === "medianPlane"
+                                  ? `Datum-${d.identifier}-Dimension`
+                                  : resolvedId,
+                                name: resolvedName,
+                                type: datumRenderKind === "twoFaceDimension" || datumRenderKind === "medianPlane" ? "datum" : "face",
+                                relatedFaces,
+                                datumIdentifier: d.identifier,
+                                datumKind: datumRenderKind,
+                              });
                               setMobileView("viewport");
                             }}
                           >
@@ -1372,6 +1488,60 @@ export default function App() {
                               </div>
                               <div className="text-slate-700 truncate mt-0.5" title={target.targetName}>
                                 {target.targetName}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {parsedMetadata?.datumReferenceFrames && parsedMetadata.datumReferenceFrames.length > 0 && (
+                    <div className="bg-indigo-50/45 p-2.5 rounded-xl border border-indigo-200/80 space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[9.5px] uppercase font-black tracking-wider text-indigo-700 font-mono flex items-center gap-1.5">
+                          <span className="inline-block w-1.5 h-1.5 bg-indigo-600 rounded-full"></span>
+                          Datum Reference Frames
+                        </span>
+                        <span className="text-[8.5px] bg-indigo-100 text-indigo-700 font-bold px-1.5 py-0.2 rounded-md font-mono">
+                          {parsedMetadata.datumReferenceFrames.length} Frames
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        {parsedMetadata.datumReferenceFrames.map((frame) => (
+                          <div
+                            key={frame.id}
+                            className="bg-white border border-indigo-200 p-2 rounded-lg hover:border-indigo-400 transition"
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0">
+                                <div className="text-[11px] font-black text-indigo-800 font-mono truncate" title={frame.name}>
+                                  {frame.name}
+                                </div>
+                                <div className="text-[8.5px] text-slate-400 font-bold font-mono">
+                                  {frame.entityId}
+                                </div>
+                              </div>
+                              <span className="text-[9px] font-black bg-indigo-700 text-white px-1.5 py-0.5 rounded font-mono shrink-0">
+                                {frame.toleranceEntityIds.length} FCF
+                              </span>
+                            </div>
+
+                            <div className="mt-1.5 bg-indigo-50/70 border border-dashed border-indigo-200 rounded p-1.5">
+                              <div className="text-[10.5px] text-indigo-900 font-black font-mono truncate" title={frame.label}>
+                                {frame.label}
+                              </div>
+                              <div className="mt-1 flex flex-wrap gap-1">
+                                {frame.references.map((reference, idx) => (
+                                  <span
+                                    key={`${reference.compartmentId}-${reference.datumIdentifier}-${idx}`}
+                                    className="text-[8px] bg-white border border-indigo-200 text-indigo-700 font-black px-1 py-0.5 rounded font-mono"
+                                    title={`${reference.datumEntityId}${reference.targetIds?.length ? ` -> ${reference.targetIds.join(", ")}` : ""}`}
+                                  >
+                                    {reference.precedence}: {reference.datumIdentifier}
+                                  </span>
+                                ))}
                               </div>
                             </div>
                           </div>
@@ -1528,6 +1698,20 @@ export default function App() {
                             </div>
                           </div>
 
+                          {t.datumReferenceFrame && (
+                            <div className="bg-indigo-50/70 p-1.5 rounded border border-indigo-100 text-[10px] font-mono">
+                              <div className="flex justify-between gap-2">
+                                <span className="text-indigo-500 font-sans font-bold text-[8.5px] uppercase tracking-wider">
+                                  DATUM REFERENCE FRAME
+                                </span>
+                                <span className="text-indigo-700 font-black shrink-0">{t.datumReferenceFrame.entityId}</span>
+                              </div>
+                              <div className="mt-0.5 text-indigo-900 font-black truncate" title={t.datumReferenceFrame.label}>
+                                {t.datumReferenceFrame.label}
+                              </div>
+                            </div>
+                          )}
+
                           {/* Orthopedic Justification Clinical Context Section */}
                           <div className="text-[10px] text-slate-600 leading-relaxed pl-1.5 border-l-2 border-slate-300 italic font-medium bg-slate-50/30 py-0.5">
                             {t.clinicalContext}
@@ -1542,127 +1726,142 @@ export default function App() {
           </div>
 
           {/* ACTIVE SELECTION INFO PANEL (MOUNTED STATICALLY AT BOTTOM OF SIDEBAR) */}
-          <div className="border-t border-slate-100 pt-3 shrink-0 min-w-0">
-            {selectedEntity ? (
-              <div className="space-y-3 flex flex-col min-w-0">
-                <div className="space-y-1">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[9px] text-emerald-600 font-bold tracking-widest uppercase block font-mono">Bound Geometry Entity</span>
-                    <button
-                      onClick={() => setSelectedEntity(null)}
-                      className="text-[10px] text-slate-400 hover:text-slate-650 font-bold hover:underline"
-                    >
-                      CLEAR
-                    </button>
-                  </div>
-                  <div className="flex items-center gap-2 mt-1 min-w-0">
-                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse animate-duration-1000" />
-                    <h3 className="text-xs font-bold text-slate-800 uppercase font-mono truncate min-w-0 max-w-[80%]" title={selectedEntity.name}>
-                      {selectedEntity.name}
-                    </h3>
-                  </div>
-                </div>
-
-                <div className="space-y-2 min-w-0">
-                  <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-150 space-y-1.5 text-[10.5px] font-mono min-w-0 overflow-hidden">
-                    <div className="flex justify-between gap-2 pb-1 border-b border-slate-200/50 min-w-0">
-                      <span className="text-slate-500 shrink-0">Surface ID:</span>
-                      <span className="text-slate-900 font-black min-w-0 max-w-[65%] truncate text-right" title={selectedEntity.id}>{selectedEntity.id}</span>
+          {activeTab === "brep" && (
+            <div className="border-t border-slate-100 pt-3 shrink-0 min-w-0">
+              {selectedEntity ? (
+                <div className="space-y-3 flex flex-col min-w-0">
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[9px] text-emerald-600 font-bold tracking-widest uppercase block font-mono">Bound Geometry Entity</span>
+                      <button
+                        onClick={() => setSelectedEntity(null)}
+                        className="text-[10px] text-slate-400 hover:text-slate-650 font-bold hover:underline"
+                      >
+                        CLEAR
+                      </button>
                     </div>
-                    
-                    {selectedEntity.type === 'face' ? (
-                      <>
-                        <div className="flex justify-between gap-2 pb-1 border-b border-slate-200/50 min-w-0">
-                          <span className="text-slate-500 shrink-0">Triangles:</span>
-                          <span className="text-slate-900 font-bold min-w-0 max-w-[65%] truncate text-right">{selectedEntity.triangles}</span>
+                    <div className="flex items-center gap-2 mt-1 min-w-0">
+                      <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse animate-duration-1000" />
+                      <h3 className="text-xs font-bold text-slate-800 uppercase font-mono truncate min-w-0 max-w-[80%]" title={selectedEntityView?.name || selectedEntity.name}>
+                        {selectedEntityView?.name || selectedEntity.name}
+                      </h3>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 min-w-0">
+                    <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-150 space-y-1.5 text-[10.5px] font-mono min-w-0 overflow-hidden">
+                      <div className="flex justify-between gap-2 pb-1 border-b border-slate-200/50 min-w-0">
+                        <span className="text-slate-500 shrink-0">{selectedEntity.type === "datum" ? "Datum ID:" : "Surface ID:"}</span>
+                        <span className="text-slate-900 font-black min-w-0 max-w-[65%] truncate text-right" title={selectedEntity.id}>{selectedEntity.id}</span>
+                      </div>
+                      
+                      {selectedEntity.type === 'datum' ? (
+                        <>
+                          <div className="flex justify-between gap-2 pb-1 border-b border-slate-200/50 min-w-0">
+                            <span className="text-slate-500 shrink-0">Datum Kind:</span>
+                            <span className="text-slate-900 font-bold min-w-0 max-w-[65%] truncate text-right">{selectedEntity.datumKind || "datum"}</span>
+                          </div>
+                          <div className="flex justify-between gap-2 min-w-0">
+                            <span className="text-slate-500 shrink-0">Reference Faces:</span>
+                            <span className="text-blue-600 font-black min-w-0 max-w-[65%] text-right break-words">
+                              {selectedEntity.relatedFaces?.length ? selectedEntity.relatedFaces.join(", ") : "n/a"}
+                            </span>
+                          </div>
+                        </>
+                      ) : selectedEntity.type === 'face' ? (
+                        <>
+                          <div className="flex justify-between gap-2 pb-1 border-b border-slate-200/50 min-w-0">
+                            <span className="text-slate-500 shrink-0">Triangles:</span>
+                            <span className="text-slate-900 font-bold min-w-0 max-w-[65%] truncate text-right">{selectedEntity.triangles}</span>
+                          </div>
+                          <div className="flex justify-between gap-2 min-w-0">
+                            <span className="text-slate-500 shrink-0">Surface Area:</span>
+                            <span className="text-blue-600 font-black min-w-0 max-w-[65%] truncate text-right">{selectedEntity.area} mm²</span>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <div className="flex justify-between gap-2 pb-1 border-b border-slate-200/50 min-w-0">
+                            <span className="text-slate-550 shrink-0">Type:</span>
+                            <span className="text-slate-900 font-bold min-w-0 max-w-[65%] truncate text-right">EDGE_CURVE</span>
+                          </div>
+                          <div className="flex justify-between gap-2 pb-1 border-b border-slate-200/50 min-w-0">
+                            <span className="text-slate-550 shrink-0">Adjacent Faces:</span>
+                            <span className="text-slate-900 font-bold min-w-0 max-w-[65%] text-right break-words">
+                              {selectedEntity.parentFaceIndices?.length
+                                ? selectedEntity.parentFaceIndices.map((faceIdx: number) => `F${faceIdx + 1}`).join(", ")
+                                : "Boundary"}
+                            </span>
+                          </div>
+                          <div className="flex justify-between gap-2 min-w-0">
+                            <span className="text-slate-550 shrink-0">Tessellated Length:</span>
+                            <span className="text-blue-600 font-bold min-w-0 max-w-[65%] truncate text-right">{selectedEntity.length} mm</span>
+                          </div>
+                        </>
+                      )}
+                    </div>
+
+                    {selectedEntity.point ? (
+                      <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-150 space-y-1.5 text-[10px] font-mono min-w-0 overflow-hidden">
+                        <span className="text-[9.5px] text-slate-500 uppercase font-black block mb-1">Probe Cartesian Coordinate</span>
+                        <div className="flex justify-between gap-2 min-w-0">
+                          <span className="text-slate-500 shrink-0">X-Coord:</span>
+                          <span className="text-slate-800 font-black min-w-0 max-w-[65%] truncate text-right">{selectedEntity.point.x} mm</span>
                         </div>
                         <div className="flex justify-between gap-2 min-w-0">
-                          <span className="text-slate-500 shrink-0">Surface Area:</span>
-                          <span className="text-blue-600 font-black min-w-0 max-w-[65%] truncate text-right">{selectedEntity.area} mm²</span>
+                          <span className="text-slate-550 shrink-0">Y-Coord:</span>
+                          <span className="text-slate-800 font-black min-w-0 max-w-[65%] truncate text-right">{selectedEntity.point.y} mm</span>
                         </div>
-                      </>
+                        <div className="flex justify-between gap-2 min-w-0">
+                          <span className="text-slate-550 shrink-0">Z-Coord:</span>
+                          <span className="text-slate-800 font-black min-w-0 max-w-[65%] truncate text-right">{selectedEntity.point.z} mm</span>
+                        </div>
+                      </div>
                     ) : (
-                      <>
-                        <div className="flex justify-between gap-2 pb-1 border-b border-slate-200/50 min-w-0">
-                          <span className="text-slate-550 shrink-0">Type:</span>
-                          <span className="text-slate-900 font-bold min-w-0 max-w-[65%] truncate text-right">EDGE_CURVE</span>
-                        </div>
-                        <div className="flex justify-between gap-2 pb-1 border-b border-slate-200/50 min-w-0">
-                          <span className="text-slate-550 shrink-0">Adjacent Faces:</span>
-                          <span className="text-slate-900 font-bold min-w-0 max-w-[65%] text-right break-words">
-                            {selectedEntity.parentFaceIndices?.length
-                              ? selectedEntity.parentFaceIndices.map((faceIdx: number) => `F${faceIdx + 1}`).join(", ")
-                              : "Boundary"}
-                          </span>
-                        </div>
-                        <div className="flex justify-between gap-2 min-w-0">
-                          <span className="text-slate-550 shrink-0">Tessellated Length:</span>
-                          <span className="text-blue-600 font-bold min-w-0 max-w-[65%] truncate text-right">{selectedEntity.length} mm</span>
-                        </div>
-                      </>
+                      <div className="bg-slate-50/80 p-3 rounded-lg border border-slate-150 text-[10px] text-slate-400 font-mono text-center italic">
+                        No specific 3D coordinate point clicked. Use the visualizer raycaster to probe a tactile spot.
+                      </div>
                     )}
                   </div>
 
-                  {selectedEntity.point ? (
-                    <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-150 space-y-1.5 text-[10px] font-mono min-w-0 overflow-hidden">
-                      <span className="text-[9.5px] text-slate-500 uppercase font-black block mb-1">Probe Cartesian Coordinate</span>
-                      <div className="flex justify-between gap-2 min-w-0">
-                        <span className="text-slate-500 shrink-0">X-Coord:</span>
-                        <span className="text-slate-800 font-black min-w-0 max-w-[65%] truncate text-right">{selectedEntity.point.x} mm</span>
-                      </div>
-                      <div className="flex justify-between gap-2 min-w-0">
-                        <span className="text-slate-550 shrink-0">Y-Coord:</span>
-                        <span className="text-slate-800 font-black min-w-0 max-w-[65%] truncate text-right">{selectedEntity.point.y} mm</span>
-                      </div>
-                      <div className="flex justify-between gap-2 min-w-0">
-                        <span className="text-slate-550 shrink-0">Z-Coord:</span>
-                        <span className="text-slate-800 font-black min-w-0 max-w-[65%] truncate text-right">{selectedEntity.point.z} mm</span>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="bg-slate-50/80 p-3 rounded-lg border border-slate-150 text-[10px] text-slate-400 font-mono text-center italic">
-                      No specific 3D coordinate point clicked. Use the visualizer raycaster to probe a tactile spot.
-                    </div>
-                  )}
+                  <button
+                    onClick={() => {
+                      const px = selectedEntity.point?.x ?? 0;
+                      const py = selectedEntity.point?.y ?? 0;
+                      const pz = selectedEntity.point?.z ?? 0;
+                      copyToClipboard(`ID: ${selectedEntity.id}, Point: X=${px} Y=${py} Z=${pz}`);
+                    }}
+                    className="w-full py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold font-sans flex items-center justify-center gap-1.5 cursor-pointer transition shadow-xs"
+                  >
+                    <Copy className="w-3 h-3" />
+                    Copy Coordinates
+                  </button>
                 </div>
-
-                <button
-                  onClick={() => {
-                    const px = selectedEntity.point?.x ?? 0;
-                    const py = selectedEntity.point?.y ?? 0;
-                    const pz = selectedEntity.point?.z ?? 0;
-                    copyToClipboard(`ID: ${selectedEntity.id}, Point: X=${px} Y=${py} Z=${pz}`);
-                  }}
-                  className="w-full py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold font-sans flex items-center justify-center gap-1.5 cursor-pointer transition shadow-xs"
-                >
-                  <Copy className="w-3 h-3" />
-                  Copy Coordinates
-                </button>
-              </div>
-            ) : hoveredEntity ? (
-              <div className="p-3 border border-dashed border-slate-200 bg-slate-50 rounded-xl">
-                <div className="space-y-1 text-center">
-                  <div className="text-[9px] text-slate-400 font-mono uppercase tracking-wider">Hovering Entity_</div>
-                  <div className="text-xs font-bold font-mono text-blue-600 uppercase truncate max-w-full" title={hoveredEntity.name}>
-                    {hoveredEntity.name}
-                  </div>
-                  <div className="text-[10px] text-slate-500 font-sans leading-relaxed">
-                    Click to lock coordinates & inspect.
+              ) : hoveredEntity ? (
+                <div className="p-3 border border-dashed border-slate-200 bg-slate-50 rounded-xl">
+                  <div className="space-y-1 text-center">
+                    <div className="text-[9px] text-slate-400 font-mono uppercase tracking-wider">Hovering Entity_</div>
+                    <div className="text-xs font-bold font-mono text-blue-600 uppercase truncate max-w-full" title={hoveredEntity.name}>
+                      {hoveredEntity.name}
+                    </div>
+                    <div className="text-[10px] text-slate-500 font-sans leading-relaxed">
+                      Click to lock coordinates & inspect.
+                    </div>
                   </div>
                 </div>
-              </div>
-            ) : (
-              <div className="p-3 border border-dashed border-slate-200 rounded-xl bg-slate-50/50">
-                <div className="flex flex-col items-center justify-center text-center">
-                  <HelpCircle className="w-6 h-6 text-slate-350 mb-1.5" />
-                  <p className="text-[9px] text-slate-500 font-mono uppercase tracking-wider font-bold">Tactile Selection</p>
-                  <p className="text-[10px] text-slate-450 mt-1 font-sans leading-relaxed">
-                    Hover and click any B-Rep face or edge boundary in the viewport to inspect CAD specifications.
-                  </p>
+              ) : (
+                <div className="p-3 border border-dashed border-slate-200 rounded-xl bg-slate-50/50">
+                  <div className="flex flex-col items-center justify-center text-center">
+                    <HelpCircle className="w-6 h-6 text-slate-350 mb-1.5" />
+                    <p className="text-[9px] text-slate-500 font-mono uppercase tracking-wider font-bold">Tactile Selection</p>
+                    <p className="text-[10px] text-slate-450 mt-1 font-sans leading-relaxed">
+                      Hover and click any B-Rep face or edge boundary in the viewport to inspect CAD specifications.
+                    </p>
+                  </div>
                 </div>
-              </div>
-            )}
-          </div>
+              )}
+            </div>
+          )}
 
           {errorMsg && (
             <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg p-3 text-[10.5px] font-mono flex gap-2 shrink-0">

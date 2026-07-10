@@ -29,9 +29,23 @@ export interface ParsedStepTolerance {
   symbol: string;      // Unicode GD&T standard symbol
   value: number;       // e.g. 0.05
   targetId: string;    // resolved STEP entity id, e.g. "#123"
+  targetIds?: string[]; // all resolved STEP entities for composite toleranced geometry
+  targetSurfaceTypes?: string[];
   targetName: string;  // e.g. "Main Base Face"
+  hasToleranceModifiers?: boolean;
+  datumReferenceFrame?: ParsedStepDatumReferenceFrame;
   category: "Form" | "Orientation" | "Location" | "Profile" | "Dimension";
   clinicalContext: string; // clinical/medical justification
+}
+
+export interface ParsedStepSurfaceGeometry {
+  surfaceType: "plane" | "cylinder" | "curved" | "unknown";
+  targetId: string;
+  placementId?: string;
+  point?: { x: number; y: number; z: number };
+  normal?: { x: number; y: number; z: number };
+  axis?: { x: number; y: number; z: number };
+  xDirection?: { x: number; y: number; z: number };
 }
 
 export interface ParsedStepDatum {
@@ -43,10 +57,11 @@ export interface ParsedStepDatum {
   symbol: string;      // Symbol like [ A ]
   targetId: string;    // resolved STEP entity id, e.g. "#123"
   targetIds?: string[]; // all resolved STEP entities when one datum feature is built from multiple faces
+  surfaceGeometry?: ParsedStepSurfaceGeometry[];
   semanticTargetIds?: string[];
   presentationTargetPoint?: { x: number; y: number; z: number };
   targetSource?: "semantic" | "presentation";
-  derivedDatum?: "medianPlane" | "axis";
+  derivedDatum?: "medianPlane" | "twoFaceDimension" | "axis";
   targetName: string;  // e.g. "Main Base Face"
   clinicalContext: string; // Dynamic clinical significance
 }
@@ -94,6 +109,34 @@ export interface ParsedStepDatumTarget {
   clinicalContext: string;
 }
 
+export interface ParsedStepDatumReference {
+  precedence: number;
+  datumIdentifier: string;
+  datumEntityId: string;
+  compartmentId: string;
+  modifiers: string[];
+  isCommonDatum?: boolean;
+  targetIds?: string[];
+  surfaceGeometry?: ParsedStepSurfaceGeometry[];
+}
+
+export interface ParsedStepFrameBasis {
+  origin: { x: number; y: number; z: number };
+  xAxis: { x: number; y: number; z: number };
+  yAxis: { x: number; y: number; z: number };
+  zAxis: { x: number; y: number; z: number };
+}
+
+export interface ParsedStepDatumReferenceFrame {
+  id: string;
+  entityId: string;
+  name: string;
+  label: string;
+  references: ParsedStepDatumReference[];
+  toleranceEntityIds: string[];
+  frameBasis?: ParsedStepFrameBasis;
+}
+
 export interface StepParseResult {
   fileName: string;
   fileSize: number;
@@ -113,6 +156,7 @@ export interface StepParseResult {
   tolerances: ParsedStepTolerance[];
   datums: ParsedStepDatum[];
   datumTargets: ParsedStepDatumTarget[];
+  datumReferenceFrames: ParsedStepDatumReferenceFrame[];
   rawText: string;
   faceRecords?: { id: string; referencedIds: string[] }[];
   cylinderIds?: string[];
@@ -352,7 +396,8 @@ export function parseStepFile(fileName: string, text: string): StepParseResult {
     };
   };
 
-  const normalizeVector = (vector: { x: number; y: number; z: number }) => {
+  const normalizeVector = (vector?: { x: number; y: number; z: number } | null) => {
+    if (!vector || typeof vector.x !== "number" || typeof vector.y !== "number" || typeof vector.z !== "number") return null;
     const length = Math.hypot(vector.x, vector.y, vector.z);
     return length > 1e-12
       ? { x: vector.x / length, y: vector.y / length, z: vector.z / length }
@@ -367,6 +412,24 @@ export function parseStepFile(fileName: string, text: string): StepParseResult {
     y: a.z * b.x - a.x * b.z,
     z: a.x * b.y - a.y * b.x
   });
+
+  const dotVector = (
+    a: { x: number; y: number; z: number },
+    b: { x: number; y: number; z: number }
+  ) => a.x * b.x + a.y * b.y + a.z * b.z;
+
+  const projectVectorOntoPlane = (
+    vector: { x: number; y: number; z: number },
+    normal: { x: number; y: number; z: number }
+  ) => {
+    const normalizedNormal = normalizeVector(normal) || { x: 0, y: 0, z: 1 };
+    const component = dotVector(vector, normalizedNormal);
+    return {
+      x: vector.x - normalizedNormal.x * component,
+      y: vector.y - normalizedNormal.y * component,
+      z: vector.z - normalizedNormal.z * component,
+    };
+  };
 
   const getDirection = (entityId: string): { x: number; y: number; z: number } | null => {
     const statement = entityStatements.get(entityId);
@@ -848,11 +911,6 @@ export function parseStepFile(fileName: string, text: string): StepParseResult {
     a: { x: number; y: number; z: number },
     b: { x: number; y: number; z: number }
   ) => ({ x: b.x - a.x, y: b.y - a.y, z: b.z - a.z });
-
-  const dotVector = (
-    a: { x: number; y: number; z: number },
-    b: { x: number; y: number; z: number }
-  ) => a.x * b.x + a.y * b.y + a.z * b.z;
 
   const getDatumTargetPresentationRectangleZone = (
     landingPoint: { x: number; y: number; z: number } | null
@@ -1473,6 +1531,85 @@ export function parseStepFile(fileName: string, text: string): StepParseResult {
     return "unknown";
   };
 
+  const getTargetSurfaceGeometry = (targetId: string): ParsedStepSurfaceGeometry => {
+    const surfaceType = getTargetSurfaceType(targetId);
+    const statement = entityStatements.get(targetId) || "";
+    const refs = statement.match(/#\d+/g) || [];
+    const surfaceId = refs.find((ref) => {
+      const type = getEntityType(ref);
+      return /^(PLANE|CYLINDRICAL_SURFACE|CONICAL_SURFACE|SPHERICAL_SURFACE|TOROIDAL_SURFACE|B_SPLINE_SURFACE)$/i.test(type);
+    }) || (getEntityType(targetId).match(/^(PLANE|CYLINDRICAL_SURFACE|CONICAL_SURFACE|SPHERICAL_SURFACE|TOROIDAL_SURFACE|B_SPLINE_SURFACE)$/i) ? targetId : undefined);
+    const surfaceRefs = surfaceId ? getEntityRefs(surfaceId) : [];
+    const placementId = surfaceRefs.find((ref) => getEntityType(ref) === "AXIS2_PLACEMENT_3D");
+    const placementRefs = placementId ? getEntityRefs(placementId) : [];
+    const rawPoint = placementRefs[0] ? getCartesianPoint(placementRefs[0]) || undefined : undefined;
+    const point = rawPoint ? scalePoint(rawPoint, getDefaultLengthScaleToMillimeters()) : undefined;
+    const axis = placementRefs[1] ? getDirection(placementRefs[1]) || undefined : undefined;
+    const xDirection = placementRefs[2] ? getDirection(placementRefs[2]) || undefined : undefined;
+
+    return {
+      surfaceType,
+      targetId,
+      placementId,
+      point,
+      normal: surfaceType === "plane" ? axis : undefined,
+      axis: surfaceType === "cylinder" ? axis : undefined,
+      xDirection
+    };
+  };
+
+  const getDatumTargetSetSurfaceGeometry = (targets: ParsedStepDatumTarget[]): ParsedStepSurfaceGeometry[] => {
+    const pointEntries: ParsedStepSurfaceGeometry[] = [];
+    for (const target of targets) {
+      const targetArea = target.targetCircle || target.targetZone;
+      if (targetArea && target.targetId) {
+        pointEntries.push({
+          surfaceType: "plane",
+          targetId: target.targetId,
+          point: targetArea.center,
+          normal: targetArea.normal,
+          xDirection: targetArea.xDirection
+        });
+        continue;
+      }
+
+      const rawPoint = target.targetId ? getCartesianPoint(target.targetId) : null;
+      const point = target.targetPoint || (rawPoint ? scalePoint(rawPoint, getDefaultLengthScaleToMillimeters()) : undefined);
+      if (point && target.targetId) {
+        pointEntries.push({
+          surfaceType: "unknown",
+          targetId: target.targetId,
+          point
+        });
+      }
+    }
+
+    if (pointEntries.length < 3) return pointEntries;
+
+    const first = pointEntries[0].point;
+    if (!first) return pointEntries;
+    for (let i = 1; i < pointEntries.length - 1; i++) {
+      for (let j = i + 1; j < pointEntries.length; j++) {
+        const second = pointEntries[i].point;
+        const third = pointEntries[j].point;
+        if (!second || !third) continue;
+        const normal = normalizeVector(crossVector(
+          { x: second.x - first.x, y: second.y - first.y, z: second.z - first.z },
+          { x: third.x - first.x, y: third.y - first.y, z: third.z - first.z }
+        ));
+        if (!normal) continue;
+        return [{
+          surfaceType: "plane",
+          targetId: pointEntries.map((entry) => entry.targetId).join(","),
+          point: pointCentroid(pointEntries.map((entry) => entry.point!).filter(Boolean)) || first,
+          normal
+        }, ...pointEntries];
+      }
+    }
+
+    return pointEntries;
+  };
+
   const describeDatumTarget = (targetId: string, identifier: string) => {
     const surfaceType = getTargetSurfaceType(targetId);
     let typeStr = "Reference Surface Plane";
@@ -1670,15 +1807,15 @@ export function parseStepFile(fileName: string, text: string): StepParseResult {
   const uniqueGeometryTargets = (targets: string[]): string[] =>
     targets.filter((target, index, all) => isGeometryTargetEntity(target) && all.indexOf(target) === index);
 
-  const isMedianPlaneDatumFeature = (featureIds: string[], targetIds: string[]): boolean => {
+  const getPlanarDatumFeatureKind = (featureIds: string[], targetIds: string[]): "medianPlane" | "twoFaceDimension" | undefined => {
     const planarTargets = targetIds.filter((targetId) => getTargetSurfaceType(targetId) === "plane");
-    if (planarTargets.length < 2) return false;
+    if (planarTargets.length < 2) return undefined;
 
     const featureText = featureIds
       .map((featureId) => `${getEntityTypeNames(featureId).join(" ")} ${entityStatements.get(featureId) || ""}`)
       .join(" ");
     if (/CENTRE_OF_SYMMETRY|CENTER_OF_SYMMETRY|DERIVED_SHAPE_ASPECT|MEDIAN\s+PLANE/i.test(featureText)) {
-      return true;
+      return "medianPlane";
     }
 
     const componentAspectIds = new Set<string>();
@@ -1706,7 +1843,7 @@ export function parseStepFile(fileName: string, text: string): StepParseResult {
       }
     }
 
-    if (componentAspectIds.size < 2) return false;
+    if (componentAspectIds.size < 2) return undefined;
 
     for (const [entityId] of entityStatements.entries()) {
       const typeNames = getEntityTypeNames(entityId);
@@ -1715,10 +1852,10 @@ export function parseStepFile(fileName: string, text: string): StepParseResult {
       const relatedComponents = getEntityRefs(entityId).filter((ref, index, refs) =>
         componentAspectIds.has(ref) && refs.indexOf(ref) === index
       );
-      if (relatedComponents.length >= 2) return true;
+      if (relatedComponents.length >= 2) return "twoFaceDimension";
     }
 
-    return false;
+    return undefined;
   };
 
   const describeDerivedDatum = (
@@ -1739,12 +1876,21 @@ export function parseStepFile(fileName: string, text: string): StepParseResult {
         clinicalContext: "Datum is established by a pattern of multiple physical features that act together as one datum feature."
       };
     }
-    if (isMedianPlaneDatumFeature(featureIds, targetIds)) {
+    const planarDatumKind = getPlanarDatumFeatureKind(featureIds, targetIds);
+    if (planarDatumKind === "medianPlane") {
       return {
         ...baseDescription,
         typeStr: "Feature-of-size Datum / Median Plane",
         targetName: `Datum ${identifier} median plane from ${targetIds.length} opposed planar faces (${targetIds.join(", ")})`,
         clinicalContext: "Datum is derived from the median plane of a size feature bounded by multiple physical faces."
+      };
+    }
+    if (planarDatumKind === "twoFaceDimension") {
+      return {
+        ...baseDescription,
+        typeStr: "Two-face Datum Feature / Linear Dimension",
+        targetName: `Datum ${identifier} between ${targetIds.length} dimensioned planar faces (${targetIds.join(", ")})`,
+        clinicalContext: "Datum is associated to two physical planar faces connected by a STEP dimensional location."
       };
     }
     return baseDescription;
@@ -1771,6 +1917,35 @@ export function parseStepFile(fileName: string, text: string): StepParseResult {
       .map((value) => value.toUpperCase())
       .reverse()
       .find((value) => /^[A-Z]$/.test(value));
+  };
+
+  const getDatumReferenceBaseIds = (referenceId: string): string[] => {
+    const type = getEntityType(referenceId);
+    if (type === "DATUM") return [referenceId];
+
+    const params = getEntityParams(referenceId);
+    const refIds = getEntityRefs(referenceId);
+    if (type === "DATUM_REFERENCE_COMPARTMENT" || type === "DATUM_REFERENCE_ELEMENT") {
+      const baseParam = params[4] || "";
+      const baseRefs = baseParam.match(/#\d+/g) || [];
+      return baseRefs.flatMap(getDatumReferenceBaseIds);
+    }
+
+    if (/COMMON_DATUM_LIST/i.test(entityStatements.get(referenceId) || "")) {
+      return refIds.flatMap(getDatumReferenceBaseIds);
+    }
+
+    return refIds
+      .filter((ref) => getEntityType(ref) === "DATUM" || /DATUM_REFERENCE_ELEMENT/i.test(getEntityType(ref)))
+      .flatMap(getDatumReferenceBaseIds);
+  };
+
+  const getDatumReferenceModifiers = (referenceId: string): string[] => {
+    const statement = entityStatements.get(referenceId) || "";
+    const modifiers = Array.from(statement.matchAll(/\.([A-Z_]+)\./gi))
+      .map((match) => match[1].replace(/_/g, " ").toUpperCase())
+      .filter((value) => !["T", "F"].includes(value));
+    return modifiers.filter((modifier, index, all) => all.indexOf(modifier) === index);
   };
 
   const getParentDatumIdentifier = (shapeAspectId: string): string | undefined => {
@@ -1929,10 +2104,11 @@ export function parseStepFile(fileName: string, text: string): StepParseResult {
         symbol: `[ ${identifier} ]`,
         targetId: primaryTarget,
         targetIds,
+        surfaceGeometry: targetIds.map(getTargetSurfaceGeometry),
         semanticTargetIds: targetIds,
         presentationTargetPoint,
         targetSource: "semantic",
-        derivedDatum: isMedianPlaneDatumFeature(featureIds, targetIds) ? "medianPlane" : undefined,
+        derivedDatum: getPlanarDatumFeatureKind(featureIds, targetIds),
         targetName: targetIds.length > 1
           ? description.targetName
           : description.targetName,
@@ -2075,6 +2251,9 @@ export function parseStepFile(fileName: string, text: string): StepParseResult {
       const targetCandidates = shapeAspectRef ? getShapeAspectGeometryTargets(shapeAspectRef) : [];
       const targetId = targetCandidates[0] || shapeAspectRef || "";
       const definition = getToleranceDefinition(entityTypeLabel);
+      const hasToleranceModifiers = /GEOMETRIC_TOLERANCE_WITH_MODIFIERS|MODIFIED_GEOMETRIC_TOLERANCE/i.test(
+        entityStatements.get(entityId) || ""
+      );
 
       tolerances.push({
         id: `PMI-STP-${tolerances.length + 1}`,
@@ -2083,13 +2262,516 @@ export function parseStepFile(fileName: string, text: string): StepParseResult {
         symbol: definition.symbol,
         value: magnitude ?? 0,
         targetId,
+        targetIds: uniqueGeometryTargets(targetCandidates),
+        targetSurfaceTypes: uniqueGeometryTargets(targetCandidates)
+          .map(getTargetSurfaceType)
+          .filter((type, index, all) => !!type && all.indexOf(type) === index),
         targetName: targetId ? `PMI target B-Rep Feature (${targetId})` : "Unresolved semantic tolerance target",
+        hasToleranceModifiers,
         category: definition.category,
         clinicalContext: definition.clinicalContext
       });
     }
 
     return tolerances;
+  };
+
+  const buildDatumReferenceFrames = (datums: ParsedStepDatum[]): ParsedStepDatumReferenceFrame[] => {
+    const datumByEntityId = new Map(datums.map((datum) => [datum.entityId, datum]));
+    const datumByIdentifier = new Map(datums.map((datum) => [datum.identifier, datum]));
+    const frames: ParsedStepDatumReferenceFrame[] = [];
+
+    const buildFrameBasis = (references: ParsedStepDatumReference[]): ParsedStepFrameBasis | undefined => {
+      const sortedReferences = [...references].sort((a, b) => a.precedence - b.precedence);
+      const points = sortedReferences
+        .flatMap((reference) => (reference.surfaceGeometry || [])
+          .map((geometry) => geometry.point)
+          .filter((point): point is { x: number; y: number; z: number } => !!point));
+
+      const datumTargetPointsByIdentifier = new Map<string, Array<{ x: number; y: number; z: number }>>();
+      const datumTargetsByIdentifier = new Map<string, ParsedStepDatumTarget[]>();
+      for (const target of parsedDatumTargets) {
+        const parentDatum = target.parentDatum;
+        if (!parentDatum) continue;
+        const existing = datumTargetPointsByIdentifier.get(parentDatum) || [];
+        if (target.targetPoint) existing.push(target.targetPoint);
+        datumTargetPointsByIdentifier.set(parentDatum, existing);
+
+        const existingTargets = datumTargetsByIdentifier.get(parentDatum) || [];
+        existingTargets.push(target);
+        datumTargetsByIdentifier.set(parentDatum, existingTargets);
+      }
+
+      const chooseAxis = (candidates: Array<{ x: number; y: number; z: number } | null | undefined>) => {
+        for (const candidate of candidates) {
+          const normalized = normalizeVector(candidate);
+          if (normalized) return normalized;
+        }
+        return null;
+      };
+
+      const pickPoint = (reference?: ParsedStepDatumReference) => {
+        const geometry = reference?.surfaceGeometry?.find((candidate) => !!candidate.point);
+        return geometry?.point || null;
+      };
+
+      const buildPlaneFromReference = (reference?: ParsedStepDatumReference) => {
+        const planarGeometries = (reference?.surfaceGeometry || [])
+          .filter((candidate) => candidate.surfaceType === "plane" && !!candidate.point && !!candidate.normal);
+        if (planarGeometries.length >= 2) {
+          const firstNormal = normalizeVector(planarGeometries[0].normal);
+          const parallelPlanes = !!firstNormal && planarGeometries.every((geometry) => {
+            const normal = normalizeVector(geometry.normal);
+            return !!normal && Math.abs(dotVector(normal, firstNormal)) > 0.985;
+          });
+          if (firstNormal && parallelPlanes) {
+            const signedOffsets = planarGeometries
+              .map((geometry) => geometry.point ? dotVector(geometry.point, firstNormal) : null)
+              .filter((offset): offset is number => Number.isFinite(offset as number));
+            if (signedOffsets.length >= 2) {
+              const minOffset = Math.min(...signedOffsets);
+              const maxOffset = Math.max(...signedOffsets);
+              if (Math.abs(maxOffset - minOffset) > 1e-6) {
+                const centerOffset = (minOffset + maxOffset) / 2;
+                const seedPoint = planarGeometries[0].point!;
+                const seedOffset = dotVector(seedPoint, firstNormal);
+                return {
+                  point: {
+                    x: seedPoint.x + firstNormal.x * (centerOffset - seedOffset),
+                    y: seedPoint.y + firstNormal.y * (centerOffset - seedOffset),
+                    z: seedPoint.z + firstNormal.z * (centerOffset - seedOffset),
+                  },
+                  normal: firstNormal
+                };
+              }
+            }
+          }
+        }
+
+        const geometry = reference?.surfaceGeometry?.find((candidate) => !!candidate.point && !!candidate.normal);
+        if (geometry?.point && geometry.normal) {
+          const point = geometry.point;
+          const normal = normalizeVector(geometry.normal);
+          if (normal) return { point, normal };
+        }
+
+        const targetGeometryPoints = (reference?.surfaceGeometry || [])
+          .map((candidate) => candidate.point)
+          .filter((point): point is { x: number; y: number; z: number } => !!point)
+          .filter((point, index, all) => all.findIndex((candidate) =>
+            Math.abs(candidate.x - point.x) < 1e-8 &&
+            Math.abs(candidate.y - point.y) < 1e-8 &&
+            Math.abs(candidate.z - point.z) < 1e-8
+          ) === index);
+        if (targetGeometryPoints.length === 2) {
+          const first = targetGeometryPoints[0];
+          const second = targetGeometryPoints[1];
+          const normal = normalizeVector({
+            x: second.x - first.x,
+            y: second.y - first.y,
+            z: second.z - first.z,
+          });
+          if (normal) {
+            return {
+              point: {
+                x: (first.x + second.x) / 2,
+                y: (first.y + second.y) / 2,
+                z: (first.z + second.z) / 2,
+              },
+              normal
+            };
+          }
+        }
+
+        const targetPoints = (reference?.datumIdentifier ? datumTargetPointsByIdentifier.get(reference.datumIdentifier) : []) || [];
+        if (targetPoints.length >= 3) {
+          const centroid = pointCentroid(targetPoints);
+          if (!centroid) return null;
+          const first = targetPoints[0];
+          const second = targetPoints[1];
+          const third = targetPoints[2];
+          const a = { x: first.x - centroid.x, y: first.y - centroid.y, z: first.z - centroid.z };
+          const b = { x: second.x - centroid.x, y: second.y - centroid.y, z: second.z - centroid.z };
+          const c = { x: third.x - centroid.x, y: third.y - centroid.y, z: third.z - centroid.z };
+          const normal = normalizeVector(crossVector(crossVector(a, b), c));
+          if (normal) {
+            if (targetPoints.length >= 4) {
+              const distances = targetPoints.map((point) => dotVector({ x: point.x - centroid.x, y: point.y - centroid.y, z: point.z - centroid.z }, normal));
+              const sortedDistances = [...distances].sort((a, b) => a - b);
+              const gap = sortedDistances[sortedDistances.length - 1] - sortedDistances[0];
+              if (gap > 1e-4) {
+                const midpoint = (sortedDistances[0] + sortedDistances[sortedDistances.length - 1]) / 2;
+                const positivePoints = targetPoints.filter((point) => dotVector({ x: point.x - centroid.x, y: point.y - centroid.y, z: point.z - centroid.z }, normal) >= midpoint);
+                const negativePoints = targetPoints.filter((point) => dotVector({ x: point.x - centroid.x, y: point.y - centroid.y, z: point.z - centroid.z }, normal) < midpoint);
+                if (positivePoints.length > 0 && negativePoints.length > 0) {
+                  const positiveCentroid = pointCentroid(positivePoints);
+                  const negativeCentroid = pointCentroid(negativePoints);
+                  if (positiveCentroid && negativeCentroid) {
+                    const planePoint = {
+                      x: (positiveCentroid.x + negativeCentroid.x) / 2,
+                      y: (positiveCentroid.y + negativeCentroid.y) / 2,
+                      z: (positiveCentroid.z + negativeCentroid.z) / 2,
+                    };
+                    return { point: planePoint, normal };
+                  }
+                }
+              }
+            }
+            return { point: centroid, normal };
+          }
+        }
+
+        return null;
+      };
+
+      const projectPointOntoLine = (point: { x: number; y: number; z: number }, linePoint: { x: number; y: number; z: number }, lineDirection: { x: number; y: number; z: number }) => {
+        const direction = normalizeVector(lineDirection);
+        if (!direction) return point;
+        const delta = { x: point.x - linePoint.x, y: point.y - linePoint.y, z: point.z - linePoint.z };
+        const t = dotVector(delta, direction);
+        return {
+          x: linePoint.x + direction.x * t,
+          y: linePoint.y + direction.y * t,
+          z: linePoint.z + direction.z * t,
+        };
+      };
+
+      const intersectAxisWithPlane = (
+        axisPoint: { x: number; y: number; z: number },
+        axisDirection: { x: number; y: number; z: number },
+        planePoint: { x: number; y: number; z: number },
+        planeNormal: { x: number; y: number; z: number }
+      ) => {
+        const direction = normalizeVector(axisDirection);
+        const normal = normalizeVector(planeNormal);
+        if (!direction || !normal) return null;
+        const denominator = dotVector(direction, normal);
+        const delta = { x: planePoint.x - axisPoint.x, y: planePoint.y - axisPoint.y, z: planePoint.z - axisPoint.z };
+        if (Math.abs(denominator) > 1e-10) {
+          const t = dotVector(delta, normal) / denominator;
+          return {
+            x: axisPoint.x + direction.x * t,
+            y: axisPoint.y + direction.y * t,
+            z: axisPoint.z + direction.z * t
+          };
+        }
+        const offset = dotVector(delta, normal);
+        return {
+          x: axisPoint.x + normal.x * offset,
+          y: axisPoint.y + normal.y * offset,
+          z: axisPoint.z + normal.z * offset
+        };
+      };
+
+      const intersectThreePlanes = (
+        first: { point: { x: number; y: number; z: number }; normal: { x: number; y: number; z: number } },
+        second: { point: { x: number; y: number; z: number }; normal: { x: number; y: number; z: number } },
+        third: { point: { x: number; y: number; z: number }; normal: { x: number; y: number; z: number } }
+      ) => {
+        const n1 = normalizeVector(first.normal);
+        const n2 = normalizeVector(second.normal);
+        const n3 = normalizeVector(third.normal);
+        if (!n1 || !n2 || !n3) return null;
+        const n2xn3 = crossVector(n2, n3);
+        const n3xn1 = crossVector(n3, n1);
+        const n1xn2 = crossVector(n1, n2);
+        const denominator = dotVector(n1, n2xn3);
+        if (Math.abs(denominator) <= 1e-10) return null;
+        const d1 = dotVector(n1, first.point);
+        const d2 = dotVector(n2, second.point);
+        const d3 = dotVector(n3, third.point);
+        return {
+          x: (n2xn3.x * d1 + n3xn1.x * d2 + n1xn2.x * d3) / denominator,
+          y: (n2xn3.y * d1 + n3xn1.y * d2 + n1xn2.y * d3) / denominator,
+          z: (n2xn3.z * d1 + n3xn1.z * d2 + n1xn2.z * d3) / denominator
+        };
+      };
+
+      const buildAxisFromReference = (reference?: ParsedStepDatumReference) => {
+        const geometry = reference?.surfaceGeometry?.find((candidate) => !!candidate.point && !!candidate.axis);
+        if (!geometry?.point || !geometry.axis) return null;
+        const axis = normalizeVector(geometry.axis);
+        return axis ? { point: geometry.point, axis } : null;
+      };
+
+      const getDatumTargetPoints = (reference?: ParsedStepDatumReference) => {
+        const surfacePoints = (reference?.surfaceGeometry || [])
+          .filter((geometry) => geometry.surfaceType === "unknown" && !!geometry.point)
+          .map((geometry) => geometry.point!)
+          .filter((point, index, all) => all.findIndex((candidate) =>
+            Math.abs(candidate.x - point.x) < 1e-8 &&
+            Math.abs(candidate.y - point.y) < 1e-8 &&
+            Math.abs(candidate.z - point.z) < 1e-8
+          ) === index);
+        if (surfacePoints.length > 0) return surfacePoints;
+        if (!reference?.datumIdentifier) return [];
+        const targets = datumTargetsByIdentifier.get(reference.datumIdentifier) || [];
+        return targets
+          .filter((target) => !!target.targetPoint)
+          .sort((a, b) => a.identifier.localeCompare(b.identifier, undefined, { numeric: true }))
+          .map((target) => target.targetPoint!)
+          .filter((point, index, all) => all.findIndex((candidate) =>
+            Math.abs(candidate.x - point.x) < 1e-8 &&
+            Math.abs(candidate.y - point.y) < 1e-8 &&
+            Math.abs(candidate.z - point.z) < 1e-8
+          ) === index);
+      };
+
+      const chooseTargetPairDirection = (
+        targetPoints: Array<{ x: number; y: number; z: number }>,
+        planeNormal: { x: number; y: number; z: number }
+      ) => {
+        const pairs: Array<{ direction: { x: number; y: number; z: number }; length: number }> = [];
+        for (let i = 0; i < targetPoints.length - 1; i++) {
+          for (let j = i + 1; j < targetPoints.length; j++) {
+            const projected = projectVectorOntoPlane({
+              x: targetPoints[j].x - targetPoints[i].x,
+              y: targetPoints[j].y - targetPoints[i].y,
+              z: targetPoints[j].z - targetPoints[i].z
+            }, planeNormal);
+            const length = Math.sqrt(projected.x * projected.x + projected.y * projected.y + projected.z * projected.z);
+            const direction = normalizeVector(projected);
+            if (direction) {
+              pairs.push({ direction, length });
+            }
+          }
+        }
+
+        let bestPair: { direction: { x: number; y: number; z: number }; length: number } | null = null;
+        let bestSupport = 0;
+        for (const pair of pairs) {
+          const support = pairs.filter((candidate) => Math.abs(dotVector(pair.direction, candidate.direction)) > 0.985).length;
+          if (support > bestSupport || (support === bestSupport && pair.length > (bestPair?.length || 0))) {
+            bestPair = pair;
+            bestSupport = support;
+          }
+        }
+        return bestPair?.direction || null;
+      };
+
+      const primaryReference = sortedReferences[0];
+      const secondaryReference = sortedReferences[1];
+      const tertiaryReference = sortedReferences[2] || sortedReferences[sortedReferences.length - 1];
+      const primaryGeometry = primaryReference?.surfaceGeometry?.[0];
+      const secondaryGeometry = secondaryReference?.surfaceGeometry?.[0];
+      const tertiaryGeometry = tertiaryReference?.surfaceGeometry?.find((candidate) => !!candidate.point);
+
+      const primaryPlane = buildPlaneFromReference(primaryReference);
+      const secondaryPlane = buildPlaneFromReference(secondaryReference);
+      const tertiaryPoint = pickPoint(tertiaryReference) || tertiaryGeometry?.point || null;
+      const primaryNormal = normalizeVector(primaryGeometry?.normal || primaryGeometry?.axis || null);
+      const primaryAxis = normalizeVector(primaryGeometry?.axis || primaryGeometry?.normal || null);
+      const zAxis = chooseAxis([
+        primaryPlane?.normal,
+        primaryNormal,
+        primaryAxis,
+        ...sortedReferences.flatMap((reference) => {
+          const geometry = reference.surfaceGeometry?.[0];
+          return [geometry?.normal, geometry?.axis];
+        }),
+      ]) || { x: 0, y: 0, z: 1 };
+
+      let origin: { x: number; y: number; z: number } | null = null;
+      let xAxis: { x: number; y: number; z: number } | null = null;
+      let yAxis: { x: number; y: number; z: number } | null = null;
+
+      const secondaryAxis = buildAxisFromReference(secondaryReference);
+      const tertiaryAxis = buildAxisFromReference(tertiaryReference);
+      const tertiaryPlane = buildPlaneFromReference(tertiaryReference);
+
+      const primaryTargetPoints = getDatumTargetPoints(primaryReference);
+      const secondaryTargetPoints = getDatumTargetPoints(secondaryReference);
+
+      // Case 0: datum reference frame established by datum target sets.
+      // Primary targets establish the plane, secondary targets establish the middle plane and X direction,
+      // and the tertiary target establishes the third orthogonal locating plane.
+      if (primaryPlane && primaryTargetPoints.length >= 3 && secondaryTargetPoints.length >= 2 && tertiaryPoint) {
+        const targetXAxis = chooseTargetPairDirection(secondaryTargetPoints, primaryPlane.normal);
+        const secondaryCenter = pointCentroid(secondaryTargetPoints);
+        if (targetXAxis && secondaryCenter) {
+          const targetYAxis = normalizeVector(crossVector(primaryPlane.normal, targetXAxis));
+          if (targetYAxis) {
+            xAxis = targetXAxis;
+            origin = intersectThreePlanes(
+              primaryPlane,
+              { point: secondaryCenter, normal: targetXAxis },
+              { point: tertiaryPoint, normal: targetYAxis }
+            );
+          }
+        }
+      }
+
+      // Case 1: primary plane, secondary cylindrical axis, tertiary cylindrical axis.
+      if (!origin && primaryPlane && secondaryAxis && tertiaryAxis) {
+        origin = intersectAxisWithPlane(secondaryAxis.point, secondaryAxis.axis, primaryPlane.point, primaryPlane.normal);
+        const tertiaryIntersection = intersectAxisWithPlane(tertiaryAxis.point, tertiaryAxis.axis, primaryPlane.point, primaryPlane.normal);
+        if (origin && tertiaryIntersection) {
+          const primaryPlacementXAxis = primaryGeometry?.xDirection
+            ? normalizeVector(projectVectorOntoPlane(primaryGeometry.xDirection, primaryPlane.normal))
+            : null;
+          const placementXDirections = [primaryGeometry, secondaryGeometry, tertiaryGeometry]
+            .map((geometry) => geometry?.xDirection
+              ? normalizeVector(projectVectorOntoPlane(geometry.xDirection, primaryPlane.normal))
+              : null)
+            .filter((direction): direction is { x: number; y: number; z: number } => !!direction);
+          const hasCoherentPlacementXAxis = !!primaryPlacementXAxis &&
+            placementXDirections.length >= 3 &&
+            placementXDirections.every((direction) => Math.abs(dotVector(direction, primaryPlacementXAxis)) > 0.985);
+          xAxis = (hasCoherentPlacementXAxis ? primaryPlacementXAxis : null) || normalizeVector(projectVectorOntoPlane({
+            x: tertiaryIntersection.x - origin.x,
+            y: tertiaryIntersection.y - origin.y,
+            z: tertiaryIntersection.z - origin.z
+          }, primaryPlane.normal));
+        }
+      }
+
+      // Case 2: three datum planes. X follows the secondary plane normal projected into the primary plane.
+      if (!origin && primaryPlane && secondaryPlane && tertiaryPlane) {
+        origin = intersectThreePlanes(primaryPlane, secondaryPlane, tertiaryPlane);
+        xAxis = normalizeVector(projectVectorOntoPlane(secondaryPlane.normal, primaryPlane.normal));
+      }
+
+      // Case 2 fallback: two planes plus a target/middle point, project the point to the plane intersection.
+      if (!origin && primaryPlane && secondaryPlane && tertiaryPoint) {
+        const lineDirection = normalizeVector(crossVector(primaryPlane.normal, secondaryPlane.normal));
+        if (lineDirection) {
+          const w = normalizeVector(crossVector(primaryPlane.normal, lineDirection));
+          if (w) {
+            const scalar = dotVector({ x: secondaryPlane.point.x - primaryPlane.point.x, y: secondaryPlane.point.y - primaryPlane.point.y, z: secondaryPlane.point.z - primaryPlane.point.z }, secondaryPlane.normal) / dotVector(w, secondaryPlane.normal);
+            const linePoint = {
+              x: primaryPlane.point.x + w.x * scalar,
+              y: primaryPlane.point.y + w.y * scalar,
+              z: primaryPlane.point.z + w.z * scalar,
+            };
+            origin = projectPointOntoLine(tertiaryPoint, linePoint, lineDirection);
+            const vectorToTertiary = {
+              x: tertiaryPoint.x - origin.x,
+              y: tertiaryPoint.y - origin.y,
+              z: tertiaryPoint.z - origin.z,
+            };
+            xAxis = normalizeVector(projectVectorOntoPlane(vectorToTertiary, primaryPlane.normal)) || lineDirection;
+          }
+        }
+      }
+
+      // Case 3: primary datum plane plus a datum target point. The frame origin lies
+      // on the primary plane at the target center projected along the primary normal.
+      if (!origin && primaryPlane && sortedReferences.length === 2 && secondaryTargetPoints.length === 1) {
+        const targetPoint = secondaryTargetPoints[0];
+        const normal = normalizeVector(primaryPlane.normal);
+        if (normal) {
+          const offset = dotVector({
+            x: targetPoint.x - primaryPlane.point.x,
+            y: targetPoint.y - primaryPlane.point.y,
+            z: targetPoint.z - primaryPlane.point.z,
+          }, normal);
+          origin = {
+            x: targetPoint.x - normal.x * offset,
+            y: targetPoint.y - normal.y * offset,
+            z: targetPoint.z - normal.z * offset,
+          };
+          xAxis = normalizeVector(projectVectorOntoPlane(primaryGeometry?.xDirection || { x: 1, y: 0, z: 0 }, normal));
+        }
+      }
+
+      if (!origin && points.length > 0) {
+        origin = pointCentroid(points);
+      }
+      if (!origin) return undefined;
+
+      const projectedXAxis = (vector: { x: number; y: number; z: number }) => {
+        const normalizedZ = normalizeVector(zAxis) || { x: 0, y: 0, z: 1 };
+        return projectVectorOntoPlane(vector, normalizedZ);
+      };
+
+      const fallbackXAxis = chooseAxis([
+        tertiaryGeometry?.xDirection,
+        sortedReferences[0]?.surfaceGeometry?.[0]?.xDirection,
+        sortedReferences[1]?.surfaceGeometry?.[0]?.xDirection,
+        sortedReferences[2]?.surfaceGeometry?.[0]?.xDirection,
+      ]);
+      const directionToTertiary = tertiaryPoint && origin
+        ? {
+            x: tertiaryPoint.x - origin.x,
+            y: tertiaryPoint.y - origin.y,
+            z: tertiaryPoint.z - origin.z,
+          }
+        : null;
+      const normalizedXAxis = normalizeVector(xAxis || projectedXAxis(directionToTertiary || fallbackXAxis || { x: 1, y: 0, z: 0 }))
+        || fallbackXAxis
+        || { x: 1, y: 0, z: 0 };
+
+      const normalizedZAxis = normalizeVector(zAxis) || { x: 0, y: 0, z: 1 };
+      const normalizedYAxis = crossVector(normalizedZAxis, normalizedXAxis);
+      return {
+        origin,
+        xAxis: normalizeVector(normalizedXAxis) || { x: 1, y: 0, z: 0 },
+        yAxis: normalizeVector(normalizedYAxis) || { x: 0, y: 1, z: 0 },
+        zAxis: normalizeVector(normalizedZAxis) || { x: 0, y: 0, z: 1 },
+      };
+    };
+
+    for (const [entityId] of entityStatements.entries()) {
+      const entityType = getEntityType(entityId);
+      if (entityType !== "DATUM_SYSTEM" && entityType !== "DATUM_SYSTEM_FOR_COMPOSITE_GROUP_ELEMENT") continue;
+
+      const params = getEntityParams(entityId);
+      const compartmentRefs = (params[4]?.match(/#\d+/g) || [])
+        .filter((ref) => /DATUM_REFERENCE_COMPARTMENT|DATUM_REFERENCE_ELEMENT|DATUM/i.test(getEntityType(ref)));
+      const references: ParsedStepDatumReference[] = [];
+
+      compartmentRefs.forEach((compartmentId, compartmentIndex) => {
+        const baseDatumIds = getDatumReferenceBaseIds(compartmentId);
+        baseDatumIds.forEach((datumEntityId, baseIndex) => {
+          const identifier = getDatumIdentifier(datumEntityId);
+          if (!identifier) return;
+          const datum = datumByEntityId.get(datumEntityId) || datumByIdentifier.get(identifier);
+          const targetIds = datum?.targetIds || (datum?.targetId ? [datum.targetId] : undefined);
+          references.push({
+            precedence: compartmentIndex + 1,
+            datumIdentifier: identifier,
+            datumEntityId,
+            compartmentId,
+            modifiers: getDatumReferenceModifiers(compartmentId),
+            isCommonDatum: baseDatumIds.length > 1,
+            targetIds,
+            surfaceGeometry: datum?.surfaceGeometry || targetIds?.map(getTargetSurfaceGeometry)
+          });
+        });
+      });
+
+      const label = Array.from(
+        references.reduce<Map<number, string[]>>((groups, reference) => {
+          const modifierLabel = reference.modifiers.length > 0
+            ? `(${reference.modifiers.map((modifier) => modifier.split(" ").map((word) => word[0]).join("")).join(",")})`
+            : "";
+          const group = groups.get(reference.precedence) || [];
+          group.push(`${reference.datumIdentifier}${modifierLabel}`);
+          groups.set(reference.precedence, group);
+          return groups;
+        }, new Map<number, string[]>()).entries()
+      )
+        .sort(([a], [b]) => a - b)
+        .map(([, labels]) => labels.join("-"))
+        .join(" | ");
+
+      const toleranceEntityIds = getUsedIn(entityId)
+        .filter((referrerId) => getEntityTypeNames(referrerId).some((type) => /_TOLERANCE|GEOMETRIC_TOLERANCE/i.test(type)));
+
+      if (references.length > 0) {
+        frames.push({
+          id: `PMI-DRF-${frames.length + 1}`,
+          entityId,
+          name: getQuotedValues(params[0] || "")[0] || `Datum Reference Frame ${frames.length + 1}`,
+          label,
+          references,
+          toleranceEntityIds,
+          frameBasis: buildFrameBasis(references)
+        });
+      }
+    }
+
+    return frames;
   };
 
   const buildAp242SemanticDatums = (): ParsedStepDatum[] => {
@@ -2147,7 +2829,7 @@ export function parseStepFile(fileName: string, text: string): StepParseResult {
       const activeFeatureIds = featureId ? [featureId] : getSemanticDatumFeatureIds(datumEntityId);
       const description = describeDerivedDatum(identifier, primaryTarget, targetIds, activeFeatureIds);
       const additionalCount = targetIds.length - 1;
-      const isMedianDatum = isMedianPlaneDatumFeature(activeFeatureIds, targetIds);
+      const planarDatumKind = getPlanarDatumFeatureKind(activeFeatureIds, targetIds);
       const presentationTargetPoint = [datumEntityId, ...activeFeatureIds]
         .map(getPresentationLandingPointForShapeAspect)
         .find((point): point is { x: number; y: number; z: number } => !!point) ||
@@ -2162,10 +2844,11 @@ export function parseStepFile(fileName: string, text: string): StepParseResult {
         symbol: `[ ${identifier} ]`,
         targetId: primaryTarget,
         targetIds,
+        surfaceGeometry: targetIds.map(getTargetSurfaceGeometry),
         semanticTargetIds: targetIds,
         presentationTargetPoint,
         targetSource: "semantic",
-        derivedDatum: isMedianDatum ? "medianPlane" : undefined,
+        derivedDatum: planarDatumKind,
         targetName: additionalCount > 0
           ? description.targetName
           : description.targetName,
@@ -2192,7 +2875,8 @@ export function parseStepFile(fileName: string, text: string): StepParseResult {
       const description = describeDerivedDatum(d.identifier, resolved, resolvedTargets, []);
       d.type = description.typeStr;
       d.targetName = description.targetName;
-      d.derivedDatum = isMedianPlaneDatumFeature([], resolvedTargets) ? "medianPlane" : undefined;
+      d.derivedDatum = getPlanarDatumFeatureKind([], resolvedTargets);
+      d.surfaceGeometry = resolvedTargets.map(getTargetSurfaceGeometry);
       d.clinicalContext = description.clinicalContext;
     }
   }
@@ -2228,7 +2912,8 @@ export function parseStepFile(fileName: string, text: string): StepParseResult {
           symbol: `[ ${identifier} ]`,
           targetId,
           targetIds: selectedTargets,
-          derivedDatum: isMedianPlaneDatumFeature([annId], selectedTargets) ? "medianPlane" : undefined,
+          surfaceGeometry: selectedTargets.map(getTargetSurfaceGeometry),
+          derivedDatum: getPlanarDatumFeatureKind([annId], selectedTargets),
           targetName: description.targetName,
           clinicalContext: description.clinicalContext
         });
@@ -2338,6 +3023,9 @@ export function parseStepFile(fileName: string, text: string): StepParseResult {
       const sortedTargets = [...targets].sort((a, b) => a.identifier.localeCompare(b.identifier, undefined, { numeric: true }));
       const primaryTarget = sortedTargets[0];
       const targetLabels = sortedTargets.map((target) => target.identifier).join(", ");
+      const targetIds = sortedTargets
+        .map((target) => target.targetId)
+        .filter((targetId, targetIndex, all): targetId is string => !!targetId && all.indexOf(targetId) === targetIndex);
       return {
         id: `PMI-DTM-${index + 1}`,
         entityId: sortedTargets.map((target) => target.entityId).join(","),
@@ -2346,6 +3034,8 @@ export function parseStepFile(fileName: string, text: string): StepParseResult {
         type: "Datum Target Set",
         symbol: `[ ${identifier} ]`,
         targetId: primaryTarget.targetId,
+        targetIds,
+        surfaceGeometry: getDatumTargetSetSurfaceGeometry(sortedTargets),
         targetName: `Datum ${identifier} established by ${sortedTargets.length} datum target${sortedTargets.length === 1 ? "" : "s"} (${targetLabels})`,
         clinicalContext: "Datum is established by datum targets rather than an explicit datum feature surface in the STEP presentation PMI."
       };
@@ -2374,6 +3064,7 @@ export function parseStepFile(fileName: string, text: string): StepParseResult {
     .map((datum, index) => ({
       ...datum,
       semanticTargetIds: datum.semanticTargetIds || datum.targetIds,
+      surfaceGeometry: datum.surfaceGeometry || (datum.targetIds || (datum.targetId ? [datum.targetId] : [])).map(getTargetSurfaceGeometry),
       presentationTargetPoint: datum.presentationTargetPoint || getDatumPresentationLandingPointByIdentifier(datum.identifier) || (() => {
         const escapedIdentifier = datum.identifier.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
         const leaderMatch = text.match(new RegExp(`ANNOTATION_TO_MODEL_LEADER_LINE\\s*\\(\\s*'Datum\\s+Feature\\s+Symbol\\s+${escapedIdentifier}[^']*'\\s*,\\s*\\((#[\\d\\s,#]+)\\)\\s*\\)\\s*;`, "i"));
@@ -2399,6 +3090,102 @@ export function parseStepFile(fileName: string, text: string): StepParseResult {
       id: `PMI-DTGT-${index + 1}`
     }));
 
+  const datumReferenceFrames = buildDatumReferenceFrames(finalDatums);
+  const datumReferenceFrameByEntityId = new Map(datumReferenceFrames.map((frame) => [frame.entityId, frame]));
+
+  const getAxisPlacementDirections = (placementId: string) => {
+    if (getEntityType(placementId) !== "AXIS2_PLACEMENT_3D") return null;
+    const placementRefs = getEntityRefs(placementId);
+    const axis = placementRefs[1] ? normalizeVector(getDirection(placementRefs[1])) : null;
+    const xDirection = placementRefs[2] ? normalizeVector(getDirection(placementRefs[2])) : null;
+    if (!axis || !xDirection) return null;
+    const yDirection = normalizeVector(crossVector(axis, xDirection));
+    return yDirection ? { axis, xDirection, yDirection } : null;
+  };
+
+  const getTolerancePresentationXAxisHint = (
+    toleranceEntityId: string,
+    frame: ParsedStepDatumReferenceFrame
+  ): { x: number; y: number; z: number } | null => {
+    const uniqueReferences = frame.references
+      .filter((reference, index, all) => all.findIndex((candidate) => candidate.datumIdentifier === reference.datumIdentifier) === index)
+      .sort((a, b) => a.precedence - b.precedence);
+    const primaryPlaneCount = (uniqueReferences[0]?.surfaceGeometry || [])
+      .filter((geometry) => geometry.surfaceType === "plane" && geometry.normal).length;
+    const hasSecondaryAxes = uniqueReferences.slice(1, 3).every((reference) =>
+      (reference.surfaceGeometry || []).some((geometry) => geometry.surfaceType === "cylinder" && geometry.axis)
+    );
+    if (!hasSecondaryAxes) return null;
+
+    const toleranceRefs = getEntityRefs(toleranceEntityId);
+    const shapeAspectId = toleranceRefs.find((ref) => /SHAPE_ASPECT/i.test(getEntityType(ref)));
+    if (!shapeAspectId) return null;
+
+    const calloutIds = getUsedIn(shapeAspectId, /DRAUGHTING_MODEL_ITEM_ASSOCIATION/i)
+      .flatMap((associationId) => getEntityRefs(associationId))
+      .filter((ref) => getEntityType(ref) === "DRAUGHTING_CALLOUT");
+
+    for (const calloutId of calloutIds) {
+      const occurrenceIds = getEntityRefs(calloutId)
+        .filter((ref) => /TESSELLATED_ANNOTATION_OCCURRENCE|ANNOTATION_PLACEHOLDER_OCCURRENCE/i.test(getEntityType(ref)));
+      for (const occurrenceId of occurrenceIds) {
+        const placementIds = getEntityRefs(occurrenceId)
+          .flatMap((ref) => [ref, ...getEntityRefs(ref)])
+          .filter((ref) => getEntityType(ref) === "AXIS2_PLACEMENT_3D");
+        for (const placementId of placementIds) {
+          const placement = getAxisPlacementDirections(placementId);
+          if (!placement) continue;
+          const projected = frame.frameBasis
+            ? projectVectorOntoPlane(placement.yDirection, frame.frameBasis.zAxis)
+            : placement.yDirection;
+          const xAxisHint = normalizeVector(projected);
+          if (xAxisHint) return xAxisHint;
+        }
+      }
+    }
+
+    return null;
+  };
+
+  const withFrameXAxisHint = (
+    frame: ParsedStepDatumReferenceFrame,
+    xAxisHint: { x: number; y: number; z: number }
+  ): ParsedStepDatumReferenceFrame => {
+    if (!frame.frameBasis) return frame;
+    const zAxis = normalizeVector(frame.frameBasis.zAxis);
+    if (!zAxis) return frame;
+    const xAxis = normalizeVector(projectVectorOntoPlane(xAxisHint, zAxis));
+    if (!xAxis) return frame;
+    const yAxis = normalizeVector(crossVector(zAxis, xAxis));
+    if (!yAxis) return frame;
+    return {
+      ...frame,
+      frameBasis: {
+        ...frame.frameBasis,
+        xAxis,
+        yAxis,
+        zAxis
+      }
+    };
+  };
+
+  finalTolerances = finalTolerances.map((tolerance) => {
+    const datumSystemId = getEntityRefs(tolerance.entityId)
+      .find((ref) => /DATUM_SYSTEM/i.test(getEntityType(ref)));
+    const datumReferenceFrame = datumSystemId ? datumReferenceFrameByEntityId.get(datumSystemId) : undefined;
+    let orientedDatumReferenceFrame = datumReferenceFrame;
+    if (datumReferenceFrame && /profile/i.test(tolerance.type || "")) {
+      const xAxisHint = getTolerancePresentationXAxisHint(tolerance.entityId, datumReferenceFrame);
+      if (xAxisHint) orientedDatumReferenceFrame = withFrameXAxisHint(datumReferenceFrame, xAxisHint);
+    }
+    return orientedDatumReferenceFrame
+      ? {
+          ...tolerance,
+          datumReferenceFrame: orientedDatumReferenceFrame
+        }
+      : tolerance;
+  });
+
   return {
     fileName,
     fileSize: text.length,
@@ -2420,6 +3207,7 @@ export function parseStepFile(fileName: string, text: string): StepParseResult {
     tolerances: finalTolerances,
     datums: finalDatums,
     datumTargets: finalDatumTargets,
+    datumReferenceFrames,
     faceRecords,
     cylinderIds,
     rawText: text

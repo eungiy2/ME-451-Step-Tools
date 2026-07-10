@@ -25,9 +25,12 @@ interface CadCanvas3DProps {
   onHoverEntity: (entity: any | null) => void;
   datums?: any[];
   datumTargets?: any[];
+  datumReferenceFrames?: any[];
+  tolerances?: any[];
   faceRecords?: { id: string; referencedIds: string[] }[];
   cylinderIds?: string[];
   customFaceMapping?: Record<string, string>;
+  showBrepOverlays?: boolean;
 }
 
 type MeasurementLabelState = {
@@ -93,9 +96,12 @@ export default function CadCanvas3D({
   onHoverEntity,
   datums = [],
   datumTargets = [],
+  datumReferenceFrames = [],
+  tolerances = [],
   faceRecords = [],
   cylinderIds = [],
   customFaceMapping = {},
+  showBrepOverlays = true,
 }: CadCanvas3DProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -112,11 +118,11 @@ export default function CadCanvas3D({
   const [measurementLabel, setMeasurementLabel] = useState<MeasurementLabelState | null>(null);
 
   // Capture fast-updating props in a ref for animation loops
-  const propsRef = useRef({ viewMode, wireframeOverlay, materialType, autoRotate, selectedEntityId, selectedRelatedEntityIds, hoveredEntityId, focusEntityRequest, measurementMode, selectionClickEnabled, datums, datumTargets, faceRecords, cylinderIds, customFaceMapping });
+  const propsRef = useRef({ viewMode, wireframeOverlay, materialType, autoRotate, selectedEntityId, selectedRelatedEntityIds, hoveredEntityId, focusEntityRequest, measurementMode, selectionClickEnabled, datums, datumTargets, datumReferenceFrames, tolerances, faceRecords, cylinderIds, customFaceMapping });
   useEffect(() => {
-    propsRef.current = { viewMode, wireframeOverlay, materialType, autoRotate, selectedEntityId, selectedRelatedEntityIds, hoveredEntityId, focusEntityRequest, measurementMode, selectionClickEnabled, datums, datumTargets, faceRecords, cylinderIds, customFaceMapping };
+    propsRef.current = { viewMode, wireframeOverlay, materialType, autoRotate, selectedEntityId, selectedRelatedEntityIds, hoveredEntityId, focusEntityRequest, measurementMode, selectionClickEnabled, datums, datumTargets, datumReferenceFrames, tolerances, faceRecords, cylinderIds, customFaceMapping };
     requestRenderRef.current?.(4);
-  }, [viewMode, wireframeOverlay, materialType, autoRotate, selectedEntityId, selectedRelatedEntityIds, hoveredEntityId, focusEntityRequest, measurementMode, selectionClickEnabled, datums, datumTargets, faceRecords, cylinderIds, customFaceMapping]);
+  }, [viewMode, wireframeOverlay, materialType, autoRotate, selectedEntityId, selectedRelatedEntityIds, hoveredEntityId, focusEntityRequest, measurementMode, selectionClickEnabled, datums, datumTargets, datumReferenceFrames, tolerances, faceRecords, cylinderIds, customFaceMapping]);
 
   useEffect(() => {
     if (!containerRef.current || !canvasRef.current) return;
@@ -201,12 +207,17 @@ export default function CadCanvas3D({
       triangleObject: THREE.LineLoop | null;
       leaderObject: THREE.Line | null;
       arrowShaftObject: THREE.Line | THREE.LineSegments | null;
-      arrowHeadObject: THREE.Mesh | null;
+      arrowHeadObject: THREE.Mesh | THREE.LineSegments | null;
       targetMarkObject: THREE.Line | THREE.LineSegments | null;
       dimensionObject: THREE.LineSegments | null;
       object: THREE.Object3D;
       localPoint: THREE.Vector3;
       offset: THREE.Vector3;
+      dimensionStartLocal: THREE.Vector3 | null;
+      dimensionEndLocal: THREE.Vector3 | null;
+      dimensionTouchStartLocal: THREE.Vector3 | null;
+      dimensionTouchEndLocal: THREE.Vector3 | null;
+      dimensionExtensionLocal: THREE.Vector3 | null;
       triangleApexLocal: THREE.Vector3 | null;
       leaderTangent: THREE.Vector3;
       leaderAxisLocal: THREE.Vector3;
@@ -2059,6 +2070,112 @@ export default function CadCanvas3D({
       return null;
     };
 
+    const mapTargetToTopologicalWebGLName = (targetId: string): string | null => {
+      if (!targetId) return null;
+
+      const currentFaceRecords = propsRef.current.faceRecords || [];
+      const currentCylinderIds = propsRef.current.cylinderIds || [];
+      const tId = targetId.startsWith("#") ? targetId : `#${targetId}`;
+      const visibleFace = (name?: string | null) => {
+        if (!name) return null;
+        return assemblyGroup.getObjectByName(name) ? name : null;
+      };
+
+      const directIdx = currentFaceRecords.findIndex(f => f.id === tId);
+      if (directIdx !== -1) {
+        const directFace = visibleFace(`BRepFace-${directIdx}`);
+        if (directFace) return directFace;
+      }
+
+      const indirectIdx = currentFaceRecords.findIndex(f => f.referencedIds.includes(tId));
+      if (indirectIdx !== -1) {
+        const indirectFace = visibleFace(`BRepFace-${indirectIdx}`);
+        if (indirectFace) return indirectFace;
+      }
+
+      const cylIdx = currentCylinderIds.indexOf(tId);
+      if (cylIdx !== -1) {
+        const cylinderFace = visibleFace(`BRepFace-${2 + cylIdx}`);
+        if (cylinderFace) return cylinderFace;
+      }
+
+      if (targetId.startsWith("BRepFace-")) return visibleFace(targetId);
+      return null;
+    };
+
+    const getCustomMappedVisibleFaceName = (key?: string | null): string | null => {
+      if (!key) return null;
+      const currMapping = propsRef.current.customFaceMapping || {};
+      const mapped = currMapping[key] || (key.startsWith("#") ? undefined : currMapping[`#${key}`]);
+      return mapped && assemblyGroup.getObjectByName(mapped) ? mapped : null;
+    };
+
+    const getFaceFrameInAssembly = (faceName: string): {
+      object: THREE.Object3D;
+      center: THREE.Vector3;
+      normal: THREE.Vector3 | null;
+      area: number;
+    } | null => {
+      const object = assemblyGroup.getObjectByName(faceName);
+      if (!object?.name.startsWith("BRepFace-")) return null;
+
+      const cache = object.userData.interactionCache;
+      const localCenter = cache?.localCenter instanceof THREE.Vector3
+        ? cache.localCenter.clone()
+        : new THREE.Vector3();
+      const geometry = (object as THREE.Mesh | THREE.LineSegments | THREE.Points).geometry;
+      if (!(cache?.localCenter instanceof THREE.Vector3) && geometry) {
+        if (!geometry.boundingBox) geometry.computeBoundingBox();
+        geometry.boundingBox?.getCenter(localCenter);
+      }
+
+      const center = assemblyGroup.worldToLocal(object.localToWorld(localCenter));
+      let normal: THREE.Vector3 | null = null;
+      if (cache?.coherentNormal instanceof THREE.Vector3) {
+        const worldNormal = cache.coherentNormal.clone().transformDirection(object.matrixWorld).normalize();
+        const assemblyRotation = new THREE.Quaternion();
+        assemblyGroup.getWorldQuaternion(assemblyRotation);
+        normal = worldNormal.applyQuaternion(assemblyRotation.invert()).normalize();
+      }
+
+      return {
+        object,
+        center,
+        normal,
+        area: typeof object.userData.area === "number" ? object.userData.area : 0,
+      };
+    };
+
+    const findOpposedDimensionFaceName = (seedFaceName: string, excludedNames: string[] = []): string | null => {
+      const seed = getFaceFrameInAssembly(seedFaceName);
+      if (!seed?.normal) return null;
+
+      const excluded = new Set([seedFaceName, ...excludedNames]);
+      const candidates = assemblyGroup.children
+        .filter((child) => child.name.startsWith("BRepFace-") && !excluded.has(child.name))
+        .map((child) => {
+          const frame = getFaceFrameInAssembly(child.name);
+          if (!frame?.normal) return null;
+
+          const normalAlignment = Math.abs(frame.normal.dot(seed.normal));
+          if (normalAlignment < 0.94) return null;
+
+          const separation = frame.center.clone().sub(seed.center);
+          const normalDistance = Math.abs(separation.dot(seed.normal));
+          if (normalDistance < Math.max(modelSizeMax * 0.005, 1e-5)) return null;
+
+          const seedArea = Math.max(seed.area, 1e-6);
+          const faceArea = Math.max(frame.area, 1e-6);
+          const areaRatio = Math.min(seedArea, faceArea) / Math.max(seedArea, faceArea);
+          const score = normalAlignment * 8 + areaRatio * 4 + Math.min(normalDistance / Math.max(modelSizeMax, 1e-6), 1);
+          return { name: child.name, score };
+        })
+        .filter((candidate): candidate is { name: string; score: number } => !!candidate)
+        .sort((a, b) => b.score - a.score);
+
+      return candidates[0]?.name || null;
+    };
+
     const mapDatumTargetsToWebGLNames = (datum: any): string[] => {
       const targetIds = Array.isArray(datum.targetIds) && datum.targetIds.length > 0
         ? datum.targetIds
@@ -2067,6 +2184,78 @@ export default function CadCanvas3D({
         .map((targetId: string) => mapTargetToWebGLName(targetId, datum.identifier, false))
         .filter((name: string | null): name is string => !!name)
         .filter((name: string, index: number, all: string[]) => all.indexOf(name) === index);
+    };
+
+    const mapMedianDatumTargetsToWebGLNames = (datum: any): string[] => {
+      const targetIds = Array.isArray(datum.targetIds) && datum.targetIds.length > 0
+        ? datum.targetIds
+        : (datum.targetId ? [datum.targetId] : []);
+      if (getDatumRenderKind(datum) === "twoFaceDimension") {
+        const renderedMappedNames = [
+          ...targetIds.map((targetId: string) => getCustomMappedVisibleFaceName(targetId)),
+          getCustomMappedVisibleFaceName(datum.identifier),
+        ]
+          .filter((name: string | null): name is string => !!name)
+          .filter((name: string, index: number, all: string[]) => all.indexOf(name) === index);
+
+        if (renderedMappedNames.length >= 2) {
+          return renderedMappedNames;
+        }
+
+        const seedFaceName = renderedMappedNames[0];
+        if (seedFaceName) {
+          const opposedFaceName = findOpposedDimensionFaceName(seedFaceName, renderedMappedNames);
+          const opposedPair = [opposedFaceName, seedFaceName]
+            .filter((name: string | null): name is string => !!name)
+            .filter((name: string, index: number, all: string[]) => all.indexOf(name) === index);
+          if (opposedPair.length >= 2) return opposedPair;
+        }
+      }
+
+      const mappedNames = targetIds
+        .map((targetId: string) =>
+          mapTargetToWebGLName(targetId, datum.identifier, false) ||
+          mapTargetToTopologicalWebGLName(targetId)
+        )
+        .filter((name: string | null): name is string => !!name)
+        .filter((name: string, index: number, all: string[]) => all.indexOf(name) === index);
+      return mappedNames;
+    };
+
+    const getDatumRenderKind = (datum: any): "twoFaceDimension" | "medianPlane" | "multiface" => {
+      if (datum?.derivedDatum === "twoFaceDimension") return "twoFaceDimension";
+      if (datum?.derivedDatum === "medianPlane") return "medianPlane";
+      if (
+        datum?.identifier &&
+        propsRef.current.selectedEntityId === `Datum-${datum.identifier}-Dimension`
+      ) {
+        return "twoFaceDimension";
+      }
+
+      const semanticText = `${datum?.type || ""} ${datum?.targetName || ""} ${datum?.clinicalContext || ""}`;
+      if (/two[-\s]?face|linear dimension|dimensional location|dimensioned planar faces|dimension datum/i.test(semanticText)) {
+        return "twoFaceDimension";
+      }
+      if (/median plane|centre of symmetry|center of symmetry/i.test(semanticText)) {
+        return "medianPlane";
+      }
+      return "multiface";
+    };
+
+    const getDatumRenderKindForFaces = (
+      datum: any,
+      mappedFaceNames: string[]
+    ): "twoFaceDimension" | "medianPlane" | "multiface" => {
+      const baseKind = getDatumRenderKind(datum);
+      if (baseKind !== "multiface") return baseKind;
+
+      const semanticText = `${datum?.type || ""} ${datum?.targetName || ""} ${datum?.clinicalContext || ""}`;
+      const typeText = `${datum?.type || ""}`;
+      const isTwoPlanarDatumFeature =
+        mappedFaceNames.length === 2 &&
+        /^Planar Datum Feature$/i.test(typeText.trim());
+      const isExplicitMultiFeature = /primary flat|pattern|cylind|hole|bore|target set/i.test(semanticText);
+      return isTwoPlanarDatumFeature && !isExplicitMultiFeature ? "twoFaceDimension" : "multiface";
     };
 
     const updateHighlightStyles = () => {
@@ -2394,20 +2583,655 @@ export default function CadCanvas3D({
           item.name.startsWith("DatumTargetPointMark-") ||
           item.name.startsWith("DatumTargetLineMark-") ||
           item.name.startsWith("DatumTargetCircleMark-") ||
-          item.name.startsWith("DatumTargetCurveMark-")
+          item.name.startsWith("DatumTargetCurveMark-") ||
+          item.name.startsWith("DatumReferenceFrameOverlay-")
         );
         staleLeaderGeometry.forEach((item) => {
           child.remove(item);
-          if (item instanceof THREE.Line || item instanceof THREE.LineSegments || item instanceof THREE.Mesh) {
-            item.geometry.dispose();
-            if (Array.isArray(item.material)) {
-              item.material.forEach((material) => material.dispose());
-            } else {
-              item.material.dispose();
+          item.traverse((nested) => {
+            if (nested instanceof THREE.Line || nested instanceof THREE.LineSegments || nested instanceof THREE.Mesh) {
+              nested.geometry.dispose();
+              if (Array.isArray(nested.material)) {
+                nested.material.forEach((material) => material.dispose());
+              } else {
+                nested.material.dispose();
+              }
             }
-          }
+          });
         });
       });
+    };
+
+    const drawDatumReferenceFrameOverlay = () => {
+      const frames = propsRef.current.datumReferenceFrames || [];
+      const allDatums = propsRef.current.datums || [];
+      const allTolerances = propsRef.current.tolerances || [];
+      if (frames.length === 0 || allDatums.length === 0) return;
+
+      const datumByIdentifier = new Map<string, any>(
+        allDatums.map((datum: any) => [datum.identifier, datum])
+      );
+
+      const getDatumFaceNames = (reference: any): string[] => {
+        const datum = datumByIdentifier.get(reference.datumIdentifier);
+        const targetIds = Array.isArray(reference.targetIds) && reference.targetIds.length > 0
+          ? reference.targetIds
+          : Array.isArray(datum?.targetIds) && datum.targetIds.length > 0
+            ? datum.targetIds
+            : (datum?.targetId ? [datum.targetId] : []);
+        return targetIds
+          .map((targetId: string) =>
+            mapTargetToWebGLName(targetId, reference.datumIdentifier, false) ||
+            mapTargetToTopologicalWebGLName(targetId)
+          )
+          .filter((name: string | null): name is string => !!name)
+          .filter((name: string, index: number, all: string[]) => all.indexOf(name) === index);
+      };
+
+      const getAssemblyDirection = (object: THREE.Object3D, localDirection: THREE.Vector3): THREE.Vector3 | null => {
+        if (localDirection.lengthSq() <= 1e-8) return null;
+        const worldStart = object.localToWorld(new THREE.Vector3());
+        const worldEnd = object.localToWorld(localDirection.clone());
+        const assemblyStart = assemblyGroup.worldToLocal(worldStart);
+        const assemblyEnd = assemblyGroup.worldToLocal(worldEnd);
+        const direction = assemblyEnd.sub(assemblyStart);
+        return direction.lengthSq() > 1e-8 ? direction.normalize() : null;
+      };
+
+      const getUniqueFrameReferences = (frame: any) => (frame.references || [])
+        .filter((reference: any, index: number, all: any[]) =>
+          all.findIndex((candidate) => candidate.datumIdentifier === reference.datumIdentifier) === index
+        )
+        .sort((a: any, b: any) => (a.precedence || 0) - (b.precedence || 0));
+
+      const getFrameKey = (frame: any) =>
+        getUniqueFrameReferences(frame)
+          .slice(0, 3)
+          .map((reference: any) => reference.datumIdentifier)
+          .join("|");
+      const getFrameDisplayLabel = (frame: any) =>
+        getUniqueFrameReferences(frame)
+          .slice(0, 3)
+          .map((reference: any) => reference.datumIdentifier)
+          .join(" | ") || frame.label || frame.name || "DRF";
+      const getFramePlotScore = (tolerance: any) => {
+        const frame = tolerance?.datumReferenceFrame;
+        if (!frame) return -Infinity;
+        const uniqueReferences = getUniqueFrameReferences(frame);
+        const modifierCount = uniqueReferences
+          .reduce((count: number, reference: any) => count + ((reference.modifiers || []).length || 0), 0);
+        let score = uniqueReferences.length * 10;
+        if (/position/i.test(tolerance.type || "")) score += 40;
+        if (!/profile/i.test(tolerance.type || "")) score += 15;
+        if (modifierCount === 0) score += 8;
+        return score - modifierCount;
+      };
+      const makePlottedFrame = (frame: any) => ({
+        ...frame,
+        label: getFrameDisplayLabel(frame)
+      });
+      const getUniqueCylinderDatumPoints = (frame: any) => {
+        const uniqueReferences = getUniqueFrameReferences(frame);
+        if (uniqueReferences.length !== 1) return [];
+        const cylinderGeometries = (uniqueReferences[0]?.surfaceGeometry || [])
+          .filter((geometry: any) => geometry.surfaceType === "cylinder" && geometry.point && geometry.axis);
+        const uniquePoints: Array<{ point: any; axis: any; xDirection?: any }> = [];
+        for (const geometry of cylinderGeometries) {
+          const existing = uniquePoints.some((candidate) =>
+            Math.abs(candidate.point.x - geometry.point.x) < 1e-6 &&
+            Math.abs(candidate.point.y - geometry.point.y) < 1e-6 &&
+            Math.abs(candidate.point.z - geometry.point.z) < 1e-6
+          );
+          if (!existing) {
+            uniquePoints.push({
+              point: geometry.point,
+              axis: geometry.axis,
+              xDirection: geometry.xDirection
+            });
+          }
+        }
+        return uniquePoints;
+      };
+
+      const toleranceByEntityId = new Map<string, any>(
+        allTolerances.map((tolerance: any) => [tolerance.entityId, tolerance])
+      );
+      const getFrameTolerances = (frame: any) =>
+        (frame.toleranceEntityIds || [])
+          .map((entityId: string) => toleranceByEntityId.get(entityId))
+          .filter((tolerance: any) => !!tolerance);
+      const getToleranceTargetFaceNames = (tolerance: any): string[] => {
+        const targetIds = Array.isArray(tolerance.targetIds) && tolerance.targetIds.length > 0
+          ? tolerance.targetIds
+          : (tolerance.targetId ? [tolerance.targetId] : []);
+        return targetIds
+          .map((targetId: string) =>
+            mapTargetToWebGLName(targetId, "", false) ||
+            mapTargetToTopologicalWebGLName(targetId)
+          )
+          .filter((name: string | null): name is string => !!name)
+          .filter((name: string, index: number, all: string[]) => all.indexOf(name) === index);
+      };
+      const getControlledTargetFrames = (tolerancesForFrame: any[]) =>
+        tolerancesForFrame
+          .flatMap((tolerance: any) => getToleranceTargetFaceNames(tolerance))
+          .map((faceName: string) => {
+            const frame = getFaceFrameInAssembly(faceName);
+            const object = assemblyGroup.getObjectByName(faceName);
+            const cylinderAxis = object?.userData.interactionCache?.cylinderAxis instanceof THREE.Vector3
+              ? getAssemblyDirection(object, object.userData.interactionCache.cylinderAxis)
+              : null;
+            return frame ? { ...frame, faceName, cylinderAxis } : null;
+          })
+          .filter((frame): frame is {
+            object: THREE.Object3D;
+            center: THREE.Vector3;
+            normal: THREE.Vector3 | null;
+            area: number;
+            faceName: string;
+            cylinderAxis: THREE.Vector3 | null;
+          } => !!frame);
+      const getControlledTargetCenter = (tolerancesForFrame: any[]): THREE.Vector3 | null => {
+        const targetFrames = getControlledTargetFrames(tolerancesForFrame);
+
+        if (targetFrames.length === 0) return null;
+        const center = new THREE.Vector3();
+        for (const targetFrame of targetFrames) {
+          center.add(targetFrame.center);
+        }
+        return center.multiplyScalar(1 / targetFrames.length);
+      };
+
+      const shouldPlotToleranceFrame = (tolerance: any) => {
+        if (!tolerance?.datumReferenceFrame) return false;
+        const references = tolerance.datumReferenceFrame.references || [];
+        const uniqueReferences = getUniqueFrameReferences(tolerance.datumReferenceFrame);
+        const uniqueReferenceCount = uniqueReferences.length;
+        const primaryPlaneCount = (uniqueReferences[0]?.surfaceGeometry || [])
+          .filter((geometry: any) => geometry.surfaceType === "plane" && geometry.normal).length;
+        const primaryDatum = datumByIdentifier.get(uniqueReferences[0]?.datumIdentifier);
+        const isSingleDatumTargetFrame = uniqueReferenceCount === 1 &&
+          /datum target/i.test(`${primaryDatum?.type || ""} ${primaryDatum?.targetName || ""}`);
+        const isSingleCylinderPatternFrame = uniqueReferenceCount === 1 &&
+          getUniqueCylinderDatumPoints(tolerance.datumReferenceFrame).length > 1;
+        const isSinglePrimaryPlaneWithSecondaryAxes = uniqueReferenceCount >= 3 &&
+          primaryPlaneCount === 1 &&
+          uniqueReferences.slice(1, 3).every((reference: any) =>
+            (reference.surfaceGeometry || []).some((geometry: any) => geometry.surfaceType === "cylinder" && geometry.axis)
+          );
+        const isPatternPrimaryWithSecondaryAxes = uniqueReferenceCount >= 3 &&
+          primaryPlaneCount > 1 &&
+          uniqueReferences.slice(1, 3).every((reference: any) =>
+            (reference.surfaceGeometry || []).some((geometry: any) => geometry.surfaceType === "cylinder" && geometry.axis)
+          );
+        const isThreePlaneFrame = uniqueReferenceCount >= 3 &&
+          uniqueReferences.slice(0, 3).every((reference: any) =>
+            (reference.surfaceGeometry || []).some((geometry: any) => geometry.surfaceType === "plane" && geometry.normal)
+          );
+        const isTwoReferenceTargetPositionFrame = uniqueReferenceCount === 2 &&
+          /position/i.test(tolerance.type || "") &&
+          primaryPlaneCount >= 1 &&
+          (uniqueReferences[1]?.surfaceGeometry || []).some((geometry: any) =>
+            geometry.surfaceType === "unknown" && geometry.point
+          );
+        if (/profile/i.test(tolerance.type || "")) {
+          return (isSinglePrimaryPlaneWithSecondaryAxes || isPatternPrimaryWithSecondaryAxes || isThreePlaneFrame) &&
+            references.every((reference: any) => (reference.modifiers || []).length === 0);
+        }
+        if (isSingleCylinderPatternFrame) {
+          return true;
+        }
+        if (isTwoReferenceTargetPositionFrame) {
+          return true;
+        }
+        if (/position/i.test(tolerance.type || "")) {
+          return uniqueReferenceCount >= 3;
+        }
+        if (uniqueReferenceCount < 3 && !isSingleDatumTargetFrame && !isSingleCylinderPatternFrame) {
+          return false;
+        }
+        if (/perpendicularity/i.test(tolerance.type || "")) {
+          if (uniqueReferenceCount <= 1 && primaryPlaneCount > 1) return false;
+          const surfaceTypes = tolerance.targetSurfaceTypes || [];
+          if (references.length <= 1 && surfaceTypes.length > 0 && surfaceTypes.every((type: string) => /plane/i.test(type))) {
+            return false;
+          }
+        }
+        return /position|perpendicularity|parallelism|angularity|runout|coaxiality|concentricity|symmetry/i.test(tolerance.type || "");
+      };
+      const plottedFrameByEntity = new Map<string, { frame: any; tolerances: any[]; score: number }>();
+      for (const tolerance of allTolerances) {
+        if (!shouldPlotToleranceFrame(tolerance)) continue;
+        const frame = tolerance.datumReferenceFrame;
+        if (!Array.isArray(frame.references) || frame.references.length === 0) continue;
+        const key = getFrameKey(frame) || frame.entityId;
+        const score = getFramePlotScore(tolerance);
+        const existing = plottedFrameByEntity.get(key);
+        if (existing) {
+          existing.tolerances.push(tolerance);
+          if (score > existing.score) {
+            existing.frame = makePlottedFrame(frame);
+            existing.score = score;
+          }
+        } else {
+          plottedFrameByEntity.set(key, { frame: makePlottedFrame(frame), tolerances: [tolerance], score });
+        }
+      }
+      const uniqueFrames = Array.from(plottedFrameByEntity.values())
+        .sort((a: any, b: any) => {
+          const refDelta = getUniqueFrameReferences(b.frame).length - getUniqueFrameReferences(a.frame).length;
+          return refDelta || (b.tolerances.length - a.tolerances.length);
+        })
+        .filter((candidate: any) =>
+          getControlledTargetFrames(candidate.tolerances).length > 0 ||
+          !!candidate.frame?.frameBasis
+        );
+
+      const fallbackFrames = [...frames]
+        .filter((frame: any) => Array.isArray(frame.references) && frame.references.length > 0)
+        .sort((a: any, b: any) => getUniqueFrameReferences(b).length - getUniqueFrameReferences(a).length)
+        .map((frame: any) => ({ frame, tolerances: getFrameTolerances(frame) }));
+
+      const expandCylinderPatternFrame = (candidate: { frame: any; tolerances: any[] }) => {
+        const cylinderPoints = getUniqueCylinderDatumPoints(candidate.frame);
+        if (cylinderPoints.length <= 1) return [candidate];
+        return cylinderPoints.map((cylinderPoint, index) => {
+          return {
+            frame: {
+              ...candidate.frame,
+              id: `${candidate.frame.id || candidate.frame.entityId || "frame"}-${index + 1}`,
+              entityId: `${candidate.frame.entityId || candidate.frame.id || "frame"}-${index + 1}`,
+              label: candidate.frame.label || getFrameDisplayLabel(candidate.frame),
+              frameBasis: {
+                ...(candidate.frame.frameBasis || {}),
+                origin: cylinderPoint.point
+              }
+            },
+            tolerances: candidate.tolerances
+          };
+        });
+      };
+
+      const candidateFrames = (uniqueFrames.length > 0 ? uniqueFrames : fallbackFrames)
+        .flatMap(expandCylinderPatternFrame);
+
+      const drawFrame = (candidate: { frame: any; tolerances: any[] }): boolean => {
+        const frame = candidate.frame;
+        const uniqueReferences = getUniqueFrameReferences(frame).slice(0, 3);
+        if (uniqueReferences.length === 0) return false;
+
+        const toVector3 = (value?: { x: number; y: number; z: number } | null) =>
+          value ? new THREE.Vector3(value.x, value.y, value.z) : null;
+
+        const datumAnchors = uniqueReferences.map((reference: any) => {
+        const datum = datumByIdentifier.get(reference.datumIdentifier);
+        const faceName = getDatumFaceNames(reference)[0];
+        const faceFrame = faceName ? getFaceFrameInAssembly(faceName) : null;
+        const faceObject = faceName ? assemblyGroup.getObjectByName(faceName) : null;
+        const cylinderAxis = faceObject?.userData.interactionCache?.cylinderAxis instanceof THREE.Vector3
+          ? getAssemblyDirection(faceObject, faceObject.userData.interactionCache.cylinderAxis)
+          : null;
+        const stepGeometry = Array.isArray(reference.surfaceGeometry) && reference.surfaceGeometry.length > 0
+          ? reference.surfaceGeometry
+          : (Array.isArray(datum?.surfaceGeometry) ? datum.surfaceGeometry : []);
+        const primaryStepGeometry = stepGeometry[0] || null;
+        const stepPoint = toVector3(primaryStepGeometry?.point);
+        const stepNormal = toVector3(primaryStepGeometry?.normal);
+        const stepAxis = toVector3(primaryStepGeometry?.axis);
+        const stepXDirection = toVector3(primaryStepGeometry?.xDirection);
+        const datumText = `${datum?.type || ""} ${datum?.targetName || ""}`;
+        const datumAxis = /cylind|hole|bore|axis/i.test(datumText)
+          ? stepAxis || cylinderAxis || faceFrame?.normal || null
+          : stepNormal || faceFrame?.normal || cylinderAxis || null;
+        return {
+          reference,
+          faceName,
+          frame: faceFrame,
+          cylinderAxis,
+          stepGeometry,
+          stepPoint,
+          stepNormal,
+          stepAxis,
+          stepXDirection,
+          datumAxis
+          };
+        });
+
+        const targetFrames = getControlledTargetFrames(candidate.tolerances);
+        const controlledTargetCenter = getControlledTargetCenter(candidate.tolerances);
+        const primary = datumAnchors[0];
+        const secondary = datumAnchors[1];
+        const tertiary = datumAnchors[2];
+        const firstTolerance = candidate.tolerances[0] || {};
+        const targetIsCylindrical = (firstTolerance.targetSurfaceTypes || []).some((type: string) => /cylinder/i.test(type));
+        const primaryDatum = datumByIdentifier.get(primary?.reference?.datumIdentifier);
+        const resolveDatumSurfaceKind = (datumAnchor: any): "plane" | "cylinder" | "curved" | "unknown" => {
+          const stepGeometry = Array.isArray(datumAnchor?.stepGeometry) && datumAnchor.stepGeometry.length > 0
+            ? datumAnchor.stepGeometry[0]
+            : null;
+          if (stepGeometry?.surfaceType) return stepGeometry.surfaceType;
+          const datumText = `${datumByIdentifier.get(datumAnchor?.reference?.datumIdentifier)?.type || ""} ${datumByIdentifier.get(datumAnchor?.reference?.datumIdentifier)?.targetName || ""}`.toLowerCase();
+          if (/cylind|hole|bore|axis/i.test(datumText)) return "cylinder";
+          if (/plane|planar|flat/i.test(datumText)) return "plane";
+          return "unknown";
+        };
+        const primarySurfaceKind = resolveDatumSurfaceKind(primary);
+        const primaryIsPlane = primarySurfaceKind === "plane";
+        const primaryIsCylinder = primarySurfaceKind === "cylinder";
+        const parserFrameBasis = frame?.frameBasis;
+        const hasValidParserFrameBasis = !!parserFrameBasis &&
+          !!parserFrameBasis.origin &&
+          !!parserFrameBasis.xAxis &&
+          !!parserFrameBasis.yAxis &&
+          !!parserFrameBasis.zAxis;
+
+        const intersectAxisWithPlane = (
+          axisPoint: THREE.Vector3 | undefined,
+          axisDirection: THREE.Vector3 | null | undefined,
+          planePoint: THREE.Vector3 | undefined,
+          planeNormal: THREE.Vector3 | null | undefined
+        ): THREE.Vector3 | null => {
+          if (!axisPoint || !axisDirection || !planePoint || !planeNormal) return null;
+          if (axisDirection.lengthSq() <= 1e-8 || planeNormal.lengthSq() <= 1e-8) return null;
+          const direction = axisDirection.clone().normalize();
+          const normal = planeNormal.clone().normalize();
+          const denominator = direction.dot(normal);
+          if (Math.abs(denominator) > 1e-8) {
+            return axisPoint.clone().addScaledVector(
+              direction,
+              planePoint.clone().sub(axisPoint).dot(normal) / denominator
+            );
+          }
+          return axisPoint.clone().addScaledVector(
+            normal,
+            planePoint.clone().sub(axisPoint).dot(normal)
+          );
+        };
+
+        const secondaryDatumPlanePoint = primaryIsPlane
+          ? intersectAxisWithPlane(
+              secondary?.stepPoint || secondary?.frame?.center,
+              secondary?.stepAxis || secondary?.cylinderAxis || secondary?.datumAxis,
+              primary?.stepPoint || primary?.frame?.center,
+              primary?.stepNormal || primary?.datumAxis
+            )
+          : null;
+        const tertiaryDatumPlanePoint = primaryIsPlane
+          ? intersectAxisWithPlane(
+              tertiary?.stepPoint || tertiary?.frame?.center,
+              tertiary?.stepAxis || tertiary?.cylinderAxis || tertiary?.datumAxis,
+              primary?.stepPoint || primary?.frame?.center,
+              primary?.stepNormal || primary?.datumAxis
+            )
+          : null;
+
+        const origin = (parserFrameBasis?.origin ? new THREE.Vector3(parserFrameBasis.origin.x, parserFrameBasis.origin.y, parserFrameBasis.origin.z) : null) ||
+          secondaryDatumPlanePoint ||
+          controlledTargetCenter ||
+          primary?.frame?.center?.clone() ||
+          targetFrames[0]?.center?.clone();
+        if (!origin) return false;
+
+        let zAxis = new THREE.Vector3();
+        let xAxis = new THREE.Vector3();
+        let yAxis = new THREE.Vector3();
+        const zAxisFromStepPrimary = primaryIsPlane && !!primary?.stepNormal && primary.stepNormal.lengthSq() > 1e-8;
+        if (hasValidParserFrameBasis) {
+          const parsedZ = new THREE.Vector3(parserFrameBasis.zAxis.x, parserFrameBasis.zAxis.y, parserFrameBasis.zAxis.z);
+          const parsedX = new THREE.Vector3(parserFrameBasis.xAxis.x, parserFrameBasis.xAxis.y, parserFrameBasis.xAxis.z);
+          const parsedY = new THREE.Vector3(parserFrameBasis.yAxis.x, parserFrameBasis.yAxis.y, parserFrameBasis.yAxis.z);
+          if (parsedZ.lengthSq() > 1e-8 && parsedX.lengthSq() > 1e-8 && parsedY.lengthSq() > 1e-8) {
+            zAxis.copy(parsedZ.normalize());
+            xAxis.copy(parsedX.normalize());
+            yAxis.copy(parsedY.normalize());
+          }
+        }
+        if (zAxis.lengthSq() <= 1e-8 || xAxis.lengthSq() <= 1e-8 || yAxis.lengthSq() <= 1e-8) {
+          if (zAxisFromStepPrimary) {
+            zAxis.copy(primary.stepNormal);
+          } else if (primary?.stepAxis && primary.stepAxis.lengthSq() > 1e-8) {
+            zAxis.copy(primary.stepAxis);
+          } else if (primaryIsPlane && primary?.datumAxis && primary.datumAxis.lengthSq() > 1e-8) {
+            zAxis.copy(primary.datumAxis);
+          } else if (targetIsCylindrical || primaryIsCylinder) {
+            for (const targetFrame of targetFrames) {
+              const axis = targetFrame.cylinderAxis?.clone();
+              if (!axis || axis.lengthSq() <= 1e-8) continue;
+              axis.normalize();
+              if (zAxis.lengthSq() > 1e-8 && zAxis.dot(axis) < 0) axis.negate();
+              zAxis.add(axis);
+            }
+          } else {
+            for (const targetFrame of targetFrames) {
+              const normal = targetFrame.normal?.clone();
+              if (!normal || normal.lengthSq() <= 1e-8) continue;
+              normal.normalize();
+              if (zAxis.lengthSq() > 1e-8 && zAxis.dot(normal) < 0) normal.negate();
+              zAxis.add(normal);
+            }
+          }
+          if (zAxis.lengthSq() <= 1e-8 && primary?.datumAxis) {
+            zAxis.copy(primary.datumAxis);
+          }
+          if (zAxis.lengthSq() <= 1e-8) return false;
+          zAxis.normalize();
+
+          const primaryPlanePoint = primary?.stepPoint?.clone() || primary?.frame?.center?.clone() || origin.clone();
+          const secondaryPoint = secondaryDatumPlanePoint || secondary?.frame?.center;
+          const tertiaryPoint = tertiaryDatumPlanePoint || tertiary?.frame?.center;
+          if (!zAxisFromStepPrimary && primary?.datumAxis && primary.datumAxis.dot(zAxis) < 0) {
+            zAxis.negate();
+          }
+
+          const choosePerpendicularAxis = (candidates: THREE.Vector3[]) => {
+            for (const candidateAxis of candidates) {
+              const axis = candidateAxis.clone().addScaledVector(zAxis, -candidateAxis.dot(zAxis));
+              if (axis.lengthSq() > 1e-8) return axis.normalize();
+            }
+            const worldCandidates = [
+              new THREE.Vector3(1, 0, 0),
+              new THREE.Vector3(0, 1, 0),
+              new THREE.Vector3(0, 0, 1),
+            ]
+              .map((axis) => axis.addScaledVector(zAxis, -axis.dot(zAxis)))
+              .filter((axis) => axis.lengthSq() > 1e-8)
+              .sort((a, b) => b.lengthSq() - a.lengthSq());
+            return worldCandidates[0]?.normalize() || new THREE.Vector3(1, 0, 0);
+          };
+
+          const secondaryXDirection = secondary?.stepXDirection;
+          const secondaryDatumDirection = secondary?.stepAxis || secondary?.datumAxis || secondary?.cylinderAxis || null;
+          const datumPointDirection = primaryIsPlane && secondaryPoint && tertiaryPoint
+            ? tertiaryPoint.clone().sub(secondaryPoint)
+            : null;
+          const projectedDatumPointDirection = datumPointDirection && datumPointDirection.lengthSq() > 1e-8
+            ? datumPointDirection.clone().subScaledVector(zAxis, datumPointDirection.dot(zAxis))
+            : null;
+          if (secondaryXDirection && secondaryXDirection.lengthSq() > 1e-8) {
+            xAxis.copy(secondaryXDirection);
+          } else if (primaryIsPlane && projectedDatumPointDirection && projectedDatumPointDirection.lengthSq() > 1e-8) {
+            xAxis.copy(projectedDatumPointDirection);
+          } else if (primaryIsPlane && secondary?.stepNormal && secondary.stepNormal.lengthSq() > 1e-8) {
+            xAxis.copy(secondary.stepNormal);
+          } else if (secondaryDatumDirection && secondaryDatumDirection.lengthSq() > 1e-8) {
+            xAxis.copy(secondaryDatumDirection);
+          } else if (secondaryPoint && tertiaryPoint) {
+            xAxis.copy(tertiaryPoint).sub(secondaryPoint);
+          } else if (secondaryPoint) {
+            xAxis.copy(secondaryPoint).sub(origin);
+          } else if (primary?.frame?.center) {
+            xAxis.copy(primary.frame.center).sub(origin);
+          } else if (datumAnchors[1]?.datumAxis) {
+            xAxis.copy(datumAnchors[1].datumAxis);
+          } else if (datumAnchors[1]?.cylinderAxis) {
+            xAxis.copy(datumAnchors[1].cylinderAxis);
+          } else {
+            xAxis.copy(choosePerpendicularAxis([
+              ...targetFrames.map((targetFrame) => targetFrame.normal || new THREE.Vector3()),
+              modelOrbitTarget.clone().sub(origin),
+            ]));
+          }
+          xAxis.addScaledVector(zAxis, -xAxis.dot(zAxis));
+          if (xAxis.lengthSq() <= 1e-8) xAxis.copy(choosePerpendicularAxis([modelOrbitTarget.clone().sub(origin)]));
+          if (xAxis.lengthSq() <= 1e-8) return false;
+          xAxis.normalize();
+          if (primaryIsPlane && projectedDatumPointDirection && projectedDatumPointDirection.dot(xAxis) < 0) {
+            xAxis.negate();
+          }
+          if (controlledTargetCenter) {
+            const xReferencePoint = secondaryPoint || origin;
+            const targetBias = controlledTargetCenter.clone().sub(xReferencePoint).dot(xAxis);
+            if (targetBias < 0 && Math.abs(targetBias) > 1e-6) {
+              xAxis.negate();
+            }
+          }
+
+          yAxis = new THREE.Vector3().crossVectors(zAxis, xAxis);
+          if (yAxis.lengthSq() <= 1e-8) return false;
+          yAxis.normalize();
+          xAxis = new THREE.Vector3().crossVectors(yAxis, zAxis).normalize();
+        }
+
+        if (hasValidParserFrameBasis && zAxis.lengthSq() > 1e-8 && xAxis.lengthSq() > 1e-8) {
+          yAxis = new THREE.Vector3().crossVectors(zAxis, xAxis).normalize();
+          xAxis = new THREE.Vector3().crossVectors(yAxis, zAxis).normalize();
+        }
+
+        const group = new THREE.Group();
+        group.name = `DatumReferenceFrameOverlay-${frame.id || frame.entityId || "active"}`;
+        group.renderOrder = 45;
+
+        const axisLength = Math.max(modelSizeMax * 0.12, 0.65);
+        const badgeText = frame.label || frame.name || "DRF";
+        const badgeCanvas = document.createElement("canvas");
+        const badgeContext = badgeCanvas.getContext("2d");
+        if (badgeContext) {
+          const paddingX = 9;
+          const fontSize = 12;
+          badgeContext.font = `700 ${fontSize}px Arial`;
+          const textMetrics = badgeContext.measureText(badgeText);
+          const width = Math.max(54, Math.ceil(textMetrics.width + paddingX * 2));
+          const height = 22;
+          badgeCanvas.width = width;
+          badgeCanvas.height = height;
+          badgeContext.font = `700 ${fontSize}px Arial`;
+          badgeContext.textAlign = "center";
+          badgeContext.textBaseline = "middle";
+          badgeContext.fillStyle = "rgba(15, 23, 42, 0.86)";
+          badgeContext.fillRect(0, 0, width, height);
+          badgeContext.strokeStyle = "rgba(255, 255, 255, 0.92)";
+          badgeContext.lineWidth = 1;
+          badgeContext.strokeRect(0.5, 0.5, width - 1, height - 1);
+          badgeContext.fillStyle = "#f8fafc";
+          badgeContext.fillText(badgeText, width / 2, height / 2);
+          const badgeTexture = new THREE.CanvasTexture(badgeCanvas);
+          badgeTexture.needsUpdate = true;
+          const badgeMaterial = new THREE.SpriteMaterial({
+            map: badgeTexture,
+            transparent: true,
+            depthTest: false,
+            depthWrite: false,
+          });
+          const badgeSprite = new THREE.Sprite(badgeMaterial);
+          const badgeWorldHeight = Math.max(axisLength * 0.18, modelSizeMax * 0.026, 0.16);
+          const badgeWorldWidth = badgeWorldHeight * (width / height);
+          badgeSprite.scale.set(badgeWorldWidth, badgeWorldHeight, 1);
+          badgeSprite.position.copy(origin.clone()
+            .addScaledVector(xAxis, axisLength * 0.2)
+            .addScaledVector(yAxis, axisLength * 0.2)
+            .addScaledVector(zAxis, axisLength * 0.12));
+          badgeSprite.renderOrder = 49;
+          badgeSprite.name = `DatumReferenceFrameBadge-${frame.id || frame.entityId || "active"}`;
+          group.add(badgeSprite);
+        }
+
+        const arrowLength = Math.max(modelSizeMax * 0.017, 0.095);
+        const arrowHalfWidth = arrowLength * 0.32;
+        const originRadius = Math.max(modelSizeMax * 0.007, 0.04);
+
+        const addAxis = (name: string, direction: THREE.Vector3, color: number) => {
+          const end = origin.clone().addScaledVector(direction, axisLength);
+          const lineEnd = end.clone().addScaledVector(direction, -arrowLength);
+          const lineGeometry = new THREE.BufferGeometry().setFromPoints([origin.clone(), end.clone()]);
+          const lineMaterial = new THREE.LineBasicMaterial({
+            color,
+            depthTest: false,
+            depthWrite: false,
+            transparent: true,
+            opacity: 0.95,
+          });
+          const line = new THREE.Line(lineGeometry, lineMaterial);
+          line.name = `DatumReferenceFrameOverlay-${name}-Axis`;
+          line.renderOrder = 46;
+          line.raycast = () => undefined;
+          group.add(line);
+
+          let sideDirection = new THREE.Vector3().crossVectors(direction, zAxis);
+          if (sideDirection.lengthSq() <= 1e-8) {
+            sideDirection.crossVectors(direction, yAxis);
+          }
+          if (sideDirection.lengthSq() <= 1e-8) {
+            sideDirection.crossVectors(direction, new THREE.Vector3(0, 1, 0));
+          }
+          if (sideDirection.lengthSq() <= 1e-8) {
+            sideDirection.crossVectors(direction, new THREE.Vector3(1, 0, 0));
+          }
+          sideDirection.normalize().multiplyScalar(arrowHalfWidth);
+
+          const arrowGeometry = new THREE.BufferGeometry().setFromPoints([
+            end.clone(),
+            lineEnd.clone().add(sideDirection),
+            lineEnd.clone().sub(sideDirection),
+          ]);
+          const arrowMaterial = new THREE.MeshBasicMaterial({
+            color,
+            side: THREE.DoubleSide,
+            depthTest: false,
+            depthWrite: false,
+            transparent: true,
+            opacity: 0.95,
+          });
+          const arrow = new THREE.Mesh(arrowGeometry, arrowMaterial);
+          arrow.name = `DatumReferenceFrameOverlay-${name}-Head`;
+          arrow.renderOrder = 47;
+          arrow.raycast = () => undefined;
+          group.add(arrow);
+        };
+
+        const originGeometry = new THREE.SphereGeometry(originRadius, 18, 12);
+        const originMaterial = new THREE.MeshBasicMaterial({
+          color: 0x111827,
+          depthTest: false,
+          depthWrite: false,
+          transparent: true,
+          opacity: 0.9,
+        });
+        const originMarker = new THREE.Mesh(originGeometry, originMaterial);
+        originMarker.name = "DatumReferenceFrameOverlay-Origin";
+        originMarker.position.copy(origin);
+        originMarker.renderOrder = 48;
+        originMarker.raycast = () => undefined;
+        group.add(originMarker);
+
+        addAxis("X", xAxis, 0xef4444);
+        addAxis("Y", yAxis, 0x22c55e);
+        addAxis("Z", zAxis, 0x3b82f6);
+        assemblyGroup.add(group);
+        return true;
+      };
+
+      let plottedCount = 0;
+      for (const frame of candidateFrames) {
+        if (drawFrame(frame)) plottedCount++;
+      }
+
+      if (plottedCount === 0 && candidateFrames.length > 0) {
+        [...frames]
+          .filter((frame: any) => Array.isArray(frame.references) && frame.references.length > 0)
+          .sort((a: any, b: any) => getUniqueFrameReferences(b).length - getUniqueFrameReferences(a).length)
+          .map((frame: any) => ({ frame, tolerances: getFrameTolerances(frame) }))
+          .some((candidate: { frame: any; tolerances: any[] }) => drawFrame(candidate));
+      }
     };
 
     const addDatumTargetRegionOverlay = (datum: any, faceObject: THREE.Object3D, webglName: string) => {
@@ -2762,6 +3586,7 @@ export default function CadCanvas3D({
       datumCacheMissingElements = 0;
       clearDatumTargetRegionOverlays();
       clearDatumLeaderGeometry();
+      drawDatumReferenceFrameOverlay();
       const sharedHoleLeaderDirections = new Map<string, THREE.Vector3>();
       const quantizeForGrouping = (value: number, tolerance: number) =>
         Math.round(value / tolerance);
@@ -2828,6 +3653,17 @@ export default function CadCanvas3D({
         }
         return leaderDirection;
       };
+      const getPrimaryDatumNormalLocal = (): THREE.Vector3 | null => {
+        const primaryDatum = (propsRef.current.datums || []).find((datum: any) =>
+          datum.identifier === "A" && datum.type !== "Datum Target Set"
+        );
+        if (!primaryDatum) return null;
+
+        const primaryFaceName = mapDatumTargetsToWebGLNames(primaryDatum)[0];
+        if (!primaryFaceName) return null;
+
+        return getFaceFrameInAssembly(primaryFaceName)?.normal || null;
+      };
       datumAnchorCache = currentAnnotations.flatMap((d: any) => {
         const element = document.getElementById(`3d-datum-badge-${d.id}`);
         const leaderElement = document.getElementById(`3d-datum-leader-${d.id}`);
@@ -2865,9 +3701,19 @@ export default function CadCanvas3D({
         }
 
         const datumTargetText = `${d.type || ""} ${d.targetName || ""}`;
-        const isSemanticMedianDatum = d.annotationKind !== "datumTarget" &&
-          (d.derivedDatum === "medianPlane" || /feature-of-size|median plane|opposed planar faces/i.test(datumTargetText));
-        let isMedianDatum = isSemanticMedianDatum && webglNames.length >= 2;
+        const baseWebglNames = webglNames.length > 0 ? webglNames : mapDatumTargetsToWebGLNames(d);
+        const datumRenderKind = getDatumRenderKindForFaces(d, baseWebglNames);
+        const isDimensionDatum = d.annotationKind !== "datumTarget" &&
+          (datumRenderKind === "twoFaceDimension" || datumRenderKind === "medianPlane");
+        const medianWebglNames = isDimensionDatum ? mapMedianDatumTargetsToWebGLNames(d) : [];
+        if (isDimensionDatum && medianWebglNames.length < 2) {
+          datumCacheMissingElements++;
+          element.style.display = "none";
+          if (leaderElement) leaderElement.style.display = "none";
+          if (triangleElement) triangleElement.style.display = "none";
+          return [];
+        }
+        let isMedianDatum = isDimensionDatum && medianWebglNames.length >= 2;
         const isPlanarDatum = /plane|planar|flat/i.test(datumTargetText);
         const isCylindricalDatum = /cylind|hole wall|bore/i.test(datumTargetText);
         const isHoleDatum = /hole|bore/i.test(datumTargetText);
@@ -2897,9 +3743,14 @@ export default function CadCanvas3D({
         let triangleObject: THREE.LineLoop | null = null;
         let leaderObject: THREE.Line | null = null;
         let arrowShaftObject: THREE.Line | THREE.LineSegments | null = null;
-        let arrowHeadObject: THREE.Mesh | null = null;
+        let arrowHeadObject: THREE.Mesh | THREE.LineSegments | null = null;
         let targetMarkObject: THREE.Line | THREE.LineSegments | null = null;
         let dimensionObject: THREE.LineSegments | null = null;
+        let dimensionStartLocal: THREE.Vector3 | null = null;
+        let dimensionEndLocal: THREE.Vector3 | null = null;
+        let dimensionTouchStartLocal: THREE.Vector3 | null = null;
+        let dimensionTouchEndLocal: THREE.Vector3 | null = null;
+        let dimensionExtensionLocal: THREE.Vector3 | null = null;
         let triangleApexLocal: THREE.Vector3 | null = null;
         let calloutKind: "planar" | "cylindrical" | "median" | "targetPoint" | "targetZone" | "targetLine" | "targetCircle" | "targetCurve" | null = null;
         let triangleHeight = 0;
@@ -2914,27 +3765,70 @@ export default function CadCanvas3D({
         let targetMarkHalfSize = 0;
 
         if (isMedianDatum) {
-          const faceObjects = webglNames
+          const faceObjects = medianWebglNames
             .map((name) => assemblyGroup.getObjectByName(name))
             .filter((obj): obj is THREE.Object3D => !!obj && obj.name.startsWith("BRepFace-"))
             .slice(0, 2);
 
           if (faceObjects.length >= 2) {
             anchorObject = assemblyGroup;
-            const facePoints = faceObjects.map((faceObject) => {
+            const faceFrames = faceObjects.map((faceObject) => getFaceFrameInAssembly(faceObject.name));
+            const stableFacePoints = faceObjects.map((faceObject) => {
               const localAnchor = getStableSurfacePoint(faceObject);
               const worldAnchor = faceObject.localToWorld(localAnchor.clone());
               return assemblyGroup.worldToLocal(worldAnchor);
             });
-            const firstPoint = facePoints[0];
-            const secondPoint = facePoints[1];
-            const dimensionAxis = secondPoint.clone().sub(firstPoint);
+            const firstFrame = faceFrames[0];
+            const secondFrame = faceFrames[1];
+            let firstPoint = stableFacePoints[0];
+            let secondPoint = stableFacePoints[1];
+            let dimensionAxis = secondPoint.clone().sub(firstPoint);
+
+            if (firstFrame?.normal && secondFrame?.normal) {
+              const normalAlignment = Math.abs(firstFrame.normal.dot(secondFrame.normal));
+              const separation = secondFrame.center.clone().sub(firstFrame.center);
+              const normalDistance = separation.dot(firstFrame.normal);
+              if (normalAlignment > 0.94 && Math.abs(normalDistance) > Math.max(modelSizeMax * 0.001, 1e-6)) {
+                dimensionAxis = firstFrame.normal.clone();
+                if (normalDistance < 0) {
+                  dimensionAxis.negate();
+                }
+                const lateralCenter = stableFacePoints[0].clone().add(stableFacePoints[1]).multiplyScalar(0.5);
+                const centerPlaneCoordinate = (firstFrame.center.dot(dimensionAxis) + secondFrame.center.dot(dimensionAxis)) * 0.5;
+                const dimensionCenter = lateralCenter
+                  .clone()
+                  .addScaledVector(dimensionAxis, centerPlaneCoordinate - lateralCenter.dot(dimensionAxis));
+                const dimensionHalfDistance = Math.abs(normalDistance) * 0.5;
+                firstPoint = dimensionCenter.clone().addScaledVector(dimensionAxis, -dimensionHalfDistance);
+                secondPoint = dimensionCenter.clone().addScaledVector(dimensionAxis, dimensionHalfDistance);
+              }
+            }
+            dimensionAxis = secondPoint.clone().sub(firstPoint);
             if (dimensionAxis.lengthSq() > 1e-8) {
               dimensionHalfLength = dimensionAxis.length() * 0.5;
               dimensionAxis.normalize();
               localPoint.copy(firstPoint).add(secondPoint).multiplyScalar(0.5);
 
-              const leaderDirection = getCanonicalLeaderDirection(dimensionAxis, localPoint);
+              const primaryNormal = getPrimaryDatumNormalLocal();
+              let leaderDirection = primaryNormal
+                ? primaryNormal.clone().addScaledVector(dimensionAxis, -primaryNormal.dot(dimensionAxis))
+                : new THREE.Vector3();
+              if (leaderDirection.lengthSq() <= 1e-8 && primaryNormal) {
+                leaderDirection.crossVectors(primaryNormal, dimensionAxis);
+              }
+              if (leaderDirection.lengthSq() <= 1e-8) {
+                leaderDirection = getCanonicalLeaderDirection(dimensionAxis, localPoint);
+              } else {
+                leaderDirection.normalize();
+                const modelCenterLocal = modelOrbitTarget.clone();
+                if (
+                  localPoint.clone().add(leaderDirection).distanceToSquared(modelCenterLocal) <
+                  localPoint.distanceToSquared(modelCenterLocal)
+                ) {
+                  leaderDirection.negate();
+                }
+              }
+              dimensionExtensionLocal = leaderDirection.clone();
 
               leaderTangent.copy(dimensionAxis);
               leaderAxisLocal.copy(leaderDirection);
@@ -2948,8 +3842,10 @@ export default function CadCanvas3D({
               arrowHalfWidth = arrowLength * 0.36;
               dimensionTickLength = Math.max(arrowHalfWidth * 8.0, modelSizeMax * 0.045);
 
-              const dimensionStartLocal = localPoint.clone().addScaledVector(dimensionAxis, -dimensionHalfLength);
-              const dimensionEndLocal = localPoint.clone().addScaledVector(dimensionAxis, dimensionHalfLength);
+              dimensionStartLocal = localPoint.clone().addScaledVector(dimensionAxis, -dimensionHalfLength);
+              dimensionEndLocal = localPoint.clone().addScaledVector(dimensionAxis, dimensionHalfLength);
+              dimensionTouchStartLocal = dimensionStartLocal.clone();
+              dimensionTouchEndLocal = dimensionEndLocal.clone();
               const triangleBaseCenterLocal = localPoint.clone();
               triangleApexLocal = triangleBaseCenterLocal.clone().addScaledVector(leaderDirection, triangleHeight);
               const badgeStemEndLocal = triangleApexLocal.clone().addScaledVector(leaderDirection, leaderStemLength);
@@ -3259,6 +4155,35 @@ export default function CadCanvas3D({
                 targetMarkObject.renderOrder = 32;
                 targetMarkObject.raycast = () => undefined;
                 child.add(targetMarkObject);
+
+                const hatchPoints: THREE.Vector3[] = [];
+                const hatchSpacing = Math.max(radius / 3.5, modelSizeMax * 0.003);
+                const hatchDirection = xAxis.clone().add(yAxis).normalize();
+                const hatchNormal = yAxis.clone().sub(xAxis).normalize();
+                for (let offset = -radius; offset <= radius + 1e-6; offset += hatchSpacing) {
+                  const halfChord = Math.sqrt(Math.max(radius * radius - offset * offset, 0));
+                  if (halfChord <= 1e-8) continue;
+                  const chordCenter = centerLocal.clone().addScaledVector(hatchNormal, offset);
+                  hatchPoints.push(
+                    chordCenter.clone().addScaledVector(hatchDirection, -halfChord),
+                    chordCenter.clone().addScaledVector(hatchDirection, halfChord)
+                  );
+                }
+                if (hatchPoints.length >= 2) {
+                  const hatchGeometry = new THREE.BufferGeometry().setFromPoints(hatchPoints);
+                  const hatchMaterial = new THREE.LineBasicMaterial({
+                    color: 0x047857,
+                    depthTest: false,
+                    depthWrite: false,
+                    transparent: true,
+                    opacity: 0.55,
+                  });
+                  const hatch = new THREE.LineSegments(hatchGeometry, hatchMaterial);
+                  hatch.name = `DatumTargetCircleHatch-${d.id}`;
+                  hatch.renderOrder = 31;
+                  hatch.raycast = () => undefined;
+                  child.add(hatch);
+                }
               }
             }
 
@@ -3590,6 +4515,11 @@ export default function CadCanvas3D({
           object: anchorObject,
           localPoint,
           offset,
+          dimensionStartLocal,
+          dimensionEndLocal,
+          dimensionTouchStartLocal,
+          dimensionTouchEndLocal,
+          dimensionExtensionLocal,
           triangleApexLocal,
           leaderTangent,
           leaderAxisLocal,
@@ -3775,23 +4705,47 @@ export default function CadCanvas3D({
       }
       const localCenter = new THREE.Vector3();
       geom.boundingBox!.getCenter(localCenter);
+      const datumRenderKind = getDatumRenderKindForFaces(datum, webglNames);
+      const isDatumDimensionSelection =
+        (datumRenderKind === "twoFaceDimension" || datumRenderKind === "medianPlane") &&
+        webglNames.length > 1;
+      const dimensionSelectionPoints = isDatumDimensionSelection
+        ? webglNames
+          .map((name) => assemblyGroup.getObjectByName(name))
+          .filter((faceObject): faceObject is THREE.Object3D => !!faceObject)
+          .map((faceObject) => {
+            const localAnchor = getStableSurfacePoint(faceObject);
+            return assemblyGroup.worldToLocal(faceObject.localToWorld(localAnchor.clone()));
+          })
+        : [];
+      const dimensionSelectionPoint = dimensionSelectionPoints.length > 0
+        ? dimensionSelectionPoints.reduce((sum, point) => sum.add(point), new THREE.Vector3()).multiplyScalar(1 / dimensionSelectionPoints.length)
+        : null;
 
       let blockDetails: any = {
-        id: obj.name,
-        type,
+        id: isDatumDimensionSelection ? `Datum-${datum.identifier}-Dimension` : obj.name,
+        type: isDatumDimensionSelection ? "datum" : type,
         index: idx,
-        name: webglNames.length > 1
+        name: datumRenderKind === "twoFaceDimension" && webglNames.length > 1
+          ? `Datum ${datum.identifier} dimensional location (${webglNames.length} faces)`
+          : datumRenderKind === "medianPlane" && webglNames.length > 1
+          ? `Datum ${datum.identifier} median plane (${webglNames.length} faces)`
+          : webglNames.length > 1
           ? `Datum ${datum.identifier} pattern (${webglNames.length} faces)`
           : type === "face" ? `B-Rep Face #${idx + 1}` : `B-Rep Edge #${idx + 1}`,
+        datumIdentifier: datum.identifier,
+        datumKind: datumRenderKind,
         relatedFaces: webglNames,
         point: {
-          x: parseFloat(localCenter.x.toFixed(2)),
-          y: parseFloat(localCenter.y.toFixed(2)),
-          z: parseFloat(localCenter.z.toFixed(2)),
+          x: parseFloat((dimensionSelectionPoint?.x ?? localCenter.x).toFixed(2)),
+          y: parseFloat((dimensionSelectionPoint?.y ?? localCenter.y).toFixed(2)),
+          z: parseFloat((dimensionSelectionPoint?.z ?? localCenter.z).toFixed(2)),
         }
       };
 
-      if (type === "face") {
+      if (isDatumDimensionSelection) {
+        blockDetails.referenceFaces = webglNames;
+      } else if (type === "face") {
         blockDetails.triangles = obj.userData.triangles;
         blockDetails.colorString = obj.userData.color;
         blockDetails.area = obj.userData.area || 14.28;
@@ -3848,6 +4802,7 @@ export default function CadCanvas3D({
     let prevMat = "";
     let prevDatumDatumsRef: any[] | null = null;
     let prevDatumTargetsRef: any[] | null = null;
+    let prevDatumReferenceFramesRef: any[] | null = null;
     let prevDatumMappingRef: Record<string, string> | null = null;
     let prevDatumSceneFaces = -1;
     let prevFocusRequestNonce = -1;
@@ -3931,6 +4886,7 @@ export default function CadCanvas3D({
         previousHighlightNames = new Set();
         prevDatumDatumsRef = null;
         prevDatumTargetsRef = null;
+        prevDatumReferenceFramesRef = null;
         prevDatumMappingRef = null;
         prevDatumSceneFaces = -1;
       }
@@ -3966,10 +4922,12 @@ export default function CadCanvas3D({
       // 3D Projected Annotations update (Reference Datums overlay)
       const currentDatumsRef = propsRef.current.datums || [];
       const currentDatumTargetsRef = propsRef.current.datumTargets || [];
+      const currentDatumReferenceFramesRef = propsRef.current.datumReferenceFrames || [];
       const currentMappingRef = propsRef.current.customFaceMapping || {};
       const datumAnchorInputsChanged =
         currentDatumsRef !== prevDatumDatumsRef ||
         currentDatumTargetsRef !== prevDatumTargetsRef ||
+        currentDatumReferenceFramesRef !== prevDatumReferenceFramesRef ||
         currentMappingRef !== prevDatumMappingRef ||
         assemblyGroup.children.length !== prevDatumSceneFaces;
 
@@ -3977,6 +4935,7 @@ export default function CadCanvas3D({
         refreshDatumAnchorCache();
         prevDatumDatumsRef = currentDatumsRef;
         prevDatumTargetsRef = currentDatumTargetsRef;
+        prevDatumReferenceFramesRef = currentDatumReferenceFramesRef;
         prevDatumMappingRef = currentMappingRef;
         prevDatumSceneFaces = assemblyGroup.children.length;
         datumCacheRetryFrame = 0;
@@ -4288,7 +5247,7 @@ export default function CadCanvas3D({
       </div>
 
       {/* Floating viewport details overlay */}
-      {modelStats && (
+      {showBrepOverlays && modelStats && (
         <div className="hidden sm:block absolute top-4 left-4 bg-white/95 backdrop-blur-md px-3.5 py-2.5 rounded-xl border border-slate-200 shadow-lg pointer-events-none select-none max-w-[210px]">
           <div className="text-[9px] font-black text-blue-600 tracking-wider uppercase flex items-center gap-1.5 font-mono">
             <Sparkles className="w-3.5 h-3.5 animate-pulse" />
@@ -4317,7 +5276,7 @@ export default function CadCanvas3D({
       )}
 
       {/* Floating Hover Coordinates Probe */}
-      {hoveredCoordinate && (
+      {showBrepOverlays && hoveredCoordinate && (
         <div className="absolute bottom-3 sm:bottom-4 left-3 sm:left-4 right-3 sm:right-4 pointer-events-none bg-white/95 backdrop-blur-md px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-lg border border-slate-200 flex items-center justify-between text-[10px] sm:text-[11px] font-mono shadow-md">
           <div className="flex items-center gap-1 sm:gap-1.5 text-slate-800">
             <span className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-ping" />
