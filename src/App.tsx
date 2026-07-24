@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, type CSSProperties, type MouseEvent as ReactMouseEvent } from "react";
 import { 
   Upload, 
   RefreshCw, 
@@ -8,22 +8,81 @@ import {
   Copy,
   Cpu,
   Compass,
+  Eye,
+  EyeOff,
   Sparkles,
   Sliders,
-  Ruler
+  Ruler,
+  GripVertical,
 } from "lucide-react";
 import { parseStepFile, generateSampleStepText, StepParseResult } from "./utils/stepParser";
 import { parseStepWithOcct } from "./utils/stepOcctParser";
 import { loadOcct } from "./utils/occtLoader";
-import { autoGenerateFaceMapping, classifyBRepFaces } from "./utils/geometryClassifier";
+import { autoGenerateFaceMapping } from "./utils/geometryClassifier";
 import CadCanvas3D from "./components/CadCanvas3D";
 import * as THREE from "three";
 
-const DATUM_PARSE_REVISION = "target-point-plane-projection-drf-v10";
+const DATUM_PARSE_REVISION = "multiface-datum-feature-v30";
+
+type DatumFeatureClass = "midDimensional" | "cylindricalMultiFace" | "cylindrical" | "singlePlane" | "multiFace" | "surface";
+
+const getDatumTargetIds = (datum: any): string[] => (
+  Array.isArray(datum?.targetIds) && datum.targetIds.length > 0
+    ? datum.targetIds
+    : (datum?.targetId ? [datum.targetId] : [])
+);
+
+const getDatumFeatureClass = (datum: any, mappedFaceNames: string[] = []): DatumFeatureClass => {
+  const targetIds = getDatumTargetIds(datum);
+  const faceCount = Math.max(mappedFaceNames.length, targetIds.length);
+  const semanticText = `${datum?.type || ""} ${datum?.targetName || ""} ${datum?.clinicalContext || ""}`;
+  const surfaceTypes = Array.isArray(datum?.surfaceGeometry)
+    ? datum.surfaceGeometry.map((surface: any) => `${surface?.surfaceType || ""}`)
+    : [];
+
+  const isMidDimensional =
+    datum?.derivedDatum === "twoFaceDimension" ||
+    datum?.derivedDatum === "medianPlane" ||
+    /mid[-\s]?dimension|median plane|centre of symmetry|center of symmetry|dimensional location|dimensioned planar faces/i.test(semanticText);
+  const isCylindrical =
+    datum?.derivedDatum === "axis" ||
+    surfaceTypes.some((surfaceType) => /cylinder/i.test(surfaceType)) ||
+    /cylind|hole|bore|axis/i.test(semanticText);
+  const isMultiFace =
+    faceCount > 1 ||
+    datum?.derivedDatum === "multiface" ||
+    /pattern|multi[-\s]?face|multiple physical faces/i.test(semanticText);
+
+  if (isMidDimensional) {
+    return "midDimensional";
+  }
+
+  if (isCylindrical && isMultiFace) {
+    return "cylindricalMultiFace";
+  }
+
+  if (isCylindrical) {
+    return "cylindrical";
+  }
+
+  if (
+    faceCount <= 1 &&
+    (surfaceTypes.length === 0 || surfaceTypes.some((surfaceType) => /plane|unknown/i.test(surfaceType)) || /planar|plane|flat/i.test(semanticText))
+  ) {
+    return "singlePlane";
+  }
+
+  if (isMultiFace) {
+    return "multiFace";
+  }
+
+  return "surface";
+};
 
 const getDatumRenderKind = (datum: any): "twoFaceDimension" | "medianPlane" | "multiface" => {
   if (datum?.derivedDatum === "twoFaceDimension") return "twoFaceDimension";
   if (datum?.derivedDatum === "medianPlane") return "medianPlane";
+  if (datum?.derivedDatum === "multiface") return "multiface";
 
   const semanticText = `${datum?.type || ""} ${datum?.targetName || ""} ${datum?.clinicalContext || ""}`;
   if (/two-face|linear dimension|dimensional location|dimensioned planar faces/i.test(semanticText)) {
@@ -39,6 +98,8 @@ const getDatumRenderKindForFaces = (
   datum: any,
   mappedFaceNames: string[]
 ): "twoFaceDimension" | "medianPlane" | "multiface" => {
+  if (datum?.derivedDatum === "multiface") return "multiface";
+
   const baseKind = getDatumRenderKind(datum);
   if (baseKind !== "multiface") return baseKind;
 
@@ -47,7 +108,7 @@ const getDatumRenderKindForFaces = (
   const isTwoPlanarDatumFeature =
     mappedFaceNames.length === 2 &&
     /^Planar Datum Feature$/i.test(typeText.trim());
-  const isExplicitMultiFeature = /primary flat|pattern|cylind|hole|bore|target set/i.test(semanticText);
+  const isExplicitMultiFeature = /primary flat|pattern|multi[-\s]?face|multiple physical faces|cylind|hole|bore|target set/i.test(semanticText);
   return isTwoPlanarDatumFeature && !isExplicitMultiFeature ? "twoFaceDimension" : "multiface";
 };
 
@@ -66,6 +127,35 @@ const getDatumDisplayName = (datum: any, faceCount: number): string => {
     return `${datumName} pattern (${count} faces)`;
   }
   return datum?.targetName || datumName;
+};
+
+const getDatumPrecedenceLabel = (identifier?: string): string => {
+  const symbol = `${identifier || ""}`.trim().toUpperCase();
+  if (symbol === "A") return "Primary";
+  if (symbol === "B") return "Secondary";
+  if (symbol === "C") return "Tertiary";
+  return "Reference";
+};
+
+const getDatumCompactDescription = (datum: any): string => {
+  const datumClass = getDatumFeatureClass(datum);
+  if (datumClass === "midDimensional") {
+    return "Mid-dimensional datum feature";
+  }
+  if (datumClass === "cylindricalMultiFace") {
+    return "Cylindrical multi-face datum feature";
+  }
+  if (datumClass === "cylindrical") {
+    return "Cylindrical datum feature";
+  }
+  if (datumClass === "singlePlane") {
+    return `${getDatumPrecedenceLabel(datum?.identifier)} planar datum feature`;
+  }
+  if (datumClass === "multiFace") {
+    return "Multi-face datum feature";
+  }
+
+  return `${getDatumPrecedenceLabel(datum?.identifier)} surface datum feature`;
 };
 
 const normalizeSelectedDatumEntity = (entity: any | null, datums?: any[]): any | null => {
@@ -408,7 +498,6 @@ export default function App() {
   // Client Loader States
   const [occtInstalled, setOcctInstalled] = useState<boolean>(false);
   const [isWasmLoading, setIsWasmLoading] = useState<boolean>(true);
-  const [stepText, setStepText] = useState<string>("");
   const [parsedMetadata, setParsedMetadata] = useState<StepParseResult | null>(null);
   
   // CAD graphics sources
@@ -428,13 +517,17 @@ export default function App() {
   // Dynamic B-Rep STEP face pairing & alignment override state
   const [customFaceMapping, setCustomFaceMapping] = useState<Record<string, string>>({});
   const [bindingMode, setBindingMode] = useState<{ type: "datum" | "tolerance"; id: string; targetId: string; label?: string } | null>(null);
-  const [activeTab, setActiveTab] = useState<"params" | "brep" | "steptree" | "tolerances">("brep");
-  const [stepSearch, setStepSearch] = useState<string>("");
+  const [activeTab, setActiveTab] = useState<"brep" | "tolerances">("brep");
   const [toleranceSearch, setToleranceSearch] = useState<string>("");
   const [toleranceCategory, setToleranceCategory] = useState<string>("All");
+  const [showDatumFeatures, setShowDatumFeatures] = useState<boolean>(true);
+  const [showDatumTargets, setShowDatumTargets] = useState<boolean>(true);
+  const [showDatumReferenceFrames, setShowDatumReferenceFrames] = useState<boolean>(true);
+  const [showDimensionalTolerances, setShowDimensionalTolerances] = useState<boolean>(true);
+  const [inspectorWidth, setInspectorWidth] = useState<number>(384);
 
   // Discretization & Geometry Parameter States for medical planning config
-  const [linearDeflection, setLinearDeflection] = useState<number>(0.12);
+  const [linearDeflection, setLinearDeflection] = useState<number>(0.02);
   const [angularDeflection, setAngularDeflection] = useState<number>(0.45);
   const [radialDivisions, setRadialDivisions] = useState<number>(28);
   const [segmentsCount, setSegmentsCount] = useState<number>(5);
@@ -444,15 +537,51 @@ export default function App() {
   const [uploadedBytes, setUploadedBytes] = useState<Uint8Array | null>(null);
 
   // Graphical viewport preferences
-  const [viewMode, setViewMode] = useState<"solid" | "wireframe" | "points" | "xray">("solid");
-  const [wireframeOverlay, setWireframeOverlay] = useState<boolean>(false);
-  const [materialType, setMaterialType] = useState<"titanium" | "gold" | "chrome" | "carbon">("titanium");
-  const [autoRotate, setAutoRotate] = useState<boolean>(false);
+  const [viewMode, setViewMode] = useState<"solid" | "xray">("solid");
+  const [cameraProjection, setCameraProjection] = useState<"perspective" | "orthographic">("perspective");
   const [measurementMode, setMeasurementMode] = useState<boolean>(false);
   const [presetResetNonce, setPresetResetNonce] = useState<number>(0);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const parsedRevisionRef = useRef<string>("");
+  const inspectorResizeRef = useRef<{ startX: number; startWidth: number } | null>(null);
+
+  const beginInspectorResize = (event: ReactMouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    inspectorResizeRef.current = {
+      startX: event.clientX,
+      startWidth: inspectorWidth
+    };
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+  };
+
+  useEffect(() => {
+    const handleMouseMove = (event: MouseEvent) => {
+      const resizeState = inspectorResizeRef.current;
+      if (!resizeState) return;
+
+      const nextWidth = Math.round(resizeState.startWidth + resizeState.startX - event.clientX);
+      const maxWidth = Math.max(420, Math.min(window.innerWidth - 360, 920));
+      setInspectorWidth(Math.min(Math.max(nextWidth, 320), maxWidth));
+    };
+
+    const handleMouseUp = () => {
+      if (!inspectorResizeRef.current) return;
+      inspectorResizeRef.current = null;
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+  }, []);
 
   // Dynamic Open Cascade kernel initialization
   useEffect(() => {
@@ -513,7 +642,6 @@ export default function App() {
 
           // Build dynamic metadata and mock STEP text
           const text = generateSampleStepText(`SURGICAL-MANDIBLE-PLATE-${segmentsCount}X`);
-          setStepText(text);
           setRawFileSize(text.length);
 
           const meta = parseStepFile(`surgical_mandible_plate_${segmentsCount}x.stp`, text);
@@ -576,7 +704,7 @@ export default function App() {
     setFileName("surgical_mandible_plate_5x.stp");
     
     // Restore default geometry parameters
-    setLinearDeflection(0.12);
+    setLinearDeflection(0.02);
     setAngularDeflection(0.45);
     setRadialDivisions(28);
     setSegmentsCount(5);
@@ -586,9 +714,6 @@ export default function App() {
 
     // Reset view controls to seamless solid presets
     setViewMode("solid");
-    setWireframeOverlay(false);
-    setMaterialType("titanium");
-    setAutoRotate(false);
     setPresetResetNonce((nonce) => nonce + 1);
   };
 
@@ -614,8 +739,6 @@ export default function App() {
           // Decode text block for summary stats
           const decoder = new TextDecoder("utf-8");
           const decodedText = decoder.decode(u8Array);
-          setStepText(decodedText);
-
           // Store bytes in state to trigger reactive parsing
           setUploadedBytes(u8Array);
 
@@ -749,9 +872,9 @@ export default function App() {
             occtResult={occtParsedResult}
             isLoading={isTessellating}
             viewMode={viewMode}
-            wireframeOverlay={wireframeOverlay}
-            materialType={materialType}
-            autoRotate={autoRotate}
+            cameraProjection={cameraProjection}
+            materialType="titanium"
+            autoRotate={false}
             selectedEntityId={selectedEntityView ? selectedEntityView.id : null}
             selectedRelatedEntityIds={selectedEntityView?.relatedFaces || []}
             hoveredEntityId={hoveredEntityId}
@@ -795,30 +918,22 @@ export default function App() {
             cylinderIds={parsedMetadata?.cylinderIds}
             customFaceMapping={customFaceMapping}
             showBrepOverlays={activeTab === "brep"}
+            showDatumFeatures={showDatumFeatures}
+            showDatumTargets={showDatumTargets}
+            showDatumReferenceFrames={showDatumReferenceFrames}
+            showDimensionalTolerances={showDimensionalTolerances}
           />
 
           {/* FLOATING VIEWPORT UTILITY DECK */}
           <div className="absolute bottom-3 sm:bottom-4 left-3 right-3 lg:left-1/2 lg:right-auto lg:-translate-x-1/2 lg:w-[min(56rem,calc(100%-2rem))] bg-white/95 backdrop-blur-md px-2 py-2 rounded-xl border border-slate-200/80 shadow-lg z-30 flex flex-wrap items-center justify-center gap-1.5 sm:gap-2 select-none overflow-hidden">
-            {/* Wireframe overlay toggle */}
-            <div className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50/80 px-1.5 py-1 shrink-0">
-              <span className="hidden md:inline text-[9px] font-black text-slate-400 font-mono tracking-wider uppercase">Wire</span>
-              <button
-                onClick={() => setWireframeOverlay(!wireframeOverlay)}
-                className={`px-1.5 sm:px-2 py-0.5 rounded-md text-[9.5px] font-bold font-mono transition flex items-center gap-1.5 cursor-pointer ${
-                  wireframeOverlay
-                    ? "bg-blue-600 text-white shadow-sm"
-                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                }`}
-              >
-                {wireframeOverlay ? "ON" : "OFF"}
-              </button>
-            </div>
-
             {/* View Mode selector */}
             <div className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50/80 px-1.5 py-1 min-w-0">
               <span className="hidden md:inline text-[9px] font-black text-slate-400 font-mono tracking-wider uppercase">Render</span>
               <div className="flex flex-wrap bg-slate-100 p-0.5 rounded-lg border border-slate-200 gap-0.5">
-                {(["solid", "wireframe", "points", "xray"] as const).map((mode) => (
+                {([
+                  ["solid", "SOLID"],
+                  ["xray", "XRAY"]
+                ] as const).map(([mode, label]) => (
                   <button
                     key={mode}
                     onClick={() => setViewMode(mode)}
@@ -828,33 +943,36 @@ export default function App() {
                         : "text-slate-500 hover:text-slate-800"
                     }`}
                   >
-                    {mode.toUpperCase()}
+                    {label}
                   </button>
                 ))}
               </div>
             </div>
 
-            {/* Material selector */}
+            {/* Camera Projection selector */}
             <div className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50/80 px-1.5 py-1 min-w-0">
-              <span className="hidden md:inline text-[9px] font-black text-slate-400 font-mono tracking-wider uppercase">Mat</span>
-              <div className="flex flex-wrap bg-slate-100 p-0.5 rounded-lg border border-slate-200 gap-0.5">
-                {(["titanium", "gold", "chrome", "carbon"] as const).map((mat) => (
+              <span className="hidden md:inline text-[9px] font-black text-slate-400 font-mono tracking-wider uppercase">Cam</span>
+              <div className="flex bg-slate-100 p-0.5 rounded-lg border border-slate-200 gap-0.5">
+                {([
+                  ["perspective", "PERSP"],
+                  ["orthographic", "ORTHO"]
+                ] as const).map(([mode, label]) => (
                   <button
-                    key={mat}
-                    onClick={() => setMaterialType(mat)}
+                    key={mode}
+                    onClick={() => setCameraProjection(mode)}
                     className={`px-1.5 sm:px-2 py-0.5 rounded-md text-[9.5px] font-bold font-mono transition cursor-pointer ${
-                      materialType === mat
+                      cameraProjection === mode
                         ? "bg-white text-blue-600 shadow-xs"
                         : "text-slate-500 hover:text-slate-800"
                     }`}
                   >
-                    {mat.toUpperCase()}
+                    {label}
                   </button>
                 ))}
               </div>
             </div>
 
-            {/* Auto Spin Toggle */}
+            {/* Measurement Toggle */}
             <div className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50/80 px-1.5 py-1 shrink-0">
               <span className="hidden md:inline text-[9px] font-black text-slate-400 font-mono tracking-wider uppercase">Measure</span>
               <button
@@ -870,30 +988,27 @@ export default function App() {
                 {measurementMode ? "ON" : "OFF"}
               </button>
             </div>
-
-            {/* Auto Spin Toggle */}
-            <div className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50/80 px-1.5 py-1 shrink-0">
-              <span className="hidden md:inline text-[9px] font-black text-slate-400 font-mono tracking-wider uppercase">Spin</span>
-              <button
-                onClick={() => setAutoRotate(!autoRotate)}
-                className={`px-2 py-0.5 rounded-md text-[9.5px] font-bold font-mono transition cursor-pointer ${
-                  autoRotate
-                    ? "bg-blue-600 text-white shadow-sm animate-pulse"
-                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                }`}
-              >
-                {autoRotate ? "ON" : "OFF"}
-              </button>
-            </div>
           </div>
         </div>
 
-        {/* Right Column sidebar: dedicated to interactive B-Rep hierarchy, Parametric CAD sliders, and STEP file diagnostics */}
-        <div className={`h-full w-full max-w-full min-w-0 lg:w-96 lg:basis-[24rem] lg:min-w-[24rem] lg:max-w-[24rem] shrink-0 border-t lg:border-t-0 lg:border-l border-slate-200 bg-white p-4 sm:p-5 flex flex-col gap-4 sm:gap-5 overflow-hidden shadow-sm z-10 ${
+        {/* Right Column sidebar: dedicated to interactive B-Rep hierarchy, parameters, and PMI inspection */}
+        <div
+          className={`relative h-full w-full max-w-full min-w-0 lg:w-[var(--inspector-width)] lg:basis-[var(--inspector-width)] lg:min-w-[20rem] lg:max-w-[min(57.5rem,calc(100vw-22.5rem))] shrink-0 border-t lg:border-t-0 lg:border-l border-slate-200 bg-white p-4 sm:p-5 flex flex-col gap-4 sm:gap-5 overflow-hidden shadow-sm z-10 ${
           mobileView === "inspector" 
-            ? "flex-1 flex" 
+            ? "flex-1 flex lg:flex-none"
             : "hidden lg:flex"
-        }`}>
+        }`}
+          style={{ "--inspector-width": `${inspectorWidth}px` } as CSSProperties}
+        >
+          <button
+            type="button"
+            onMouseDown={beginInspectorResize}
+            className="hidden lg:flex absolute left-[-7px] top-0 h-full w-3 cursor-col-resize items-center justify-center border-x border-transparent text-slate-300 transition hover:border-blue-200 hover:bg-blue-50/70 hover:text-blue-600"
+            title="Drag to resize inspector panel"
+            aria-label="Resize inspector panel"
+          >
+            <GripVertical className="h-4 w-4" />
+          </button>
           
           {/* Active File descriptor card with Reset control */}
           <div className="border-b border-slate-100 pb-3 flex flex-row items-center justify-between shrink-0">
@@ -923,22 +1038,6 @@ export default function App() {
               }`}
             >
               B-Rep
-            </button>
-            <button
-              onClick={() => setActiveTab("params")}
-              className={`flex-1 py-1.5 px-1 rounded-md text-[9.5px] font-bold font-sans transition cursor-pointer text-center ${
-                activeTab === "params" ? "bg-white text-blue-600 shadow-xs" : "text-slate-500 hover:text-slate-800"
-              }`}
-            >
-              Param
-            </button>
-            <button
-              onClick={() => setActiveTab("steptree")}
-              className={`flex-1 py-1.5 px-1 rounded-md text-[9.5px] font-bold font-sans transition cursor-pointer text-center ${
-                activeTab === "steptree" ? "bg-white text-blue-600 shadow-xs" : "text-slate-500 hover:text-slate-800"
-              }`}
-            >
-              STEP Code
             </button>
             <button
               onClick={() => setActiveTab("tolerances")}
@@ -979,7 +1078,11 @@ export default function App() {
                       <div className="flex items-center justify-between gap-2">
                         <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 font-mono">Selected B-Rep Entity</span>
                         <span className={`rounded px-1.5 py-0.5 text-[8px] font-black uppercase font-mono ${
-                          selectedEntity.type === "face" ? "bg-blue-50 text-blue-700" : "bg-cyan-50 text-cyan-700"
+                          selectedEntity.type === "face"
+                            ? "bg-blue-50 text-blue-700"
+                            : selectedEntity.type === "vertex"
+                            ? "bg-violet-50 text-violet-700"
+                            : "bg-cyan-50 text-cyan-700"
                         }`}>
                           {selectedEntity.type}
                         </span>
@@ -1012,7 +1115,22 @@ export default function App() {
                             </div>
                             <div className="rounded border border-slate-100 bg-slate-50 p-1.5">
                               <span className="block text-[8px] font-black uppercase text-slate-400">Area</span>
-                              <span className="font-black text-slate-800">{selectedEntity.area ?? "n/a"} mm²</span>
+                              <span className="font-black text-slate-800">{selectedEntity.area ?? "n/a"} mm^2</span>
+                            </div>
+                          </>
+                        ) : selectedEntity.type === "vertex" ? (
+                          <>
+                            <div className="rounded border border-slate-100 bg-slate-50 p-1.5">
+                              <span className="block text-[8px] font-black uppercase text-slate-400">Edges</span>
+                              <span className="font-black text-slate-800">{selectedEntity.edgeIds?.length || 0}</span>
+                            </div>
+                            <div className="rounded border border-slate-100 bg-slate-50 p-1.5">
+                              <span className="block text-[8px] font-black uppercase text-slate-400">Parent Faces</span>
+                              <span className="font-black text-slate-800">
+                                {selectedEntity.parentFaceIndices?.length
+                                  ? selectedEntity.parentFaceIndices.map((faceIdx: number) => `F${faceIdx + 1}`).join(", ")
+                                  : "n/a"}
+                              </span>
                             </div>
                           </>
                         ) : (
@@ -1049,198 +1167,135 @@ export default function App() {
                     </div>
                   )}
 
-                </div>
-              </div>
-            )}
+                  <div className="space-y-3 rounded-lg border border-slate-200 bg-white p-3">
+                    <span className="text-[9px] text-slate-400 font-bold uppercase tracking-widest font-mono block">
+                      Discretization & Geometry Parameters
+                    </span>
 
-            {activeTab === "params" && (
-              <div className="space-y-4">
-                <span className="text-[9px] text-slate-400 font-bold uppercase tracking-widest font-mono block">
-                  Discretization & Geometry parameters
-                </span>
-
-                <div className="space-y-3.5 pl-0.5 pr-0.5">
-                  {/* Dynamic Segments / Holes Count Slider */}
-                  <div className="space-y-1">
-                    <div className="flex justify-between items-center text-xs">
-                      <span className="text-slate-600 font-semibold">Total Locking Bores:</span>
-                      <span className="font-mono font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">{segmentsCount} holes</span>
-                    </div>
-                    <input
-                      type="range"
-                      min="3"
-                      max="12"
-                      step="1"
-                      value={segmentsCount}
-                      onChange={(e) => {
-                        setSegmentsCount(Number(e.target.value));
-                        setUploadedBytes(null); 
-                      }}
-                      className="w-full accent-blue-600 h-1 bg-slate-100 rounded-lg appearance-none cursor-pointer"
-                    />
-                  </div>
-
-                  {/* Linear Deflection Slider */}
-                  <div className="space-y-1">
-                    <div className="flex justify-between items-center text-xs">
-                      <span className="text-slate-600 font-semibold font-mono">Linear Deflection (mm):</span>
-                      <span className="font-mono font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">{linearDeflection.toFixed(2)}</span>
-                    </div>
-                    <input
-                      type="range"
-                      min="0.02"
-                      max="0.45"
-                      step="0.01"
-                      value={linearDeflection}
-                      onChange={(e) => setLinearDeflection(Number(e.target.value))}
-                      className="w-full accent-blue-600 h-1 bg-slate-100 rounded-lg appearance-none cursor-pointer"
-                    />
-                  </div>
-
-                  {/* Angular Deflection Slider */}
-                  <div className="space-y-1">
-                    <div className="flex justify-between items-center text-xs">
-                      <span className="text-slate-600 font-semibold font-mono">Angular Deflection (rad):</span>
-                      <span className="font-mono font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">{angularDeflection.toFixed(2)}</span>
-                    </div>
-                    <input
-                      type="range"
-                      min="0.10"
-                      max="0.90"
-                      step="0.05"
-                      value={angularDeflection}
-                      onChange={(e) => setAngularDeflection(Number(e.target.value))}
-                      className="w-full accent-blue-600 h-1 bg-slate-100 rounded-lg appearance-none cursor-pointer"
-                    />
-                  </div>
-
-                  {/* Hole Radial Divisions Slider */}
-                  <div className="space-y-1">
-                    <div className="flex justify-between items-center text-xs">
-                      <span className="text-slate-600 font-semibold font-mono">Bore Subdivisions:</span>
-                      <span className="font-mono font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">{radialDivisions} facets</span>
-                    </div>
-                    <input
-                      type="range"
-                      min="12"
-                      max="64"
-                      step="2"
-                      value={radialDivisions}
-                      onChange={(e) => setRadialDivisions(Number(e.target.value))}
-                      className="w-full accent-blue-600 h-1 bg-slate-100 rounded-lg appearance-none cursor-pointer"
-                    />
-                  </div>
-
-                  {/* Plate Nominal Width */}
-                  <div className="space-y-1">
-                    <div className="flex justify-between items-center text-xs">
-                      <span className="text-slate-600 font-semibold">Plate Nominal Width:</span>
-                      <span className="font-mono font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">{plateWidth.toFixed(1)} mm</span>
-                    </div>
-                    <input
-                      type="range"
-                      min="2.5"
-                      max="5.0"
-                      step="0.1"
-                      value={plateWidth}
-                      onChange={(e) => {
-                        const newW = Number(e.target.value);
-                        setPlateWidth(newW);
-                        if (screwHoleRadius >= newW / 2 - 0.2) {
-                          setScrewHoleRadius(Number((newW / 2 - 0.4).toFixed(2)));
-                        }
-                      }}
-                      className="w-full accent-blue-600 h-1 bg-slate-100 rounded-lg appearance-none cursor-pointer"
-                    />
-                  </div>
-
-                  {/* Plate Thickness */}
-                  <div className="space-y-1">
-                    <div className="flex justify-between items-center text-xs">
-                      <span className="text-slate-600 font-semibold">Plate Thickness:</span>
-                      <span className="font-mono font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">{plateThickness.toFixed(1)} mm</span>
-                    </div>
-                    <input
-                      type="range"
-                      min="0.8"
-                      max="2.5"
-                      step="0.1"
-                      value={plateThickness}
-                      onChange={(e) => setPlateThickness(Number(e.target.value))}
-                      className="w-full accent-blue-600 h-1 bg-slate-100 rounded-lg appearance-none cursor-pointer"
-                    />
-                  </div>
-
-                  {/* Screw Hole Radius */}
-                  <div className="space-y-1">
-                    <div className="flex justify-between items-center text-xs">
-                      <span className="text-slate-600 font-semibold">Lock Hole Radius:</span>
-                      <span className="font-mono font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">{screwHoleRadius.toFixed(2)} mm</span>
-                    </div>
-                    <input
-                      type="range"
-                      min="0.60"
-                      max={Math.min(1.60, plateWidth / 2 - 0.25)}
-                      step="0.05"
-                      value={screwHoleRadius}
-                      onChange={(e) => setScrewHoleRadius(Number(e.target.value))}
-                      className="w-full accent-blue-600 h-1 bg-slate-100 rounded-lg appearance-none cursor-pointer"
-                    />
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {activeTab === "steptree" && (
-              <div className="space-y-3 flex flex-col h-full min-h-0">
-                <div className="flex flex-col gap-1.5 shrink-0">
-                  <span className="text-[9px] text-slate-400 font-bold uppercase tracking-widest font-mono">
-                    ISO 10303-21 STEP Code Inspector
-                  </span>
-                  <input
-                    type="text"
-                    placeholder="Search entities (e.g., PLANE, #102)..."
-                    value={stepSearch}
-                    onChange={(e) => setStepSearch(e.target.value)}
-                    className="w-full px-2.5 py-1.5 text-xs text-slate-700 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono"
-                  />
-                </div>
-
-                <div className="flex-1 overflow-y-auto pr-1 space-y-1.5 font-mono text-[10.5px]">
-                  {(() => {
-                    const rawStepLines = stepText
-                      ? stepText.split(";").map((l) => l.trim() + ";").filter((l) => l && l.length > 3 && !l.startsWith("ISO-") && !l.startsWith("DATA;") && !l.startsWith("HEADER;") && !l.startsWith("ENDSEC;"))
-                      : [];
-                    const filteredStepLines = rawStepLines.filter((line) => line.toLowerCase().includes(stepSearch.toLowerCase())).slice(0, 80);
-
-                    if (filteredStepLines.length === 0) {
-                      return <div className="text-center py-6 text-slate-400 text-xs">No matching STEP entities.</div>;
-                    }
-
-                    return filteredStepLines.map((line, idx) => {
-                      const matchEntity = line.match(/=\s*([A-Z0-9_]+)/);
-                      const entityName = matchEntity ? matchEntity[1] : "ENTITY";
-                      return (
-                        <div
-                          key={idx}
-                          className="p-1.5 hover:bg-slate-100 border border-slate-150 rounded bg-slate-50/50 flex flex-col gap-1 group relative transition text-slate-700"
-                        >
-                          <div className="flex items-center justify-between">
-                            <span className="text-[8.5px] bg-slate-200 px-1.5 py-0.2 rounded font-black text-slate-650 tracking-wider">
-                              {entityName}
-                            </span>
-                            <button
-                              onClick={() => copyToClipboard(line)}
-                              className="text-[9px] text-blue-600 hidden group-hover:block hover:underline font-sans font-bold cursor-pointer"
-                            >
-                              Copy
-                            </button>
-                          </div>
-                          <span className="break-all whitespace-pre-wrap leading-relaxed">{line}</span>
+                    <div className="space-y-3.5 pl-0.5 pr-0.5">
+                      <div className="space-y-1">
+                        <div className="flex justify-between items-center text-xs">
+                          <span className="text-slate-600 font-semibold">Total Locking Bores:</span>
+                          <span className="font-mono font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">{segmentsCount} holes</span>
                         </div>
-                      );
-                    });
-                  })()}
+                        <input
+                          type="range"
+                          min="3"
+                          max="12"
+                          step="1"
+                          value={segmentsCount}
+                          onChange={(e) => {
+                            setSegmentsCount(Number(e.target.value));
+                            setUploadedBytes(null);
+                          }}
+                          className="w-full accent-blue-600 h-1 bg-slate-100 rounded-lg appearance-none cursor-pointer"
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <div className="flex justify-between items-center text-xs">
+                          <span className="text-slate-600 font-semibold font-mono">Linear Deflection (mm):</span>
+                          <span className="font-mono font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">{linearDeflection.toFixed(2)}</span>
+                        </div>
+                        <input
+                          type="range"
+                          min="0.02"
+                          max="0.45"
+                          step="0.01"
+                          value={linearDeflection}
+                          onChange={(e) => setLinearDeflection(Number(e.target.value))}
+                          className="w-full accent-blue-600 h-1 bg-slate-100 rounded-lg appearance-none cursor-pointer"
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <div className="flex justify-between items-center text-xs">
+                          <span className="text-slate-600 font-semibold font-mono">Angular Deflection (rad):</span>
+                          <span className="font-mono font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">{angularDeflection.toFixed(2)}</span>
+                        </div>
+                        <input
+                          type="range"
+                          min="0.10"
+                          max="0.90"
+                          step="0.05"
+                          value={angularDeflection}
+                          onChange={(e) => setAngularDeflection(Number(e.target.value))}
+                          className="w-full accent-blue-600 h-1 bg-slate-100 rounded-lg appearance-none cursor-pointer"
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <div className="flex justify-between items-center text-xs">
+                          <span className="text-slate-600 font-semibold font-mono">Bore Subdivisions:</span>
+                          <span className="font-mono font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">{radialDivisions} facets</span>
+                        </div>
+                        <input
+                          type="range"
+                          min="12"
+                          max="64"
+                          step="2"
+                          value={radialDivisions}
+                          onChange={(e) => setRadialDivisions(Number(e.target.value))}
+                          className="w-full accent-blue-600 h-1 bg-slate-100 rounded-lg appearance-none cursor-pointer"
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <div className="flex justify-between items-center text-xs">
+                          <span className="text-slate-600 font-semibold">Plate Nominal Width:</span>
+                          <span className="font-mono font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">{plateWidth.toFixed(1)} mm</span>
+                        </div>
+                        <input
+                          type="range"
+                          min="2.5"
+                          max="5.0"
+                          step="0.1"
+                          value={plateWidth}
+                          onChange={(e) => {
+                            const newW = Number(e.target.value);
+                            setPlateWidth(newW);
+                            if (screwHoleRadius >= newW / 2 - 0.2) {
+                              setScrewHoleRadius(Number((newW / 2 - 0.4).toFixed(2)));
+                            }
+                          }}
+                          className="w-full accent-blue-600 h-1 bg-slate-100 rounded-lg appearance-none cursor-pointer"
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <div className="flex justify-between items-center text-xs">
+                          <span className="text-slate-600 font-semibold">Plate Thickness:</span>
+                          <span className="font-mono font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">{plateThickness.toFixed(1)} mm</span>
+                        </div>
+                        <input
+                          type="range"
+                          min="0.8"
+                          max="2.5"
+                          step="0.1"
+                          value={plateThickness}
+                          onChange={(e) => setPlateThickness(Number(e.target.value))}
+                          className="w-full accent-blue-600 h-1 bg-slate-100 rounded-lg appearance-none cursor-pointer"
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <div className="flex justify-between items-center text-xs">
+                          <span className="text-slate-600 font-semibold">Lock Hole Radius:</span>
+                          <span className="font-mono font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">{screwHoleRadius.toFixed(2)} mm</span>
+                        </div>
+                        <input
+                          type="range"
+                          min="0.60"
+                          max={Math.min(1.60, plateWidth / 2 - 0.25)}
+                          step="0.05"
+                          value={screwHoleRadius}
+                          onChange={(e) => setScrewHoleRadius(Number(e.target.value))}
+                          className="w-full accent-blue-600 h-1 bg-slate-100 rounded-lg appearance-none cursor-pointer"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
                 </div>
               </div>
             )}
@@ -1252,9 +1307,14 @@ export default function App() {
                     <span className="text-[9px] text-slate-400 font-bold uppercase tracking-widest font-mono">
                       Product Manufacturing Info (PMI)
                     </span>
-                    <span className="text-[9px] text-emerald-600 bg-emerald-50 border border-emerald-100 px-1.5 py-0.2 rounded font-black font-mono">
-                      ISO 1101 / ASME Y14.5
-                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="hidden sm:inline text-[9px] text-slate-500 bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded font-black font-mono">
+                        {inspectorWidth}px
+                      </span>
+                      <span className="text-[9px] text-emerald-600 bg-emerald-50 border border-emerald-100 px-1.5 py-0.5 rounded font-black font-mono">
+                        ISO 1101 / ASME Y14.5
+                      </span>
+                    </div>
                   </div>
                   <input
                     type="text"
@@ -1266,7 +1326,7 @@ export default function App() {
                   
                   {/* Category Pill Filters */}
                   <div className="flex flex-wrap gap-1 mt-1">
-                    {["All", "Form", "Location", "Profile", "Orientation"].map((cat) => (
+                    {["All", "Form", "Location", "Profile", "Orientation", "Dimension"].map((cat) => (
                       <button
                         key={cat}
                         onClick={() => setToleranceCategory(cat)}
@@ -1279,6 +1339,58 @@ export default function App() {
                         {cat}
                       </button>
                     ))}
+                  </div>
+
+                  <div className="grid grid-cols-4 gap-1.5 pt-1">
+                    {[
+                      {
+                        key: "datum-features",
+                        label: "Features",
+                        visible: showDatumFeatures,
+                        onClick: () => setShowDatumFeatures((value) => !value),
+                        title: "Toggle datum feature badges and leaders"
+                      },
+                      {
+                        key: "datum-targets",
+                        label: "Targets",
+                        visible: showDatumTargets,
+                        onClick: () => setShowDatumTargets((value) => !value),
+                        title: "Toggle datum target badges and target regions"
+                      },
+                      {
+                        key: "datum-reference-frames",
+                        label: "DRF",
+                        visible: showDatumReferenceFrames,
+                        onClick: () => setShowDatumReferenceFrames((value) => !value),
+                        title: "Toggle datum reference frame axes"
+                      },
+                      {
+                        key: "dimensional-tolerances",
+                        label: "Dims",
+                        visible: showDimensionalTolerances,
+                        onClick: () => setShowDimensionalTolerances((value) => !value),
+                        title: "Toggle dimensional tolerance annotations"
+                      }
+                    ].map((toggle) => {
+                      const Icon = toggle.visible ? Eye : EyeOff;
+                      return (
+                        <button
+                          key={toggle.key}
+                          type="button"
+                          onClick={toggle.onClick}
+                          title={toggle.title}
+                          aria-pressed={toggle.visible}
+                          className={`h-7 rounded-md border px-1.5 text-[9.5px] font-black font-mono transition flex items-center justify-center gap-1.5 ${
+                            toggle.visible
+                              ? "border-blue-200 bg-blue-600 text-white shadow-sm"
+                              : "border-slate-200 bg-slate-100 text-slate-500 hover:bg-slate-200"
+                          }`}
+                        >
+                          <Icon className="h-3.5 w-3.5 shrink-0" />
+                          <span className="truncate">{toggle.label}</span>
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
 
@@ -1297,7 +1409,9 @@ export default function App() {
                         </span>
                       </div>
 
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                      <div className={`grid gap-1.5 ${
+                        inspectorWidth >= 620 ? "grid-cols-3" : inspectorWidth >= 480 ? "grid-cols-2" : "grid-cols-1"
+                      }`}>
                         {parsedMetadata.datums.map((d) => (
                           <div
                             key={d.id}
@@ -1349,6 +1463,7 @@ export default function App() {
                               let resolvedId = relatedFaces[0] || d.targetId || "";
                               const datumRenderKind = getDatumRenderKindForFaces(d, relatedFaces);
                               const faceCount = Math.max(relatedFaces.length, datumTargetIds.length);
+                              const isAxisDatum = /cylind|hole|bore|axis/i.test(`${d.type} ${d.targetName} ${d.clinicalContext}`);
                               let resolvedName = datumRenderKind === "twoFaceDimension" && faceCount > 1
                                 ? `${d.name} dimensional location (${faceCount} faces)`
                                 : datumRenderKind === "medianPlane" && faceCount > 1
@@ -1373,66 +1488,68 @@ export default function App() {
                                 datumIdentifier: d.identifier,
                                 datumKind: datumRenderKind,
                               });
+                              const focusId = relatedFaces.find((faceId) => faceId.startsWith("BRepFace-"))
+                                || (resolvedId.startsWith("BRepFace-") ? resolvedId : "");
+                              if (focusId) {
+                                setFocusEntityRequest((prev) => ({
+                                  id: focusId,
+                                  nonce: (prev?.nonce ?? 0) + 1,
+                                  preferAxisView: isAxisDatum
+                                }));
+                              }
                               setMobileView("viewport");
                             }}
                           >
-                            <div className="flex items-center gap-1.5">
+                            {(() => {
+                              const datumTargetIds = Array.isArray(d.targetIds) && d.targetIds.length > 0
+                                ? d.targetIds
+                                : (d.targetId ? [d.targetId] : []);
+                              const faceCount = Math.max(datumTargetIds.length, 1);
+                              const datumFeatureClass = getDatumFeatureClass(d);
+                              const compactDescription = getDatumCompactDescription(d);
+                              const targetEntityLabel = datumTargetIds.length > 0 ? datumTargetIds.join(", ") : "Global";
+                              const shortType = datumFeatureClass === "midDimensional"
+                                ? "MID-DIM"
+                                : datumFeatureClass === "cylindricalMultiFace"
+                                ? "CYL-MULTI"
+                                : datumFeatureClass === "cylindrical"
+                                ? "CYL"
+                                : datumFeatureClass === "singlePlane"
+                                ? "PLANE"
+                                : datumFeatureClass === "multiFace"
+                                ? "MULTI"
+                                : "SURF";
+
+                              return (
+                            <div className="flex items-center gap-2 min-w-0">
                               {/* Standard ASME Drafting Box Style for Datums */}
                               <div className="w-5 h-5 flex items-center justify-center font-black border-2 border-slate-800 bg-slate-50 text-slate-800 text-[10px] font-mono rounded-md shadow-[1px_1px_0px_rgba(30,41,59,0.1)] shrink-0 select-none">
                                 {d.identifier}
                               </div>
-                              <div className="min-w-0">
-                                <h5 className="text-[10px] font-bold text-slate-800 truncate">
+                              <div className="min-w-0 flex-1">
+                                <h5 className="text-[10px] font-bold text-slate-800 leading-tight">
                                   {d.name}
                                 </h5>
-                                <p className="text-[8px] text-slate-400 font-mono">
-                                  {d.entityId}
+                                <p className="text-[9px] text-slate-600 font-semibold leading-tight">
+                                  {compactDescription}
+                                </p>
+                                <p className="mt-0.5 text-[8px] text-slate-400 font-mono font-black leading-tight truncate" title={targetEntityLabel}>
+                                  Target: {targetEntityLabel}
                                 </p>
                               </div>
-                            </div>
-                            
-                            <div className="mt-1 text-[8.5px] text-slate-500 font-medium font-sans truncate">
-                              {d.type}
-                            </div>
-
-                            <div className="mt-1 bg-slate-50/70 py-0.5 px-1 rounded text-[7.5px] text-slate-400 font-mono flex justify-between gap-1 items-center">
-                              <span className="truncate max-w-[70%]" title={d.targetName}>{d.targetName}</span>
-                              <span
-                                className="font-bold text-blue-600 truncate"
-                                title={(d.targetIds && d.targetIds.length > 0) ? d.targetIds.join(", ") : d.targetId}
-                              >
-                                {(d.targetIds && d.targetIds.length > 1) ? `${d.targetIds.length} faces` : (d.targetId || "Global")}
-                              </span>
-                            </div>
-
-                            <div className="mt-1.5 flex justify-between items-center bg-slate-50/50 p-1 rounded-md border border-slate-100">
-                              <span className="text-[8px] font-bold text-slate-500 font-mono">
-                                Bound: {customFaceMapping[d.targetId || d.identifier] || "Auto"}
-                              </span>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setBindingMode({
-                                    type: "datum",
-                                    id: d.id,
-                                    targetId: d.targetId || d.identifier,
-                                    label: d.identifier
-                                  });
-                                }}
-                                className="text-[8px] font-bold text-blue-600 hover:text-white hover:bg-blue-600 bg-blue-50/60 border border-blue-200/50 px-1.5 py-0.5 rounded transition cursor-pointer"
-                                title="Click to bind to any 3D face on the model"
-                              >
-                                Remap
-                              </button>
-                            </div>
-
-                            {/* Hover clinical context justification */}
-                            <div className="absolute bottom-full left-0 right-0 mb-1.5 hidden group-hover:block bg-slate-900 border border-slate-800 text-white rounded-lg text-[9px] p-2.5 z-50 shadow-lg leading-relaxed pointer-events-none">
-                              <div className="font-bold text-[8px] text-blue-400 tracking-wider uppercase mb-0.5 font-mono">
-                                Orthopedic Clinical Significance:
+                              <div className="flex flex-col items-end gap-0.5 shrink-0">
+                                <span className="text-[8px] font-black text-blue-700 bg-blue-50 border border-blue-100 px-1.5 py-0.5 rounded-md">
+                                  {shortType}
+                                </span>
+                                {faceCount > 1 && (
+                                  <span className="text-[7.5px] font-bold text-slate-500 font-mono">
+                                    {faceCount} faces
+                                  </span>
+                                )}
                               </div>
-                              {d.clinicalContext}
                             </div>
+                              );
+                            })()}
                           </div>
                         ))}
                       </div>
@@ -1452,8 +1569,17 @@ export default function App() {
                         </span>
                       </div>
 
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        {parsedMetadata.datumTargets.map((target) => (
+                      <div className={`grid gap-2 ${
+                        inspectorWidth >= 620 ? "grid-cols-3" : inspectorWidth >= 480 ? "grid-cols-2" : "grid-cols-1"
+                      }`}>
+                        {parsedMetadata.datumTargets.map((target) => {
+                          const targetIds = Array.isArray(target.targetIds) && target.targetIds.length > 0
+                            ? target.targetIds
+                            : (target.targetId ? [target.targetId] : []);
+                          const targetEntityLabel = targetIds.length > 0 ? targetIds.join(", ") : "Global";
+                          const targetKind = target.type || "Datum target";
+
+                          return (
                           <div
                             key={target.id}
                             className="bg-white border border-emerald-200 p-2 rounded-lg hover:border-emerald-400 hover:shadow-2xs transition cursor-pointer"
@@ -1467,31 +1593,33 @@ export default function App() {
                               setMobileView("viewport");
                             }}
                           >
-                            <div className="flex items-start justify-between gap-2">
-                              <div className="min-w-0">
-                                <div className="text-[11px] font-black text-emerald-800 font-mono truncate" title={target.name}>
+                            <div className="flex items-center gap-2 min-w-0">
+                              <div className="w-5 h-5 flex items-center justify-center font-black border-2 border-emerald-700 bg-emerald-50 text-emerald-800 text-[8px] font-mono rounded-md shadow-[1px_1px_0px_rgba(6,95,70,0.1)] shrink-0 select-none">
+                                DT
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <h5 className="text-[10px] font-bold text-emerald-900 leading-tight truncate" title={target.name}>
                                   {target.name}
-                                </div>
-                                <div className="text-[8.5px] text-slate-400 font-bold font-mono">
+                                </h5>
+                                <p className="text-[9px] text-slate-600 font-semibold leading-tight truncate" title={targetKind}>
+                                  {targetKind}
+                                </p>
+                                <p className="mt-0.5 text-[8px] text-slate-400 font-mono font-black leading-tight truncate" title={targetEntityLabel}>
+                                  Target: {targetEntityLabel}
+                                </p>
+                              </div>
+                              <div className="flex flex-col items-end gap-0.5 shrink-0">
+                                <span className="text-[8px] font-black bg-emerald-700 text-white px-1.5 py-0.5 rounded-md font-mono">
+                                  {target.identifier}
+                                </span>
+                                <span className="text-[7.5px] text-slate-400 font-bold font-mono">
                                   {target.entityId}
-                                </div>
-                              </div>
-                              <span className="text-[9px] font-black bg-emerald-700 text-white px-1.5 py-0.5 rounded font-mono shrink-0">
-                                {target.identifier}
-                              </span>
-                            </div>
-
-                            <div className="mt-1.5 bg-emerald-50/70 border border-dashed border-emerald-200 rounded p-1.5 text-[9.5px] font-mono">
-                              <div className="flex justify-between gap-2">
-                                <span className="text-slate-500 font-bold uppercase">Target Entity</span>
-                                <span className="text-emerald-700 font-black shrink-0">{target.targetId}</span>
-                              </div>
-                              <div className="text-slate-700 truncate mt-0.5" title={target.targetName}>
-                                {target.targetName}
+                                </span>
                               </div>
                             </div>
                           </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     </div>
                   )}
@@ -1508,44 +1636,50 @@ export default function App() {
                         </span>
                       </div>
 
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        {parsedMetadata.datumReferenceFrames.map((frame) => (
+                      <div className={`grid gap-2 ${
+                        inspectorWidth >= 620 ? "grid-cols-3" : inspectorWidth >= 480 ? "grid-cols-2" : "grid-cols-1"
+                      }`}>
+                        {parsedMetadata.datumReferenceFrames.map((frame) => {
+                          const referenceLabel = frame.references
+                            .map((reference: any) => reference.datumIdentifier)
+                            .join(" | ");
+                          const targetEntityLabel = frame.references
+                            .flatMap((reference: any) => Array.isArray(reference.targetIds) ? reference.targetIds : [])
+                            .filter((targetId: string, index: number, all: string[]) => all.indexOf(targetId) === index)
+                            .join(", ") || "Datum references";
+
+                          return (
                           <div
                             key={frame.id}
                             className="bg-white border border-indigo-200 p-2 rounded-lg hover:border-indigo-400 transition"
                           >
-                            <div className="flex items-start justify-between gap-2">
-                              <div className="min-w-0">
-                                <div className="text-[11px] font-black text-indigo-800 font-mono truncate" title={frame.name}>
+                            <div className="flex items-center gap-2 min-w-0">
+                              <div className="w-5 h-5 flex items-center justify-center font-black border-2 border-indigo-700 bg-indigo-50 text-indigo-800 text-[8px] font-mono rounded-md shadow-[1px_1px_0px_rgba(67,56,202,0.1)] shrink-0 select-none">
+                                DRF
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <h5 className="text-[10px] font-bold text-indigo-900 leading-tight truncate" title={frame.name}>
                                   {frame.name}
-                                </div>
-                                <div className="text-[8.5px] text-slate-400 font-bold font-mono">
-                                  {frame.entityId}
-                                </div>
+                                </h5>
+                                <p className="text-[9px] text-slate-600 font-semibold leading-tight truncate" title={frame.label}>
+                                  {frame.label}
+                                </p>
+                                <p className="mt-0.5 text-[8px] text-slate-400 font-mono font-black leading-tight truncate" title={targetEntityLabel}>
+                                  Target: {targetEntityLabel}
+                                </p>
                               </div>
-                              <span className="text-[9px] font-black bg-indigo-700 text-white px-1.5 py-0.5 rounded font-mono shrink-0">
-                                {frame.toleranceEntityIds.length} FCF
-                              </span>
-                            </div>
-
-                            <div className="mt-1.5 bg-indigo-50/70 border border-dashed border-indigo-200 rounded p-1.5">
-                              <div className="text-[10.5px] text-indigo-900 font-black font-mono truncate" title={frame.label}>
-                                {frame.label}
-                              </div>
-                              <div className="mt-1 flex flex-wrap gap-1">
-                                {frame.references.map((reference, idx) => (
-                                  <span
-                                    key={`${reference.compartmentId}-${reference.datumIdentifier}-${idx}`}
-                                    className="text-[8px] bg-white border border-indigo-200 text-indigo-700 font-black px-1 py-0.5 rounded font-mono"
-                                    title={`${reference.datumEntityId}${reference.targetIds?.length ? ` -> ${reference.targetIds.join(", ")}` : ""}`}
-                                  >
-                                    {reference.precedence}: {reference.datumIdentifier}
-                                  </span>
-                                ))}
+                              <div className="flex flex-col items-end gap-0.5 shrink-0">
+                                <span className="text-[8px] font-black bg-indigo-700 text-white px-1.5 py-0.5 rounded-md font-mono">
+                                  {referenceLabel || "DRF"}
+                                </span>
+                                <span className="text-[7.5px] text-slate-400 font-bold font-mono">
+                                  {frame.toleranceEntityIds.length} FCF
+                                </span>
                               </div>
                             </div>
                           </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     </div>
                   )}
@@ -1575,7 +1709,11 @@ export default function App() {
                       );
                     }
 
-                    return filteredTList.map((t) => {
+                    return (
+                      <div className={`grid gap-2 ${
+                        inspectorWidth >= 620 ? "grid-cols-3" : inspectorWidth >= 480 ? "grid-cols-2" : "grid-cols-1"
+                      }`}>
+                      {filteredTList.map((t) => {
                       const hasSemanticToleranceValue = Number.isFinite(t.value) && !(t.type === "Feature Control Frame" && t.value === 0);
                       // Color mapping depending on category
                       let badgeBg = "bg-rose-50 text-rose-700 border-rose-100";
@@ -1592,41 +1730,150 @@ export default function App() {
                       } else if (t.category === "Profile") {
                         badgeBg = "bg-pink-50 text-pink-700 border-pink-100";
                         symColor = "text-pink-600";
+                      } else if (t.category === "Dimension") {
+                        badgeBg = "bg-cyan-50 text-cyan-700 border-cyan-100";
+                        symColor = "text-cyan-600";
                       }
+
+                      const toleranceTargetIds = Array.isArray(t.targetIds) && t.targetIds.length > 0
+                        ? t.targetIds
+                        : (t.targetId ? [t.targetId] : []);
+                      const targetEntityLabel = toleranceTargetIds.length > 0 ? toleranceTargetIds.join(", ") : "Global";
+                      const fcfLabel = t.datumReferenceFrame?.label || t.category;
+                      const lowerTolerance = Number.isFinite(t.lowerTolerance) ? Number(t.lowerTolerance) : null;
+                      const upperTolerance = Number.isFinite(t.upperTolerance) ? Number(t.upperTolerance) : null;
+                      const toleranceUnitLabel = t.dimensionKind === "angular" ? "deg" : "mm";
+                      const nominalDimension = Number.isFinite(t.nominalDimension) ? Number(t.nominalDimension) : null;
+                      const dimensionLowerLimit = Number.isFinite(t.dimensionLowerLimit) ? Number(t.dimensionLowerLimit) : null;
+                      const dimensionUpperLimit = Number.isFinite(t.dimensionUpperLimit) ? Number(t.dimensionUpperLimit) : null;
+                      const hasDimensionLimitRange = dimensionLowerLimit !== null && dimensionUpperLimit !== null;
+                      const counterboreHoleNominal = Number.isFinite(t.counterboreHoleNominal) ? Number(t.counterboreHoleNominal) : null;
+                      const counterboreHoleLowerTolerance = Number.isFinite(t.counterboreHoleLowerTolerance) ? Number(t.counterboreHoleLowerTolerance) : null;
+                      const counterboreHoleUpperTolerance = Number.isFinite(t.counterboreHoleUpperTolerance) ? Number(t.counterboreHoleUpperTolerance) : null;
+                      const counterboreDepthNominal = Number.isFinite(t.counterboreDepthNominal) ? Number(t.counterboreDepthNominal) : null;
+                      const counterboreDepthLowerTolerance = Number.isFinite(t.counterboreDepthLowerTolerance) ? Number(t.counterboreDepthLowerTolerance) : null;
+                      const counterboreDepthUpperTolerance = Number.isFinite(t.counterboreDepthUpperTolerance) ? Number(t.counterboreDepthUpperTolerance) : null;
+                      const countersinkAngleNominal = Number.isFinite(t.countersinkAngleNominal) ? Number(t.countersinkAngleNominal) : null;
+                      const countersinkAngleUpperTolerance = Number.isFinite(t.countersinkAngleUpperTolerance) ? Number(t.countersinkAngleUpperTolerance) : null;
+                      const dimensionPreModifier = `${t.dimensionPreModifier || ""}`.trim();
+                      const threadDesignation = `${t.threadDesignation || ""}`.trim();
+                      const counterboreEvaluationNote = `${t.counterboreEvaluationNote || ""}`.trim();
+                      const dimensionLimitNote = `${t.dimensionLimitNote || ""}`.trim();
+                      const dimensionLimitPreModifier = `${t.dimensionLimitPreModifier || ""}`.trim();
+                      const dimensionPrefix = dimensionPreModifier ? `${dimensionPreModifier} ` : "";
+                      const dimensionLimitPrefix = dimensionLimitPreModifier ? `${dimensionLimitPreModifier} ` : "";
+                      const counterborePrefix = counterboreEvaluationNote ? "" : dimensionPrefix;
+                      const nominalValueLabel = nominalDimension !== null ? nominalDimension.toFixed(3) : "";
+                      const dimensionLimitRangeLabel = hasDimensionLimitRange
+                        ? `${dimensionLimitPrefix}${t.dimensionKind === "radius" ? "R" : ""}${dimensionLowerLimit.toFixed(3)} - ${dimensionUpperLimit.toFixed(3)}`
+                        : "";
+                      const diameterSymbol = t.isSphericalDimension ? `S\u2300` : `\u2300`;
+                      const diameterNominalLabel = `${dimensionPrefix}${diameterSymbol}${nominalValueLabel}`;
+                      const nominalLabel = hasDimensionLimitRange
+                        ? dimensionLimitRangeLabel
+                        : nominalDimension !== null
+                        ? t.isCounterboreDimension
+                          ? `${counterborePrefix}\u2334 \u2300${nominalValueLabel}${counterboreDepthNominal !== null ? ` \u21a7 ${counterboreDepthNominal.toFixed(3)}` : ""}`
+                          : t.isCountersinkDimension
+                          ? `${dimensionPrefix}\u2335 \u2300${nominalValueLabel}${countersinkAngleNominal !== null ? ` \u00d7 ${countersinkAngleNominal.toFixed(3)} deg` : ""}`
+                          : t.dimensionKind === "threadDepth" && threadDesignation
+                          ? `${dimensionPrefix}${threadDesignation} depth ${nominalValueLabel}`
+                          : t.dimensionKind === "diameter"
+                          ? diameterNominalLabel
+                          : t.dimensionKind === "radius" && t.isControlledRadiusDimension
+                          ? `${dimensionPrefix}CR ${nominalValueLabel}`
+                          : t.dimensionKind === "radius" && t.isSphericalDimension
+                          ? `${dimensionPrefix}SR ${nominalValueLabel}`
+                          : t.dimensionKind === "radius"
+                          ? `${dimensionPrefix}R ${nominalValueLabel}`
+                          : `${dimensionPrefix}${nominalValueLabel}`
+                        : "";
+                      const toleranceValueLabel = t.category === "Dimension" && hasDimensionLimitRange
+                        ? [dimensionLimitRangeLabel, dimensionLimitNote].filter(Boolean).join(" || ")
+                        : t.category === "Dimension" && t.isReferenceDimension && nominalDimension !== null
+                        ? `(${nominalLabel})`
+                        : t.category === "Dimension" && t.isBasicDimension && nominalDimension !== null
+                          ? `[${nominalLabel}]`
+                        : t.category === "Dimension" && lowerTolerance !== null && upperTolerance !== null
+                        ? t.isCounterboreDimension && counterboreDepthNominal !== null
+                          ? [
+                              counterboreHoleNominal !== null
+                                ? `${dimensionPrefix}\u2300${counterboreHoleNominal.toFixed(3)}${counterboreHoleLowerTolerance !== null && counterboreHoleUpperTolerance !== null ? ` +/- ${Math.abs(counterboreHoleUpperTolerance).toFixed(3)}` : ""}`
+                                : "",
+                              `${counterborePrefix}\u2334 \u2300${nominalValueLabel} +/- ${Math.abs(upperTolerance).toFixed(3)} \u21a7 ${counterboreDepthNominal.toFixed(3)}${counterboreDepthLowerTolerance !== null && counterboreDepthUpperTolerance !== null ? ` +/- ${Math.abs(counterboreDepthUpperTolerance).toFixed(3)}` : ""}`,
+                              counterboreEvaluationNote
+                            ].filter(Boolean).join(" || ")
+                          : t.dimensionKind === "diameter" && counterboreDepthNominal !== null
+                          ? [
+                              `${nominalLabel ? `${nominalLabel} ` : ""}+/- ${Math.abs(upperTolerance).toFixed(3)} ${toleranceUnitLabel}`,
+                              `\u21a7 ${counterboreDepthNominal.toFixed(3)}${counterboreDepthLowerTolerance !== null && counterboreDepthUpperTolerance !== null ? ` +/- ${Math.abs(counterboreDepthUpperTolerance).toFixed(3)} ${toleranceUnitLabel}` : ""}`
+                            ].join(" || ")
+                          : t.isCountersinkDimension && countersinkAngleNominal !== null
+                          ? `${dimensionPrefix}\u2335 \u2300${nominalValueLabel} +/- ${Math.abs(upperTolerance).toFixed(3)} ${toleranceUnitLabel} \u00d7 ${countersinkAngleNominal.toFixed(3)} deg${countersinkAngleUpperTolerance !== null ? ` +/- ${Math.abs(countersinkAngleUpperTolerance).toFixed(3)} deg` : ""}`
+                          : Math.abs(lowerTolerance + upperTolerance) < 1e-9
+                          ? `${nominalLabel ? `${nominalLabel} ` : ""}+/- ${Math.abs(upperTolerance).toFixed(3)} ${toleranceUnitLabel}`
+                          : `${nominalLabel ? `${nominalLabel} ` : ""}${lowerTolerance.toFixed(3)} / +${upperTolerance.toFixed(3)} ${toleranceUnitLabel}`
+                        : hasSemanticToleranceValue
+                          ? `${t.value.toFixed(3)} mm`
+                          : "Graphic PMI";
+                      const displayedToleranceValueLabel = toleranceValueLabel;
+                      const displayedToleranceValueLines = displayedToleranceValueLabel.split(" || ");
+                      const toleranceValueKind = t.category === "Dimension" && t.isBasicDimension
+                        ? "BASIC DIM"
+                        : t.category === "Dimension" && t.isReferenceDimension
+                        ? "REFERENCE DIM"
+                        : t.category === "Dimension" && t.dimensionKind === "threadDepth" ? "THREAD DEPTH"
+                        : t.category === "Dimension" && t.isCounterboreDimension ? "CBORE DIM"
+                        : t.category === "Dimension" && t.isCountersinkDimension ? "CSINK DIM"
+                        : t.category === "Dimension" && t.dimensionKind === "diameter" ? "DIAMETER DIM"
+                        : t.category === "Dimension" && t.dimensionKind === "radius" ? "RADIUS DIM"
+                        : t.category === "Dimension" ? "DIM LIMITS" : hasSemanticToleranceValue ? "ZONE LIMIT" : "PRESENTATION";
 
                       return (
                         <div
                           key={t.id}
-                          className="p-2.5 hover:bg-slate-50/85 border border-slate-150 rounded-lg bg-white shadow-3xs flex flex-col gap-2 transition group relative"
+                          title={t.clinicalContext}
+                          data-tolerance-explanation={t.clinicalContext}
+                          className="min-w-0 overflow-hidden p-2.5 hover:bg-slate-50/85 border border-slate-150 rounded-lg bg-white shadow-3xs flex flex-col gap-2 transition group relative"
                         >
                           {/* Header Line */}
-                          <div className="flex items-start justify-between gap-1">
-                            <div className="flex items-center gap-1.5">
+                          <div className="flex flex-col gap-1 min-w-0">
+                            <div className="flex items-center gap-1 min-w-0 flex-1 overflow-hidden">
                               {/* GD&T Badge Icon */}
-                              <span className={`w-6 h-6 flex items-center justify-center text-sm font-black rounded-md border font-sans ${badgeBg}`}>
+                              <span className={`h-6 min-w-0 max-w-[4.25rem] px-1.5 shrink flex items-center justify-center truncate text-[8px] font-black rounded-md border font-mono ${badgeBg}`} title={t.symbol}>
                                 {t.symbol}
                               </span>
-                              <div>
-                                <h4 className="text-xs font-bold text-slate-800 leading-tight">
+                              <div className="min-w-0 flex-1 overflow-hidden">
+                                <h5 className="text-[10px] font-bold text-slate-800 leading-tight line-clamp-2 break-words" title={`${t.type} Tolerancing`}>
                                   {t.type} Tolerancing
-                                </h4>
-                                <span className="text-[9px] text-slate-400 font-mono font-medium">
-                                  {t.entityId}
-                                </span>
+                                </h5>
+                                <p className="text-[9px] text-slate-600 font-semibold leading-tight truncate" title={fcfLabel}>
+                                  {fcfLabel}
+                                </p>
+                                <p className="mt-0.5 text-[8px] text-slate-400 font-mono font-black leading-tight truncate" title={targetEntityLabel}>
+                                  Target: {targetEntityLabel}
+                                </p>
                               </div>
                             </div>
                             
                             {/* Numerical Tolerance Value Badge */}
-                            <div className="text-right shrink-0">
-                              <span className="font-mono text-[10px] font-black bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded border border-slate-200">
-                                {hasSemanticToleranceValue ? `⌀ ${t.value.toFixed(2)} mm` : "Graphic PMI"}
+                            <div className="text-left min-w-0 max-w-full">
+                              <span className="max-w-full min-w-0 font-mono text-[9px] font-black bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded border border-slate-200 inline-flex flex-col items-start gap-0.5 leading-tight" title={displayedToleranceValueLabel}>
+                                {displayedToleranceValueLines.map((line, lineIndex) => (
+                                  <span key={`${t.id}-tol-line-${lineIndex}`} className="max-w-full truncate">{line}</span>
+                                ))}
+                                {t.category === "Dimension" && t.isStatisticalTolerance && (
+                                  <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-slate-800 text-[6px] font-semibold leading-none tracking-normal" title="Statistical tolerance">
+                                    ST
+                                  </span>
+                                )}
                               </span>
-                              <div className="text-[8px] text-slate-400 font-bold tracking-wider font-mono mt-0.5">
-                                {hasSemanticToleranceValue ? "ZONE LIMIT" : "PRESENTATION"}
+                              <div className="max-w-full truncate text-[7px] text-slate-400 font-bold tracking-normal font-mono mt-0.5" title={toleranceValueKind}>
+                                {toleranceValueKind}
                               </div>
                             </div>
-                          </div>                          {/* Target B-Rep Detail Mapping */}
-                          <div className="bg-slate-50/50 p-1.5 rounded border border-dashed border-slate-200 text-[10px] font-mono hover:bg-blue-50/50 hover:border-blue-200 transition cursor-pointer"
+                          </div>
+                          <div className="min-w-0 overflow-hidden flex items-center justify-between gap-1.5 rounded border border-slate-200 bg-slate-50/60 px-1.5 py-1 text-[9px] font-mono hover:bg-blue-50/50 hover:border-blue-200 transition cursor-pointer"
                                onClick={() => {
                                  // Smart interaction: highlight related B-Rep entities dynamically
                                  const currentFaceRecords = parsedMetadata?.faceRecords || [];
@@ -1669,10 +1916,12 @@ export default function App() {
                                  setMobileView("viewport");
                                }}
                           >
-                            <div className="flex justify-between items-center">
-                              <span className="text-slate-400 font-sans font-bold text-[8.5px] uppercase tracking-wider">
-                                TARGET ENTITY {customFaceMapping[t.targetId] ? `(Bound: ${customFaceMapping[t.targetId]})` : ""}
+                            <div className="min-w-0 flex items-center gap-1.5 overflow-hidden">
+                              <span className="text-slate-400 font-black uppercase tracking-wider shrink-0">Target:</span>
+                              <span className="text-slate-700 font-black truncate" title={`${t.targetName} ${targetEntityLabel}`}>
+                                {customFaceMapping[t.targetId] || t.targetId || "Global"}
                               </span>
+                            </div>
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation();
@@ -1682,20 +1931,11 @@ export default function App() {
                                     targetId: t.targetId
                                   });
                                 }}
-                                className="text-[8px] font-bold text-blue-650 hover:text-white hover:bg-blue-600 bg-blue-50/60 border border-blue-200/50 px-1.5 py-0.5 rounded transition cursor-pointer"
+                                className="shrink-0 text-[8px] font-bold text-blue-650 hover:text-white hover:bg-blue-600 bg-blue-50/60 border border-blue-200/50 px-1.5 py-0.5 rounded transition cursor-pointer"
                                 title="Click to bind to any 3D face on the model"
                               >
                                 Remap
                               </button>
-                            </div>
-                            <div className="flex justify-between mt-0.5 text-slate-700">
-                              <span className="font-semibold truncate max-w-[70%]" title={t.targetName}>
-                                {t.targetName}
-                              </span>
-                              <span className="font-bold text-blue-600 shrink-0">
-                                {t.targetId || "Global"}
-                              </span>
-                            </div>
                           </div>
 
                           {t.datumReferenceFrame && (
@@ -1712,13 +1952,11 @@ export default function App() {
                             </div>
                           )}
 
-                          {/* Orthopedic Justification Clinical Context Section */}
-                          <div className="text-[10px] text-slate-600 leading-relaxed pl-1.5 border-l-2 border-slate-300 italic font-medium bg-slate-50/30 py-0.5">
-                            {t.clinicalContext}
-                          </div>
                         </div>
                       );
-                    });
+                    })}
+                      </div>
+                    );
                   })()}
                 </div>
               </div>
@@ -1776,7 +2014,26 @@ export default function App() {
                           </div>
                           <div className="flex justify-between gap-2 min-w-0">
                             <span className="text-slate-500 shrink-0">Surface Area:</span>
-                            <span className="text-blue-600 font-black min-w-0 max-w-[65%] truncate text-right">{selectedEntity.area} mm²</span>
+                            <span className="text-blue-600 font-black min-w-0 max-w-[65%] truncate text-right">{selectedEntity.area} mm^2</span>
+                          </div>
+                        </>
+                      ) : selectedEntity.type === 'vertex' ? (
+                        <>
+                          <div className="flex justify-between gap-2 pb-1 border-b border-slate-200/50 min-w-0">
+                            <span className="text-slate-550 shrink-0">Type:</span>
+                            <span className="text-slate-900 font-bold min-w-0 max-w-[65%] truncate text-right">VERTEX_POINT</span>
+                          </div>
+                          <div className="flex justify-between gap-2 pb-1 border-b border-slate-200/50 min-w-0">
+                            <span className="text-slate-550 shrink-0">Connected Edges:</span>
+                            <span className="text-slate-900 font-bold min-w-0 max-w-[65%] text-right break-words">{selectedEntity.edgeIds?.length || 0}</span>
+                          </div>
+                          <div className="flex justify-between gap-2 min-w-0">
+                            <span className="text-slate-550 shrink-0">Adjacent Faces:</span>
+                            <span className="text-blue-600 font-bold min-w-0 max-w-[65%] text-right break-words">
+                              {selectedEntity.parentFaceIndices?.length
+                                ? selectedEntity.parentFaceIndices.map((faceIdx: number) => `F${faceIdx + 1}`).join(", ")
+                                : "Boundary"}
+                            </span>
                           </div>
                         </>
                       ) : (

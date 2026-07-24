@@ -36,18 +36,6 @@ export async function parseStepWithOcct(
       const hasSolidMesh = result.meshes.some((mesh: any) => /^SOLID\b/i.test(mesh.name || ""));
       const isAuxiliarySourceMesh = (mesh: any) => hasSolidMesh && !/^SOLID\b/i.test(mesh.name || "");
 
-      // Helper to calculate a precise triangle normal
-      const computeTriangleNormal = (v0: number[], v1: number[], v2: number[]): number[] => {
-        const ax = v1[0] - v0[0], ay = v1[1] - v0[1], az = v1[2] - v0[2];
-        const bx = v2[0] - v0[0], by = v2[1] - v0[1], bz = v2[2] - v0[2];
-        const nx = ay * bz - az * by;
-        const ny = az * bx - ax * bz;
-        const nz = ax * by - ay * bx;
-        const len = Math.sqrt(nx * nx + ny * ny + nz * nz);
-        if (len < 1e-7) return [0, 0, 1];
-        return [nx / len, ny / len, nz / len];
-      };
-
       // 1. Convert each body/mesh into its individual constituent analytical B-Rep faces
       result.meshes.forEach((mesh: any, meshIdx: number) => {
         const rawPositions = mesh.attributes?.position?.array || [];
@@ -156,13 +144,16 @@ export async function parseStepWithOcct(
         });
       });
 
-      // 2. Extract shared B-Rep-like edge segments globally. A real B-Rep edge is
-      // owned by the shell and referenced by adjacent faces, not duplicated per face.
+      // 2. Extract face-to-face intersection edge segments globally. A viewer
+      // B-Rep edge is selectable only when the same boundary segment is shared
+      // by at least two B-Rep faces; single-face loop contours are not edges.
       const edgeSegmentMap = new Map<string, {
         positions: number[];
         faceIndices: Set<number>;
         faceIds: Set<string>;
       }>();
+      const edgeEndpointKeys = new Map<string, [string, string]>();
+      const pointByCoordinateKey = new Map<string, [number, number, number]>();
       const faceLoopDrafts: {
         faceIndex: number;
         edgeKeys: string[];
@@ -180,7 +171,14 @@ export async function parseStepWithOcct(
       };
 
       const addSharedEdgeSegment = (positions: any, a: number, b: number, faceIdx: number) => {
-        const key = edgeKeyForVertices(positions, a, b);
+        const ax = positions[a * 3], ay = positions[a * 3 + 1], az = positions[a * 3 + 2];
+        const bx = positions[b * 3], by = positions[b * 3 + 1], bz = positions[b * 3 + 2];
+        const aKey = coordinateKey(ax, ay, az);
+        const bKey = coordinateKey(bx, by, bz);
+        pointByCoordinateKey.set(aKey, [ax, ay, az]);
+        pointByCoordinateKey.set(bKey, [bx, by, bz]);
+        const key = aKey < bKey ? `${aKey}|${bKey}` : `${bKey}|${aKey}`;
+        edgeEndpointKeys.set(key, [aKey, bKey]);
         const existing = edgeSegmentMap.get(key);
         if (existing) {
           existing.faceIndices.add(faceIdx);
@@ -190,8 +188,8 @@ export async function parseStepWithOcct(
 
         edgeSegmentMap.set(key, {
           positions: [
-            positions[a * 3], positions[a * 3 + 1], positions[a * 3 + 2],
-            positions[b * 3], positions[b * 3 + 1], positions[b * 3 + 2]
+            ax, ay, az,
+            bx, by, bz
           ],
           faceIndices: new Set([faceIdx]),
           faceIds: new Set([`BRepFace-${faceIdx}`])
@@ -237,32 +235,6 @@ export async function parseStepWithOcct(
             const a = parseInt(aStr, 10);
             const b = parseInt(bStr, 10);
             edgePairs.push([a, b]);
-          } else if (info.count === 2) {
-            // Internal crease within the face. Draw only if it forms a sharp crease (angle > 30 degrees)
-            const t0 = info.triangles[0];
-            const t1 = info.triangles[1];
-
-            const a0 = indices[t0 * 3], b0 = indices[t0 * 3 + 1], c0 = indices[t0 * 3 + 2];
-            const v0 = [positions[a0 * 3], positions[a0 * 3 + 1], positions[a0 * 3 + 2]];
-            const v1 = [positions[b0 * 3], positions[b0 * 3 + 1], positions[b0 * 3 + 2]];
-            const v2 = [positions[c0 * 3], positions[c0 * 3 + 1], positions[c0 * 3 + 2]];
-
-            const a1 = indices[t1 * 3], b1 = indices[t1 * 3 + 1], c1 = indices[t1 * 3 + 2];
-            const w0 = [positions[a1 * 3], positions[a1 * 3 + 1], positions[a1 * 3 + 2]];
-            const w1 = [positions[b1 * 3], positions[b1 * 3 + 1], positions[b1 * 3 + 2]];
-            const w2 = [positions[c1 * 3], positions[c1 * 3 + 1], positions[c1 * 3 + 2]];
-
-            const normal0 = computeTriangleNormal(v0, v1, v2);
-            const normal1 = computeTriangleNormal(w0, w1, w2);
-
-            const dot = normal0[0] * normal1[0] + normal0[1] * normal1[1] + normal0[2] * normal1[2];
-            // dot < 0.866 is ~30 degrees. Creases sharper than this are drawn
-            if (dot < 0.866) {
-              const [aStr, bStr] = k.split("_");
-              const a = parseInt(aStr, 10);
-              const b = parseInt(bStr, 10);
-              edgePairs.push([a, b]);
-            }
           }
         });
 
@@ -326,21 +298,104 @@ export async function parseStepWithOcct(
         }
       });
 
-      const edgeIndexByKey = new Map<string, number>();
-      const lines = Array.from(edgeSegmentMap.entries()).map(([edgeKey, edge], idx) => {
-        edgeIndexByKey.set(edgeKey, idx);
-        const faceIndices = Array.from(edge.faceIndices).sort((a, b) => a - b);
-        const parentFaceIndex = faceIndices[0] ?? -1;
-
-        return {
-          positions: new Float32Array(edge.positions),
-          indices: new Uint32Array([0, 1]),
-          name: `B-Rep Edge #${idx + 1}`,
-          parentFaceId: parentFaceIndex >= 0 ? `BRepFace-${parentFaceIndex}` : undefined,
-          parentFaceIndex,
-          parentFaceIds: Array.from(edge.faceIds).sort(),
-          parentFaceIndices: faceIndices,
+      const sharedEdgeEntries = Array.from(edgeSegmentMap.entries())
+        .filter(([, edge]) => edge.faceIndices.size >= 2);
+      const sharedSegmentsByFacePair = new Map<string, Array<{
+        edgeKey: string;
+        edge: {
+          positions: number[];
+          faceIndices: Set<number>;
+          faceIds: Set<string>;
         };
+        endpointKeys: [string, string];
+      }>>();
+      sharedEdgeEntries.forEach(([edgeKey, edge]) => {
+        const faceIndices = Array.from(edge.faceIndices).sort((a, b) => a - b).slice(0, 2);
+        if (faceIndices.length < 2) return;
+        const endpointKeys = edgeEndpointKeys.get(edgeKey);
+        if (!endpointKeys) return;
+        const facePairKey = faceIndices.join("|");
+        const segments = sharedSegmentsByFacePair.get(facePairKey) || [];
+        segments.push({ edgeKey, edge, endpointKeys });
+        sharedSegmentsByFacePair.set(facePairKey, segments);
+      });
+
+      const edgeIndexByKey = new Map<string, number>();
+      const lines: any[] = [];
+
+      sharedSegmentsByFacePair.forEach((segments) => {
+        const adjacency = new Map<string, string[]>();
+        const segmentByKey = new Map(segments.map((segment) => [segment.edgeKey, segment]));
+        segments.forEach((segment) => {
+          const [aKey, bKey] = segment.endpointKeys;
+          const aEdges = adjacency.get(aKey) || [];
+          const bEdges = adjacency.get(bKey) || [];
+          aEdges.push(segment.edgeKey);
+          bEdges.push(segment.edgeKey);
+          adjacency.set(aKey, aEdges);
+          adjacency.set(bKey, bEdges);
+        });
+
+        const unvisited = new Set(segments.map((segment) => segment.edgeKey));
+        while (unvisited.size > 0) {
+          const [startKey] = unvisited;
+          const pending = [startKey];
+          const componentKeys: string[] = [];
+          unvisited.delete(startKey);
+
+          while (pending.length > 0) {
+            const currentKey = pending.pop()!;
+            componentKeys.push(currentKey);
+            const segment = segmentByKey.get(currentKey);
+            if (!segment) continue;
+            segment.endpointKeys.forEach((pointKey) => {
+              (adjacency.get(pointKey) || []).forEach((neighborKey) => {
+                if (unvisited.has(neighborKey)) {
+                  unvisited.delete(neighborKey);
+                  pending.push(neighborKey);
+                }
+              });
+            });
+          }
+
+          const componentSegments = componentKeys
+            .map((edgeKey) => segmentByKey.get(edgeKey))
+            .filter((segment): segment is NonNullable<typeof segment> => !!segment);
+          if (componentSegments.length === 0) continue;
+          const firstEdge = componentSegments[0].edge;
+          const faceIndices = Array.from(firstEdge.faceIndices).sort((a, b) => a - b);
+          const faceIds = Array.from(firstEdge.faceIds).sort();
+          const positions = componentSegments.flatMap((segment) => segment.edge.positions);
+          const componentPointDegree = new Map<string, number>();
+          componentSegments.forEach((segment) => {
+            segment.endpointKeys.forEach((pointKey) => {
+              componentPointDegree.set(pointKey, (componentPointDegree.get(pointKey) || 0) + 1);
+            });
+          });
+          const openVertexKeys = Array.from(componentPointDegree.entries())
+            .filter(([, degree]) => degree !== 2)
+            .map(([pointKey]) => pointKey);
+          const vertexKeys = openVertexKeys.length > 0
+            ? openVertexKeys
+            : [componentSegments[0].endpointKeys[0]];
+          const vertexPoints = vertexKeys
+            .map((pointKey) => pointByCoordinateKey.get(pointKey))
+            .filter((point): point is [number, number, number] => !!point)
+            .map(([x, y, z]) => ({ x, y, z }));
+          const idx = lines.length;
+          componentKeys.forEach((edgeKey) => edgeIndexByKey.set(edgeKey, idx));
+          const parentFaceIndex = faceIndices[0] ?? -1;
+
+          lines.push({
+            positions: new Float32Array(positions),
+            name: `B-Rep Edge #${idx + 1}`,
+            parentFaceId: parentFaceIndex >= 0 ? `BRepFace-${parentFaceIndex}` : undefined,
+            parentFaceIndex,
+            parentFaceIds: faceIds,
+            parentFaceIndices: faceIndices,
+            vertexPoints,
+          });
+        }
       });
 
       const loops = faceLoopDrafts.map((loop, idx) => {

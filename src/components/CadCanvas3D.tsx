@@ -3,6 +3,9 @@ import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { acceleratedRaycast, computeBoundsTree, disposeBoundsTree, SAH } from "three-mesh-bvh";
 import { Orbit, Sparkles } from "lucide-react";
+import { LineMaterial } from "three/examples/jsm/lines/LineMaterial.js";
+import { LineSegments2 } from "three/examples/jsm/lines/LineSegments2.js";
+import { LineSegmentsGeometry } from "three/examples/jsm/lines/LineSegmentsGeometry.js";
 
 (THREE.BufferGeometry.prototype as any).computeBoundsTree = computeBoundsTree;
 (THREE.BufferGeometry.prototype as any).disposeBoundsTree = disposeBoundsTree;
@@ -11,8 +14,8 @@ import { Orbit, Sparkles } from "lucide-react";
 interface CadCanvas3DProps {
   occtResult: any;
   isLoading: boolean;
-  viewMode: "solid" | "wireframe" | "points" | "xray";
-  wireframeOverlay: boolean;
+  viewMode: "solid" | "xray";
+  cameraProjection: "perspective" | "orthographic";
   materialType: "titanium" | "gold" | "chrome" | "carbon";
   autoRotate: boolean;
   selectedEntityId: string | null;
@@ -31,6 +34,10 @@ interface CadCanvas3DProps {
   cylinderIds?: string[];
   customFaceMapping?: Record<string, string>;
   showBrepOverlays?: boolean;
+  showDatumFeatures?: boolean;
+  showDatumTargets?: boolean;
+  showDatumReferenceFrames?: boolean;
+  showDimensionalTolerances?: boolean;
 }
 
 type MeasurementLabelState = {
@@ -48,11 +55,20 @@ type MeasurementCircleSnap = {
 
 type MeasurementSample = {
   point: THREE.Vector3;
-  kind: "face" | "edge" | "cylinder";
+  kind: "face" | "edge" | "vertex" | "cylinder";
   objectName: string;
   normal?: THREE.Vector3;
   planeConstant?: number;
   circle?: MeasurementCircleSnap;
+};
+
+type BRepVertexRecord = {
+  id: string;
+  index: number;
+  point: { x: number; y: number; z: number };
+  edgeIds: string[];
+  parentFaceIndices: number[];
+  parentFaceIds: string[];
 };
 
 type LinearMeasurementResult = {
@@ -63,6 +79,12 @@ type LinearMeasurementResult = {
   diameterReference?: boolean;
   normalReference?: THREE.Vector3;
   surfaceReference?: THREE.Vector3;
+};
+
+type MeasurementFrameBasis = {
+  xAxis: THREE.Vector3;
+  yAxis: THREE.Vector3;
+  zAxis: THREE.Vector3;
 };
 
 type AngularMeasurementResult = {
@@ -83,7 +105,7 @@ export default function CadCanvas3D({
   occtResult,
   isLoading,
   viewMode,
-  wireframeOverlay,
+  cameraProjection,
   materialType,
   autoRotate,
   selectedEntityId,
@@ -102,6 +124,10 @@ export default function CadCanvas3D({
   cylinderIds = [],
   customFaceMapping = {},
   showBrepOverlays = true,
+  showDatumFeatures = true,
+  showDatumTargets = true,
+  showDatumReferenceFrames = true,
+  showDimensionalTolerances = true,
 }: CadCanvas3DProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -111,6 +137,8 @@ export default function CadCanvas3D({
   const orientationViewHandlerRef = useRef<((direction: THREE.Vector3, up?: THREE.Vector3) => void) | null>(null);
   const partRollHandlerRef = useRef<((angle: number) => void) | null>(null);
   const requestRenderRef = useRef<((frames?: number) => void) | null>(null);
+  const dimensionOverlayVisibilityRefreshRef = useRef<(() => void) | null>(null);
+  const prevShowDimensionalTolerancesPropRef = useRef(showDimensionalTolerances);
 
   // Tracker for dynamic coordinates info
   const [hoveredCoordinate, setHoveredCoordinate] = useState<{ x: number; y: number; z: number } | null>(null);
@@ -118,11 +146,16 @@ export default function CadCanvas3D({
   const [measurementLabel, setMeasurementLabel] = useState<MeasurementLabelState | null>(null);
 
   // Capture fast-updating props in a ref for animation loops
-  const propsRef = useRef({ viewMode, wireframeOverlay, materialType, autoRotate, selectedEntityId, selectedRelatedEntityIds, hoveredEntityId, focusEntityRequest, measurementMode, selectionClickEnabled, datums, datumTargets, datumReferenceFrames, tolerances, faceRecords, cylinderIds, customFaceMapping });
+  const propsRef = useRef({ viewMode, cameraProjection, materialType, autoRotate, selectedEntityId, selectedRelatedEntityIds, hoveredEntityId, focusEntityRequest, measurementMode, selectionClickEnabled, datums, datumTargets, datumReferenceFrames, tolerances, faceRecords, cylinderIds, customFaceMapping, showDatumFeatures, showDatumTargets, showDatumReferenceFrames, showDimensionalTolerances });
   useEffect(() => {
-    propsRef.current = { viewMode, wireframeOverlay, materialType, autoRotate, selectedEntityId, selectedRelatedEntityIds, hoveredEntityId, focusEntityRequest, measurementMode, selectionClickEnabled, datums, datumTargets, datumReferenceFrames, tolerances, faceRecords, cylinderIds, customFaceMapping };
+    const dimensionVisibilityChanged = prevShowDimensionalTolerancesPropRef.current !== showDimensionalTolerances;
+    prevShowDimensionalTolerancesPropRef.current = showDimensionalTolerances;
+    propsRef.current = { viewMode, cameraProjection, materialType, autoRotate, selectedEntityId, selectedRelatedEntityIds, hoveredEntityId, focusEntityRequest, measurementMode, selectionClickEnabled, datums, datumTargets, datumReferenceFrames, tolerances, faceRecords, cylinderIds, customFaceMapping, showDatumFeatures, showDatumTargets, showDatumReferenceFrames, showDimensionalTolerances };
+    if (dimensionVisibilityChanged) {
+      dimensionOverlayVisibilityRefreshRef.current?.();
+    }
     requestRenderRef.current?.(4);
-  }, [viewMode, wireframeOverlay, materialType, autoRotate, selectedEntityId, selectedRelatedEntityIds, hoveredEntityId, focusEntityRequest, measurementMode, selectionClickEnabled, datums, datumTargets, datumReferenceFrames, tolerances, faceRecords, cylinderIds, customFaceMapping]);
+  }, [viewMode, cameraProjection, materialType, autoRotate, selectedEntityId, selectedRelatedEntityIds, hoveredEntityId, focusEntityRequest, measurementMode, selectionClickEnabled, datums, datumTargets, datumReferenceFrames, tolerances, faceRecords, cylinderIds, customFaceMapping, showDatumFeatures, showDatumTargets, showDatumReferenceFrames, showDimensionalTolerances]);
 
   useEffect(() => {
     if (!containerRef.current || !canvasRef.current) return;
@@ -154,8 +187,39 @@ export default function CadCanvas3D({
     scene.add(assemblyGroup);
 
     // Setup Camera
-    const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 1000);
+    type ViewCamera = THREE.PerspectiveCamera | THREE.OrthographicCamera;
+    let viewportWidth = 1;
+    let viewportHeight = 1;
+    let activeCameraProjection: "perspective" | "orthographic" = propsRef.current.cameraProjection;
+    const perspectiveCamera = new THREE.PerspectiveCamera(40, 1, 0.1, 1000);
+    const orthographicCamera = new THREE.OrthographicCamera(-10, 10, 10, -10, 0.1, 1000);
+    let camera: ViewCamera = activeCameraProjection === "orthographic" ? orthographicCamera : perspectiveCamera;
+    let controls: OrbitControls;
     camera.position.set(15, 12, 22);
+
+    const getViewportAspect = () => viewportWidth / Math.max(viewportHeight, 1);
+
+    const getPerspectiveFitDistance = (sizeMax: number) => {
+      const cameraFov = perspectiveCamera.fov * (Math.PI / 180);
+      return Math.max(10, Math.abs(sizeMax / 2 / Math.tan(cameraFov / 2)) * 1.55);
+    };
+
+    const updateOrthographicCameraFrustum = () => {
+      const aspect = getViewportAspect();
+      const distance = Math.max(camera.position.distanceTo(controls?.target || modelOrbitTarget), modelSizeMax || 10);
+      const visibleHeight = Math.max(modelSizeMax * 0.8, 2 * distance * Math.tan(THREE.MathUtils.degToRad(perspectiveCamera.fov) / 2));
+      orthographicCamera.left = -visibleHeight * aspect / 2;
+      orthographicCamera.right = visibleHeight * aspect / 2;
+      orthographicCamera.top = visibleHeight / 2;
+      orthographicCamera.bottom = -visibleHeight / 2;
+      orthographicCamera.updateProjectionMatrix();
+    };
+
+    const updateActiveCameraProjectionMatrix = () => {
+      perspectiveCamera.aspect = getViewportAspect();
+      perspectiveCamera.updateProjectionMatrix();
+      updateOrthographicCameraFrustum();
+    };
 
     // Logs-depth buffer solves CAD intersection flickering/aliasing
     const renderer = new THREE.WebGLRenderer({
@@ -170,8 +234,9 @@ export default function CadCanvas3D({
     const resizeObserver = new ResizeObserver((entries) => {
       for (const entry of entries) {
         const { width, height } = entry.contentRect;
-        camera.aspect = width / height;
-        camera.updateProjectionMatrix();
+        viewportWidth = Math.max(width, 1);
+        viewportHeight = Math.max(height, 1);
+        updateActiveCameraProjectionMatrix();
         renderer.setSize(width, height);
         requestRenderRef.current?.(2);
       }
@@ -179,13 +244,31 @@ export default function CadCanvas3D({
     resizeObserver.observe(containerRef.current);
 
     // Orbit Navigator Controls
-    const controls = new OrbitControls(camera, canvas);
+    controls = new OrbitControls(camera, canvas);
     controls.enableDamping = true;
     controls.dampingFactor = 0.08;
     controls.maxDistance = 450;
     controls.minDistance = 2;
 
-    let gridHelper: THREE.GridHelper | null = null;
+    const switchCameraProjection = (nextProjection: "perspective" | "orthographic") => {
+      if (nextProjection === activeCameraProjection) return;
+      const previousCamera = camera;
+      const nextCamera = nextProjection === "orthographic" ? orthographicCamera : perspectiveCamera;
+
+      nextCamera.position.copy(previousCamera.position);
+      nextCamera.rotation.copy(previousCamera.rotation);
+      nextCamera.up.copy(previousCamera.up);
+      nextCamera.near = previousCamera.near;
+      nextCamera.far = previousCamera.far;
+      camera = nextCamera;
+      controls.object = camera;
+      activeCameraProjection = nextProjection;
+      updateActiveCameraProjectionMatrix();
+      controls.update();
+      camera.updateMatrixWorld(true);
+      requestRenderRef.current?.(4);
+    };
+
     let cameraFocusTarget: {
       position: THREE.Vector3;
       target: THREE.Vector3;
@@ -199,8 +282,15 @@ export default function CadCanvas3D({
     let focusedDatumOrbit = false;
     const modelOrbitTarget = new THREE.Vector3(0, 0, 0);
     let modelSizeMax = 10;
+    let drfBadgeCache: {
+      id: string;
+      element: HTMLElement;
+      object: THREE.Object3D;
+      localPoint: THREE.Vector3;
+    }[] = [];
     let datumAnchorCache: {
       id: string;
+      datum: any;
       element: HTMLElement;
       leaderElement: HTMLElement | null;
       triangleElement: HTMLElement | null;
@@ -235,20 +325,87 @@ export default function CadCanvas3D({
       annotationKind: "datum" | "datumTarget";
       hasLeader: boolean;
     }[] = [];
+    let pmiDimensionLeaderCache: {
+      tolerance: any;
+      faceName: string;
+      slotIndex: number;
+      slotCount: number;
+      anchor: {
+        surfacePoint: THREE.Vector3;
+        radialDirection: THREE.Vector3;
+      };
+      line: THREE.LineSegments;
+      arrow: THREE.Mesh;
+      labelEntry: {
+        element: HTMLElement;
+        point: THREE.Vector3;
+        screenX: number;
+        screenY: number;
+        visible: boolean;
+      } | null;
+    }[] = [];
+    let pmiDimensionLabelCache: {
+      element: HTMLElement;
+      point: THREE.Vector3;
+      resolvePoint?: () => THREE.Vector3 | null;
+      resolveTransform?: () => string;
+      screenX: number;
+      screenY: number;
+      visible: boolean;
+    }[] = [];
+    let updatePmiDimensionLeaderFacing: () => void = () => undefined;
     let cadFacePickObjects: THREE.Object3D[] = [];
     let cadFallbackFacePickObjects: THREE.Object3D[] = [];
+    let cadEdgePickObjects: THREE.Object3D[] = [];
+    let cadVertexPickObjects: THREE.Object3D[] = [];
     let renderedObjectByName = new Map<string, THREE.Object3D>();
     let edgeNamesByFaceIndex = new Map<number, string[]>();
+    let vertexRecordsByName = new Map<string, BRepVertexRecord>();
     let datumCacheMissingElements = 0;
     let datumCacheRetryFrame = 0;
-    const floorBounds = new THREE.Box3();
     const partBounds = new THREE.Box3();
     const partCenter = new THREE.Vector3();
     let measurementPoints: MeasurementSample[] = [];
     let measurementGroup: THREE.Group | null = null;
     let previousMeasurementGroup: THREE.Group | null = null;
+    let edgeHighlightGroup: THREE.Group | null = null;
+    let vertexHighlightGroup: THREE.Group | null = null;
     let measurementLabelPoint: THREE.Vector3 | null = null;
     let prevMeasurementMode = measurementMode;
+    let edgeHighlightResolutionWidth = -1;
+    let edgeHighlightResolutionHeight = -1;
+    const vertexMarkerWorldPoint = new THREE.Vector3();
+
+    const updateEdgeHighlightResolution = (force = false) => {
+      if (!edgeHighlightGroup) return;
+      const width = Math.max(viewportWidth, 1);
+      const height = Math.max(viewportHeight, 1);
+      if (!force && width === edgeHighlightResolutionWidth && height === edgeHighlightResolutionHeight) return;
+
+      edgeHighlightResolutionWidth = width;
+      edgeHighlightResolutionHeight = height;
+      edgeHighlightGroup.children.forEach((item) => {
+        const material = (item as any).material;
+        if (material instanceof LineMaterial) {
+          material.resolution.set(width, height);
+        }
+      });
+    };
+
+    const updateVertexMarkerScreenScale = () => {
+      if (!vertexHighlightGroup) return;
+      const targetPixels = 6;
+      const viewportScale = viewportHeight > 0 ? viewportHeight : renderer.domElement.clientHeight || 1;
+      const perspectiveFov = THREE.MathUtils.degToRad(perspectiveCamera.fov);
+      vertexHighlightGroup.children.forEach((child) => {
+        if (!(child instanceof THREE.Mesh)) return;
+        const worldPoint = child.getWorldPosition(vertexMarkerWorldPoint);
+        const worldRadius = camera instanceof THREE.OrthographicCamera
+          ? (targetPixels / viewportScale) * (camera.top - camera.bottom) / Math.max(camera.zoom, 1e-6)
+          : (2 * camera.position.distanceTo(worldPoint) * Math.tan(perspectiveFov / 2) * targetPixels) / viewportScale;
+        child.scale.setScalar(Math.max(worldRadius, 1e-6));
+      });
+    };
 
     const getPartWorldBounds = () => {
       assemblyGroup.updateMatrixWorld(true);
@@ -261,16 +418,8 @@ export default function CadCanvas3D({
       return partBounds;
     };
 
-    const updateFloorGridPosition = () => {
-      if (!gridHelper || assemblyGroup.children.length === 0) return;
-      floorBounds.copy(getPartWorldBounds());
-      if (!Number.isFinite(floorBounds.min.y)) return;
-      floorBounds.getCenter(partCenter);
-      gridHelper.position.set(partCenter.x, floorBounds.min.y - 0.2, partCenter.z);
-    };
-
     // Helper: Obtain base face standard material
-    const getFaceMaterial = (type: string, baseColor: THREE.Color, mode: "solid" | "wireframe" | "points" | "xray", isSelected: boolean, isHovered: boolean) => {
+    const getFaceMaterial = (type: string, baseColor: THREE.Color, mode: "solid" | "xray", isSelected: boolean, isHovered: boolean) => {
       if (mode === "xray") {
         return new THREE.MeshStandardMaterial({
           color: isSelected ? new THREE.Color("#10b981") : (isHovered ? new THREE.Color("#38bdf8") : baseColor.clone().addScalar(0.1)),
@@ -282,14 +431,6 @@ export default function CadCanvas3D({
           side: THREE.DoubleSide,
           emissive: isSelected ? new THREE.Color("#047857") : (isHovered ? new THREE.Color("#0284c7") : new THREE.Color("#000000")),
           emissiveIntensity: isSelected ? 0.6 : (isHovered ? 0.8 : 0),
-        });
-      }
-
-      if (mode === "wireframe") {
-        return new THREE.MeshBasicMaterial({
-          color: isSelected ? new THREE.Color("#10b981") : (isHovered ? new THREE.Color("#0ea5e9") : baseColor),
-          wireframe: true,
-          side: THREE.DoubleSide,
         });
       }
 
@@ -514,34 +655,45 @@ export default function CadCanvas3D({
       };
     };
 
+    const clearPmiDimensionLabelElements = () => {
+      pmiDimensionLeaderCache = [];
+      pmiDimensionLabelCache = [];
+      containerRef.current
+        ?.querySelectorAll("[data-pmi-dimension-label='true']")
+        .forEach((element) => element.remove());
+    };
+
     // Rebuild B-Rep objects inside the canvas
     const rebuildSceneTopology = (resetCamera = false) => {
+      clearPmiDimensionLabelElements();
+      updatePmiDimensionLeaderFacing = () => undefined;
       // Clean previously rendered nodes
       while (assemblyGroup.children.length > 0) {
         const item = assemblyGroup.children[0];
         assemblyGroup.remove(item);
-        if (item instanceof THREE.Mesh || item instanceof THREE.LineSegments || item instanceof THREE.Line) {
-          item.geometry.dispose();
-          if (Array.isArray(item.material)) {
-            item.material.forEach((m) => m.dispose());
-          } else {
-            item.material.dispose();
+        item.traverse((child) => {
+          if (child instanceof THREE.Mesh || child instanceof THREE.LineSegments || child instanceof THREE.Line || child instanceof THREE.Points) {
+            child.geometry.dispose();
+            if (Array.isArray(child.material)) {
+              child.material.forEach((m) => m.dispose());
+            } else {
+              child.material.dispose();
+            }
           }
-        }
+        });
       }
 
-      if (gridHelper) {
-        scene.remove(gridHelper);
-        gridHelper = null;
-      }
       cadFacePickObjects = [];
       cadFallbackFacePickObjects = [];
+      cadEdgePickObjects = [];
+      cadVertexPickObjects = [];
       renderedObjectByName = new Map();
       edgeNamesByFaceIndex = new Map();
+      vertexRecordsByName = new Map();
 
       if (!occtResult || !occtResult.success) return;
 
-      const { materialType: activeMat, viewMode: activeMode, wireframeOverlay: overlayOn, selectedEntityId: selectId, hoveredEntityId: hoverId } = propsRef.current;
+      const { materialType: activeMat, viewMode: activeMode, selectedEntityId: selectId, hoveredEntityId: hoverId } = propsRef.current;
       let totalTriangles = 0;
       let meshCounter = 0;
       let edgeCounter = 0;
@@ -549,26 +701,39 @@ export default function CadCanvas3D({
       const pickIndices: number[] = [];
       const pickFaceNamesByTriangle: string[] = [];
       const pickFaceNamesByVertex: string[] = [];
+      const visibleEdgePositions: number[] = [];
+      const edgePickPositions: number[] = [];
+      const edgePickNamesBySegment: string[] = [];
+      const vertexRecordsByKey = new Map<string, BRepVertexRecord>();
 
-      // Check if the currently hovered or selected entity is actually an edge, and locate its parent face index
-      let selectedParentFaceIndices: number[] = [];
-      let hoveredParentFaceIndices: number[] = [];
-
-      if (selectId && selectId.startsWith("BRepEdge-") && occtResult.lines) {
-        const edgeIdx = parseInt(selectId.replace("BRepEdge-", ""), 10);
-        const edgeObj = occtResult.lines[edgeIdx];
-        if (edgeObj) {
-          selectedParentFaceIndices = edgeObj.parentFaceIndices || (edgeObj.parentFaceIndex !== undefined ? [edgeObj.parentFaceIndex] : []);
+      const addVertexCandidate = (
+        point: { x: number; y: number; z: number },
+        edgeName: string,
+        parentFaceIndices: number[] = [],
+        parentFaceIds: string[] = []
+      ) => {
+        const key = `${point.x.toFixed(5)}|${point.y.toFixed(5)}|${point.z.toFixed(5)}`;
+        let record = vertexRecordsByKey.get(key);
+        if (!record) {
+          const index = vertexRecordsByKey.size;
+          record = {
+            id: `BRepVertex-${index}`,
+            index,
+            point: { x: point.x, y: point.y, z: point.z },
+            edgeIds: [],
+            parentFaceIndices: [],
+            parentFaceIds: []
+          };
+          vertexRecordsByKey.set(key, record);
         }
-      }
-
-      if (hoverId && hoverId.startsWith("BRepEdge-") && occtResult.lines) {
-        const edgeIdx = parseInt(hoverId.replace("BRepEdge-", ""), 10);
-        const edgeObj = occtResult.lines[edgeIdx];
-        if (edgeObj) {
-          hoveredParentFaceIndices = edgeObj.parentFaceIndices || (edgeObj.parentFaceIndex !== undefined ? [edgeObj.parentFaceIndex] : []);
-        }
-      }
+        if (!record.edgeIds.includes(edgeName)) record.edgeIds.push(edgeName);
+        parentFaceIndices.forEach((faceIndex) => {
+          if (!record!.parentFaceIndices.includes(faceIndex)) record!.parentFaceIndices.push(faceIndex);
+        });
+        parentFaceIds.forEach((faceId) => {
+          if (faceId && !record!.parentFaceIds.includes(faceId)) record!.parentFaceIds.push(faceId);
+        });
+      };
 
       // Translate 3D SOLID meshes into selectable B-Rep Faces
       if (occtResult.meshes && occtResult.meshes.length > 0) {
@@ -631,40 +796,13 @@ export default function CadCanvas3D({
             interactionCache,
           };
 
-          if (activeMode === "points") {
-            const pointMat = new THREE.PointsMaterial({
-              color: isSelected ? 0x10b981 : (isHovered ? 0x38bdf8 : baseColor),
-              size: 0.15,
-              sizeAttenuation: true,
-            });
-            const ptsObj = new THREE.Points(geometry, pointMat);
-            ptsObj.name = `BRepFace-${idx}`;
-            ptsObj.userData = { ...faceUserData, triangles: 0 };
-            assemblyGroup.add(ptsObj);
-            renderedObjectByName.set(ptsObj.name, ptsObj);
-            cadFallbackFacePickObjects.push(ptsObj);
-          } else {
-            const mat = getFaceMaterial(activeMat, baseColor, activeMode, isSelected, isHovered);
-            const meshObj = new THREE.Mesh(geometry, mat);
-            meshObj.name = `BRepFace-${idx}`;
-            meshObj.userData = faceUserData;
-            assemblyGroup.add(meshObj);
-            renderedObjectByName.set(meshObj.name, meshObj);
-            cadFallbackFacePickObjects.push(meshObj);
-
-            // Solid overlaid grid lines
-            if (overlayOn && activeMode !== "wireframe") {
-              const wireMat = new THREE.MeshBasicMaterial({
-                color: isSelected ? 0x059669 : 0x1e293b,
-                wireframe: true,
-                transparent: true,
-                opacity: isSelected ? 0.45 : 0.15,
-                depthWrite: false,
-              });
-              const wireOverlay = new THREE.Mesh(geometry, wireMat);
-              assemblyGroup.add(wireOverlay);
-            }
-          }
+          const mat = getFaceMaterial(activeMat, baseColor, activeMode, isSelected, isHovered);
+          const meshObj = new THREE.Mesh(geometry, mat);
+          meshObj.name = `BRepFace-${idx}`;
+          meshObj.userData = faceUserData;
+          assemblyGroup.add(meshObj);
+          renderedObjectByName.set(meshObj.name, meshObj);
+          cadFallbackFacePickObjects.push(meshObj);
         });
       }
 
@@ -694,11 +832,83 @@ export default function CadCanvas3D({
         cadFacePickObjects = [pickMesh];
       }
 
-      // Translate 3D line outlines into B-Rep Wireframe Edges
+      // Translate face-to-face intersection segments into selectable B-Rep edges.
       if (occtResult.lines && occtResult.lines.length > 0) {
         occtResult.lines.forEach((line: any, idx: number) => {
           if (!line.positions || line.positions.length === 0) return;
           edgeCounter++;
+          const edgeName = `BRepEdge-${idx}`;
+          const parentFaceIndices = line.parentFaceIndices || (line.parentFaceIndex !== undefined ? [line.parentFaceIndex] : []);
+          const parentFaceIds = line.parentFaceIds || (line.parentFaceId ? [line.parentFaceId] : []);
+          let firstEndpointIndex: number | null = null;
+          let lastEndpointIndex: number | null = null;
+          const appendEdgePickSegment = (aIndex: number, bIndex: number) => {
+            const aOffset = aIndex * 3;
+            const bOffset = bIndex * 3;
+            const ax = line.positions[aOffset] || 0;
+            const ay = line.positions[aOffset + 1] || 0;
+            const az = line.positions[aOffset + 2] || 0;
+            const bx = line.positions[bOffset] || 0;
+            const by = line.positions[bOffset + 1] || 0;
+            const bz = line.positions[bOffset + 2] || 0;
+            edgePickPositions.push(ax, ay, az, bx, by, bz);
+            edgePickNamesBySegment.push(edgeName);
+            if (firstEndpointIndex === null) firstEndpointIndex = aIndex;
+            lastEndpointIndex = bIndex;
+          };
+
+          if (line.indices && line.indices.length > 0) {
+            line.indices.forEach((vertexIndex: number) => {
+              const offset = vertexIndex * 3;
+              visibleEdgePositions.push(
+                line.positions[offset] || 0,
+                line.positions[offset + 1] || 0,
+                line.positions[offset + 2] || 0
+              );
+            });
+            for (let i = 0; i < line.indices.length - 1; i += 2) {
+              appendEdgePickSegment(line.indices[i], line.indices[i + 1]);
+            }
+          } else {
+            visibleEdgePositions.push(...line.positions);
+            const vertexCount = Math.floor(line.positions.length / 3);
+            for (let i = 0; i < vertexCount - 1; i += 2) {
+              appendEdgePickSegment(i, i + 1);
+            }
+          }
+
+          if (Array.isArray(line.vertexPoints) && line.vertexPoints.length > 0) {
+            line.vertexPoints.forEach((point: any) => {
+              if (
+                Number.isFinite(point?.x) &&
+                Number.isFinite(point?.y) &&
+                Number.isFinite(point?.z)
+              ) {
+                addVertexCandidate({ x: point.x, y: point.y, z: point.z }, edgeName, parentFaceIndices, parentFaceIds);
+              }
+            });
+          } else if (firstEndpointIndex !== null && lastEndpointIndex !== null) {
+            const firstOffset = firstEndpointIndex * 3;
+            const lastOffset = lastEndpointIndex * 3;
+            const firstPoint = {
+              x: line.positions[firstOffset] || 0,
+              y: line.positions[firstOffset + 1] || 0,
+              z: line.positions[firstOffset + 2] || 0
+            };
+            const lastPoint = {
+              x: line.positions[lastOffset] || 0,
+              y: line.positions[lastOffset + 1] || 0,
+              z: line.positions[lastOffset + 2] || 0
+            };
+            const endpointDistanceSq =
+              (firstPoint.x - lastPoint.x) * (firstPoint.x - lastPoint.x) +
+              (firstPoint.y - lastPoint.y) * (firstPoint.y - lastPoint.y) +
+              (firstPoint.z - lastPoint.z) * (firstPoint.z - lastPoint.z);
+            if (endpointDistanceSq > 1e-10) {
+              addVertexCandidate(firstPoint, edgeName, parentFaceIndices, parentFaceIds);
+              addVertexCandidate(lastPoint, edgeName, parentFaceIndices, parentFaceIds);
+            }
+          }
 
           const geometry = new THREE.BufferGeometry();
           geometry.setAttribute("position", new THREE.Float32BufferAttribute(line.positions, 3));
@@ -711,22 +921,16 @@ export default function CadCanvas3D({
           const isEdgeHovered = hoverId === `BRepEdge-${idx}`;
 
           // Detect if parent face is selected/hovered to activate synchronization
-          const parentFaceIndices = line.parentFaceIndices || (line.parentFaceIndex !== undefined ? [line.parentFaceIndex] : []);
-          const isParentSelected = parentFaceIndices.some((parentFaceIdx: number) => selectId === `BRepFace-${parentFaceIdx}` || selectedParentFaceIndices.includes(parentFaceIdx));
-          const isParentHovered = parentFaceIndices.some((parentFaceIdx: number) => hoverId === `BRepFace-${parentFaceIdx}` || hoveredParentFaceIndices.includes(parentFaceIdx));
+          const isParentSelected = parentFaceIndices.some((parentFaceIdx: number) => selectId === `BRepFace-${parentFaceIdx}`);
+          const isParentHovered = parentFaceIndices.some((parentFaceIdx: number) => hoverId === `BRepFace-${parentFaceIdx}`);
 
           const isDirectlyActive = isEdgeSelected || isEdgeHovered;
           const isParentActive = isParentSelected || isParentHovered;
           const isHighlighted = isDirectlyActive || isParentActive;
 
-          // Wireframe Overlay button state (overlayOn) determines if unhovered/unselected edges are visible
-          // If wireframeOverlay is False, we hide edges EXCEPT those highlighted!
-          // Hidden edges stay in the scene for visual face-boundary highlighting; pointer picking uses the merged face surface.
-          const shouldBeVisible = overlayOn || isHighlighted;
-
           let edgeColor = 0x64748b; // neutral slate grey
           let edgeWidth = 1.5;
-          let edgeOpacity = 0.35;
+          let edgeOpacity = 0.0;
 
           if (isEdgeSelected || isParentSelected) {
             edgeColor = 0x10b981; // Emerald green
@@ -736,8 +940,6 @@ export default function CadCanvas3D({
             edgeColor = 0xf43f5e; // Pink/rose high-luminance hover glow
             edgeWidth = 4.5;
             edgeOpacity = 1.0;
-          } else if (!shouldBeVisible) {
-            edgeOpacity = 0.0;
           }
 
           const edgeMaterial = new THREE.LineBasicMaterial({
@@ -745,13 +947,13 @@ export default function CadCanvas3D({
             linewidth: edgeWidth,
             transparent: true,
             opacity: edgeOpacity,
-            depthWrite: !shouldBeVisible ? false : true,
+            depthWrite: false,
           });
 
           // Draw using THREE.LineSegments to prevent crossing lines across disjoint segments!
           const lineObj = new THREE.LineSegments(geometry, edgeMaterial);
-          lineObj.name = `BRepEdge-${idx}`;
-          lineObj.visible = shouldBeVisible;
+          lineObj.name = edgeName;
+          lineObj.visible = isHighlighted;
           lineObj.userData = { 
             index: idx, 
             type: "edge", 
@@ -759,7 +961,8 @@ export default function CadCanvas3D({
             parentFaceId: line.parentFaceId,
             parentFaceIndex: line.parentFaceIndex,
             parentFaceIds: line.parentFaceIds,
-            parentFaceIndices: line.parentFaceIndices
+            parentFaceIndices: line.parentFaceIndices,
+            vertexPoints: line.vertexPoints
           };
           assemblyGroup.add(lineObj);
           renderedObjectByName.set(lineObj.name, lineObj);
@@ -770,6 +973,78 @@ export default function CadCanvas3D({
             edgeNamesByFaceIndex.set(parentFaceIdx, edgeNames);
           });
         });
+
+        if (visibleEdgePositions.length > 0) {
+          const mergedEdgeGeometry = new THREE.BufferGeometry();
+          mergedEdgeGeometry.setAttribute("position", new THREE.Float32BufferAttribute(visibleEdgePositions, 3));
+          const mergedEdgeMaterial = new THREE.LineBasicMaterial({
+            color: 0x64748b,
+            transparent: true,
+            opacity: 0.35,
+            depthWrite: false,
+          });
+          const mergedEdgeObject = new THREE.LineSegments(mergedEdgeGeometry, mergedEdgeMaterial);
+          mergedEdgeObject.name = "BRepVisibleEdges";
+          mergedEdgeObject.renderOrder = 1;
+          assemblyGroup.add(mergedEdgeObject);
+        }
+
+        if (edgePickPositions.length > 0) {
+          const edgePickGeometry = new THREE.BufferGeometry();
+          edgePickGeometry.setAttribute("position", new THREE.Float32BufferAttribute(edgePickPositions, 3));
+          edgePickGeometry.computeBoundingBox();
+          edgePickGeometry.computeBoundingSphere();
+          const edgePickMaterial = new THREE.LineBasicMaterial({
+            color: 0xffffff,
+            transparent: true,
+            opacity: 0,
+            depthWrite: false,
+          });
+          edgePickMaterial.colorWrite = false;
+          const edgePickObject = new THREE.LineSegments(edgePickGeometry, edgePickMaterial);
+          edgePickObject.name = "CADEdgePickSegments";
+          edgePickObject.userData.edgePickNamesBySegment = edgePickNamesBySegment;
+          assemblyGroup.add(edgePickObject);
+          cadEdgePickObjects = [edgePickObject];
+        }
+
+        const vertexRecords = Array.from(vertexRecordsByKey.values())
+          .filter((record) => record.edgeIds.length >= 2);
+        if (vertexRecords.length > 0) {
+          const vertexPositions = vertexRecords.flatMap((record) => [record.point.x, record.point.y, record.point.z]);
+          const vertexPickGeometry = new THREE.BufferGeometry();
+          vertexPickGeometry.setAttribute("position", new THREE.Float32BufferAttribute(vertexPositions, 3));
+          vertexPickGeometry.computeBoundingBox();
+          vertexPickGeometry.computeBoundingSphere();
+          const vertexPickMaterial = new THREE.PointsMaterial({
+            color: 0xffffff,
+            size: 1,
+            sizeAttenuation: false,
+            transparent: true,
+            opacity: 0,
+            depthWrite: false,
+          });
+          vertexPickMaterial.colorWrite = false;
+          const vertexPickObject = new THREE.Points(vertexPickGeometry, vertexPickMaterial);
+          vertexPickObject.name = "BRepVertexPickPoints";
+          vertexPickObject.userData.vertexRecords = vertexRecords;
+          assemblyGroup.add(vertexPickObject);
+          cadVertexPickObjects = [vertexPickObject];
+          vertexRecords.forEach((record) => {
+            vertexRecordsByName.set(record.id, record);
+            const vertexProxy = new THREE.Object3D();
+            vertexProxy.name = record.id;
+            vertexProxy.userData = {
+              index: record.index,
+              type: "vertex",
+              point: record.point,
+              edgeIds: record.edgeIds,
+              parentFaceIndices: record.parentFaceIndices,
+              parentFaceIds: record.parentFaceIds
+            };
+            renderedObjectByName.set(record.id, vertexProxy);
+          });
+        }
       }
 
       // Fit Viewport camera bounds gracefully
@@ -788,17 +1063,13 @@ export default function CadCanvas3D({
       assemblyGroup.position.z = -centerVec.z;
       modelOrbitTarget.set(0, 0, 0);
 
-      // Setup clean workspace floor grid helper
       const sizeMax = Math.max(sizeVec.x, sizeVec.y, sizeVec.z) || 10;
       modelSizeMax = sizeMax;
-      gridHelper = new THREE.GridHelper(sizeMax * 3.5, 24, 0x94a3b8, 0xe2e8f0);
-      gridHelper.position.set(0, -4, 0);
-      scene.add(gridHelper);
 
       // Dynamically adjust camera clipping and orbit controller limits based on model size
       camera.near = Math.max(0.01, sizeMax * 0.001);
       camera.far = Math.max(5000, sizeMax * 150);
-      camera.updateProjectionMatrix();
+      updateActiveCameraProjectionMatrix();
 
       controls.minDistance = Math.max(0.1, sizeMax * 0.02);
       controls.maxDistance = Math.max(1000, sizeMax * 50);
@@ -810,17 +1081,15 @@ export default function CadCanvas3D({
 
       // Re-center Orbit controls focus
       if (resetCamera) {
-        const cameraFov = camera.fov * (Math.PI / 180);
-        let fitDist = Math.abs(sizeMax / 2 / Math.tan(cameraFov / 2)) * 1.55;
-        fitDist = Math.max(10, fitDist); // No upper cap of 180 so large models fit perfectly!
+        const fitDist = getPerspectiveFitDistance(sizeMax);
 
         camera.position.set(fitDist * 0.7, fitDist * 0.6, fitDist);
         controls.target.copy(modelOrbitTarget);
+        updateActiveCameraProjectionMatrix();
         controls.update();
       }
 
       assemblyGroup.updateMatrixWorld(true);
-      updateFloorGridPosition();
 
       setModelStats({
         width: parseFloat(sizeVec.x.toFixed(2)),
@@ -864,12 +1133,12 @@ export default function CadCanvas3D({
     let hoverNotifyTimeoutId: number | null = null;
 
     const getHighlightToken = () =>
-      `${propsRef.current.selectedEntityId || ""}|${(propsRef.current.selectedRelatedEntityIds || []).join(",")}|${propsRef.current.hoveredEntityId || ""}|${propsRef.current.wireframeOverlay ? "1" : "0"}`;
+      `${propsRef.current.selectedEntityId || ""}|${(propsRef.current.selectedRelatedEntityIds || []).join(",")}|${currentHoverObj?.name || propsRef.current.hoveredEntityId || ""}`;
 
     const notifyParentHover = (entity: any | null, immediate = false) => {
       pendingHoverEntity = entity;
       const now = performance.now();
-      const delay = Math.max(0, 240 - (now - lastHoverNotifyAt));
+      const delay = immediate ? 0 : Math.max(0, 60 - (now - lastHoverNotifyAt));
 
       const flush = () => {
         hoverNotifyTimeoutId = null;
@@ -901,20 +1170,105 @@ export default function CadCanvas3D({
 
     const checkRaycastIntersections = (clientX: number, clientY: number, allowFallback = false) => {
       const rect = canvas.getBoundingClientRect();
-      const ptX = ((clientX - rect.left) / rect.width) * 2 - 1;
-      const ptY = -((clientY - rect.top) / rect.height) * 2 + 1;
+      const pickThreshold = Math.max(modelSizeMax * 0.0015, 0.015);
+      pointerRaycaster.params.Line = { threshold: pickThreshold };
+      pointerRaycaster.params.Points = { threshold: Math.max(modelSizeMax * 0.002, 0.018) };
 
-      pointerNdc.set(ptX, ptY);
-      pointerRaycaster.setFromCamera(pointerNdc, camera);
+      const setRayFromClientPoint = (x: number, y: number) => {
+        const ptX = ((x - rect.left) / rect.width) * 2 - 1;
+        const ptY = -((y - rect.top) / rect.height) * 2 + 1;
+        pointerNdc.set(ptX, ptY);
+        pointerRaycaster.setFromCamera(pointerNdc, camera);
+      };
 
+      setRayFromClientPoint(clientX, clientY);
+      const centerVertexHits = pointerRaycaster.intersectObjects(cadVertexPickObjects, false);
+      const centerEdgeHits = pointerRaycaster.intersectObjects(cadEdgePickObjects, false);
       const acceleratedHits = pointerRaycaster.intersectObjects(cadFacePickObjects, false);
-      if (acceleratedHits.length > 0 || !allowFallback) return acceleratedHits;
+      const centerTopologyHits = [...centerVertexHits, ...centerEdgeHits]
+        .sort((a, b) => a.distance - b.distance);
+      if (centerTopologyHits.length > 0) {
+        return [
+          ...centerVertexHits.sort((a, b) => a.distance - b.distance),
+          ...centerEdgeHits.sort((a, b) => a.distance - b.distance),
+          ...acceleratedHits.sort((a, b) => a.distance - b.distance),
+        ];
+      }
+      if (acceleratedHits.length > 0) {
+        return acceleratedHits.sort((a, b) => a.distance - b.distance);
+      }
+
+      const aperturePx = propsRef.current.measurementMode ? 6 : 4;
+      const apertureOffsets = [
+        [-aperturePx, 0],
+        [aperturePx, 0],
+        [0, -aperturePx],
+        [0, aperturePx],
+        [-aperturePx, -aperturePx],
+        [aperturePx, -aperturePx],
+        [-aperturePx, aperturePx],
+        [aperturePx, aperturePx],
+      ];
+      const apertureTopologyHits: THREE.Intersection[] = [];
+      apertureOffsets.forEach(([dx, dy]) => {
+        setRayFromClientPoint(clientX + dx, clientY + dy);
+        apertureTopologyHits.push(
+          ...pointerRaycaster.intersectObjects(cadVertexPickObjects, false),
+          ...pointerRaycaster.intersectObjects(cadEdgePickObjects, false)
+        );
+      });
+      if (apertureTopologyHits.length > 0) {
+        const uniqueTopologyHits = apertureTopologyHits
+          .filter((hit, index, all) => {
+            const objectName = hit.object.name;
+            const hitIndex = hit.index ?? Math.floor((hit as any).faceIndex ?? -1);
+            return all.findIndex((candidate) =>
+              candidate.object.name === objectName &&
+              (candidate.index ?? Math.floor((candidate as any).faceIndex ?? -1)) === hitIndex
+            ) === index;
+          })
+          .sort((a, b) => a.distance - b.distance);
+        const vertexHits = uniqueTopologyHits.filter((hit) => hit.object.name === "BRepVertexPickPoints");
+        const edgeHits = uniqueTopologyHits.filter((hit) => hit.object.name === "CADEdgePickSegments");
+        return [
+          ...vertexHits,
+          ...edgeHits,
+          ...acceleratedHits.sort((a, b) => a.distance - b.distance),
+        ];
+      }
+
+      const primaryHits = acceleratedHits
+        .sort((a, b) => a.distance - b.distance);
+      if (primaryHits.length > 0 || !allowFallback) return primaryHits;
+      setRayFromClientPoint(clientX, clientY);
       return pointerRaycaster.intersectObjects(cadFallbackFacePickObjects, false);
     };
 
     const pickCadIntersection = (intersections: THREE.Intersection[], allowFallback = false) => {
       for (const item of intersections) {
         if (item.object.name.startsWith("BRepFace-")) return item;
+        if (item.object.name.startsWith("BRepEdge-")) return item;
+
+        if (item.object.name === "BRepVertexPickPoints") {
+          const vertexIndex = item.index ?? -1;
+          const vertexRecord = item.object.userData.vertexRecords?.[vertexIndex] as BRepVertexRecord | undefined;
+          const vertexObject = vertexRecord ? renderedObjectByName.get(vertexRecord.id) : null;
+          if (vertexObject) {
+            return { ...item, object: vertexObject };
+          }
+        }
+
+        if (item.object.name === "CADEdgePickSegments") {
+          const rawIndex = item.index ?? 0;
+          const segmentIndex = Math.max(0, Math.floor(rawIndex / 2));
+          const edgeName =
+            item.object.userData.edgePickNamesBySegment?.[segmentIndex] ||
+            item.object.userData.edgePickNamesBySegment?.[rawIndex];
+          const edgeObject = edgeName ? renderedObjectByName.get(edgeName) : null;
+          if (edgeObject) {
+            return { ...item, object: edgeObject };
+          }
+        }
 
         if (item.object.name === "CADFacePickSurface") {
           const faceIndex = item.faceIndex ?? -1;
@@ -1293,6 +1647,21 @@ export default function CadCanvas3D({
     const getMeasurementSnapSample = (intersections: THREE.Intersection[], allowFallback = false): MeasurementSample | null => {
       const snapRadius = Math.max(modelSizeMax * 0.008, 0.15);
       const faceMatch = pickCadIntersection(intersections, allowFallback);
+      if (faceMatch?.object.name.startsWith("BRepVertex-")) {
+        return {
+          point: assemblyGroup.worldToLocal(faceMatch.point.clone()),
+          kind: "vertex",
+          objectName: faceMatch.object.name,
+        };
+      }
+      if (faceMatch?.object.name.startsWith("BRepEdge-")) {
+        return {
+          point: assemblyGroup.worldToLocal(faceMatch.point.clone()),
+          kind: "edge",
+          objectName: faceMatch.object.name,
+          circle: getEdgeCircleSnap(faceMatch.object, assemblyGroup.worldToLocal(faceMatch.point.clone())),
+        };
+      }
       const faceHits = faceMatch ? [faceMatch] : [];
       const faceSample = faceHits[0] ? getFaceMeasurementSample(faceHits[0]) : null;
       const activeMeasurementStartedOnFace = measurementPoints.length === 1 && measurementPoints[0].kind === "face" && !measurementPoints[0].circle;
@@ -1364,12 +1733,97 @@ export default function CadCanvas3D({
         setViewportHoverEntity(null, true);
       }
       if (lastHoveredCoordinateKey !== "") {
-        lastHoveredCoordinateKey = "";
-        lastHoveredCoordinateUpdateAt = 0;
-        setHoveredCoordinate(null);
+      lastHoveredCoordinateKey = "";
+      lastHoveredCoordinateUpdateAt = 0;
+      setHoveredCoordinate(null);
       }
       lastHoverPickClientX = -Infinity;
       lastHoverPickClientY = -Infinity;
+    };
+
+    const isPointerNearHoveredVertex = (clientX: number, clientY: number) => {
+      if (!currentHoverObj?.name?.startsWith("BRepVertex-")) return false;
+      const point = currentHoverObj.userData.point;
+      if (!point) return false;
+      const rect = canvas.getBoundingClientRect();
+      const worldPoint = assemblyGroup.localToWorld(new THREE.Vector3(point.x, point.y, point.z));
+      const projected = worldPoint.project(camera);
+      if (projected.z < -1 || projected.z > 1) return false;
+      const screenX = rect.left + (projected.x + 1) * rect.width * 0.5;
+      const screenY = rect.top + (1 - projected.y) * rect.height * 0.5;
+      const dx = clientX - screenX;
+      const dy = clientY - screenY;
+      const stickyRadius = propsRef.current.measurementMode ? 18 : 14;
+      return dx * dx + dy * dy <= stickyRadius * stickyRadius;
+    };
+
+    const findNearestScreenVertex = (clientX: number, clientY: number, radiusPx: number) => {
+      const rect = canvas.getBoundingClientRect();
+      let best: { object: THREE.Object3D; point: THREE.Vector3; distanceSq: number } | null = null;
+      vertexRecordsByName.forEach((record, name) => {
+        const object = renderedObjectByName.get(name);
+        if (!object) return;
+        const point = new THREE.Vector3(record.point.x, record.point.y, record.point.z);
+        const projected = assemblyGroup.localToWorld(point.clone()).project(camera);
+        if (projected.z < -1 || projected.z > 1) return;
+        const screenX = rect.left + (projected.x + 1) * rect.width * 0.5;
+        const screenY = rect.top + (1 - projected.y) * rect.height * 0.5;
+        const dx = clientX - screenX;
+        const dy = clientY - screenY;
+        const distanceSq = dx * dx + dy * dy;
+        if (distanceSq > radiusPx * radiusPx) return;
+        if (!best || distanceSq < best.distanceSq) {
+          best = { object, point, distanceSq };
+        }
+      });
+      return best;
+    };
+
+    const setHoverObject = (hoveredObj: THREE.Object3D, localPoint: THREE.Vector3) => {
+      const x = parseFloat((localPoint.x + assemblyGroup.position.x).toFixed(2));
+      const y = parseFloat((localPoint.y + assemblyGroup.position.y).toFixed(2));
+      const z = parseFloat((localPoint.z + assemblyGroup.position.z).toFixed(2));
+      const coordinateKey = `${x}|${y}|${z}`;
+      if (coordinateKey !== lastHoveredCoordinateKey) {
+        lastHoveredCoordinateKey = coordinateKey;
+        const now = performance.now();
+        if (now - lastHoveredCoordinateUpdateAt > 90) {
+          lastHoveredCoordinateUpdateAt = now;
+          setHoveredCoordinate({ x, y, z });
+        }
+      }
+
+      if (currentHoverObj === hoveredObj) return;
+      if (currentHoverObj && currentHoverObj.material instanceof THREE.MeshStandardMaterial) {
+        currentHoverObj.material.emissive.set(oldEmissiveColor);
+      }
+
+      currentHoverObj = hoveredObj;
+      const type = currentHoverObj.name.startsWith("BRepFace-")
+        ? "face"
+        : currentHoverObj.name.startsWith("BRepVertex-")
+        ? "vertex"
+        : "edge";
+      const index = currentHoverObj.userData.index;
+
+      setViewportHoverEntity({
+        id: currentHoverObj.name,
+        type,
+        index,
+        name: type === "face"
+          ? `B-Rep Face #${index + 1}`
+          : type === "vertex"
+          ? `B-Rep Vertex #${index + 1}`
+          : `B-Rep Edge #${index + 1}`,
+        triangles: currentHoverObj.userData.triangles || 0,
+        source: "viewport",
+      });
+
+      if (currentHoverObj.material instanceof THREE.MeshStandardMaterial) {
+        oldEmissiveColor.copy(currentHoverObj.material.emissive);
+        currentHoverObj.material.emissive.setHex(0x1e1b4b);
+        requestRenderRef.current?.(2);
+      }
     };
 
     const handleMouseMoveNow = (e: MouseEvent) => {
@@ -1388,52 +1842,20 @@ export default function CadCanvas3D({
         // Filter elements starting with CAD prefixes
         const match = pickCadIntersection(intersections);
         if (match) {
-          const pt = match.point;
-          // Compensate group offset coordinate
-          const x = parseFloat((pt.x + assemblyGroup.position.x).toFixed(2));
-          const y = parseFloat((pt.y + assemblyGroup.position.y).toFixed(2));
-          const z = parseFloat((pt.z + assemblyGroup.position.z).toFixed(2));
-          const coordinateKey = `${x}|${y}|${z}`;
-          if (coordinateKey !== lastHoveredCoordinateKey) {
-            lastHoveredCoordinateKey = coordinateKey;
-            const now = performance.now();
-            if (now - lastHoveredCoordinateUpdateAt > 90) {
-              lastHoveredCoordinateUpdateAt = now;
-              setHoveredCoordinate({ x, y, z });
-            }
-          }
-
-          const hoveredObj = match.object;
-          if (currentHoverObj !== hoveredObj) {
-            // Revert last hover shading
-            if (currentHoverObj && currentHoverObj.material instanceof THREE.MeshStandardMaterial) {
-              currentHoverObj.material.emissive.set(oldEmissiveColor);
-            }
-
-            currentHoverObj = hoveredObj;
-            const type = currentHoverObj.name.startsWith("BRepFace-") ? "face" : "edge";
-            const index = currentHoverObj.userData.index;
-
-            const hoverEntity = {
-              id: currentHoverObj.name,
-              type,
-              index,
-              name: type === "face" ? `B-Rep Face #${index + 1}` : `B-Rep Edge #${index + 1}`,
-              triangles: currentHoverObj.userData.triangles || 0,
-              source: "viewport",
-            };
-            setViewportHoverEntity(hoverEntity);
-
-            // Dynamic emissive glow highlighting for tactile feedback
-            if (currentHoverObj.material instanceof THREE.MeshStandardMaterial) {
-              oldEmissiveColor.copy(currentHoverObj.material.emissive);
-              // Give hover face a gentle blueish-white emission highlight
-              currentHoverObj.material.emissive.setHex(0x1e1b4b);
-              requestRenderRef.current?.(2);
-            }
-          }
+          const localPoint = assemblyGroup.worldToLocal(match.point.clone());
+          setHoverObject(match.object, localPoint);
           return;
         }
+      }
+
+      if (isPointerNearHoveredVertex(e.clientX, e.clientY)) {
+        return;
+      }
+
+      const nearestVertex = findNearestScreenVertex(e.clientX, e.clientY, propsRef.current.measurementMode ? 12 : 9);
+      if (nearestVertex) {
+        setHoverObject(nearestVertex.object, nearestVertex.point);
+        return;
       }
 
       // Revert if clear
@@ -1630,10 +2052,11 @@ export default function CadCanvas3D({
           }
           return {
             mode: "linear",
-            start: a.point.clone(),
-            end: a.point.clone().addScaledVector(n1, signedDistance),
+            start: b.point.clone().addScaledVector(n1, -signedDistance),
+            end: b.point.clone(),
             text: formatMm(Math.abs(signedDistance)),
             normalReference: n1.clone(),
+            surfaceReference: n2.clone(),
           };
         }
 
@@ -1711,7 +2134,7 @@ export default function CadCanvas3D({
         apex.clone().add(back).sub(side),
       ]);
       const arrowMaterial = new THREE.MeshBasicMaterial({
-        color: 0x047857,
+        color: 0x0f172a,
         side: THREE.DoubleSide,
         depthTest: false,
         depthWrite: false,
@@ -1728,7 +2151,7 @@ export default function CadCanvas3D({
     const addMeasurementLineSegments = (group: THREE.Group, points: THREE.Vector3[], name: string) => {
       const lineGeometry = new THREE.BufferGeometry().setFromPoints(points);
       const lineMaterial = new THREE.LineBasicMaterial({
-        color: 0x047857,
+        color: 0x0f172a,
         depthTest: false,
         depthWrite: false,
         transparent: true,
@@ -1740,6 +2163,55 @@ export default function CadCanvas3D({
       lineObject.raycast = () => undefined;
       group.add(lineObject);
       return lineObject;
+    };
+
+    const getLinearDimensionProjectionDirection = (
+      axis: THREE.Vector3,
+      viewDirection: THREE.Vector3,
+      result: LinearMeasurementResult,
+      frameBasis?: MeasurementFrameBasis | null
+    ): THREE.Vector3 | null => {
+      const unitAxis = axis.clone().normalize();
+      if (frameBasis) {
+        const frameProjection = [frameBasis.xAxis, frameBasis.yAxis, frameBasis.zAxis]
+          .map((frameAxis) => frameAxis.clone().addScaledVector(unitAxis, -frameAxis.dot(unitAxis)))
+          .filter((frameAxis) => frameAxis.lengthSq() > 1e-8)
+          .sort((a, b) => b.lengthSq() - a.lengthSq())[0];
+        if (frameProjection) {
+          frameProjection.normalize();
+          if (frameProjection.dot(viewDirection) < 0) frameProjection.negate();
+          return frameProjection;
+        }
+      }
+
+      let planeNormal: THREE.Vector3 | null = null;
+
+      if (
+        result.surfaceReference &&
+        result.surfaceReference.lengthSq() > 1e-8 &&
+        Math.abs(result.surfaceReference.clone().normalize().dot(unitAxis)) < 0.985
+      ) {
+        planeNormal = result.surfaceReference.clone().normalize();
+      } else {
+        planeNormal = new THREE.Vector3().crossVectors(unitAxis, viewDirection);
+        if (planeNormal.lengthSq() <= 1e-8) {
+          planeNormal.crossVectors(unitAxis, new THREE.Vector3(0, 1, 0));
+        }
+        if (planeNormal.lengthSq() <= 1e-8) {
+          planeNormal.crossVectors(unitAxis, new THREE.Vector3(1, 0, 0));
+        }
+        if (planeNormal.lengthSq() <= 1e-8) return null;
+        planeNormal.normalize();
+      }
+
+      let projectionDirection = new THREE.Vector3().crossVectors(planeNormal, unitAxis);
+      if (projectionDirection.lengthSq() <= 1e-8) {
+        projectionDirection.crossVectors(unitAxis, planeNormal);
+      }
+      if (projectionDirection.lengthSq() <= 1e-8) return null;
+      projectionDirection.normalize();
+      if (projectionDirection.dot(viewDirection) < 0) projectionDirection.negate();
+      return projectionDirection;
     };
 
     const renderLinearMeasurement = (group: THREE.Group, result: LinearMeasurementResult) => {
@@ -1779,15 +2251,8 @@ export default function CadCanvas3D({
       }
 
       if (result.normalReference && Math.abs(result.normalReference.clone().normalize().dot(axis)) > 0.985) {
-        let projectionDirection = new THREE.Vector3().crossVectors(axis, viewDirection);
-        if (projectionDirection.lengthSq() <= 1e-8) {
-          projectionDirection.crossVectors(axis, new THREE.Vector3(0, 1, 0));
-        }
-        if (projectionDirection.lengthSq() <= 1e-8) {
-          projectionDirection.crossVectors(axis, new THREE.Vector3(1, 0, 0));
-        }
-        projectionDirection.normalize();
-        if (projectionDirection.dot(viewDirection) < 0) projectionDirection.negate();
+        const projectionDirection = getLinearDimensionProjectionDirection(axis, viewDirection, result);
+        if (!projectionDirection) return;
 
         const offsetDistance = Math.max(modelSizeMax * 0.045, distance * 0.08, 0.15);
         const dimStart = start.clone().addScaledVector(projectionDirection, offsetDistance);
@@ -1808,24 +2273,8 @@ export default function CadCanvas3D({
         return;
       }
 
-      let offsetDirection = new THREE.Vector3().crossVectors(axis, viewDirection);
-      let surfaceProjection = false;
-      if (result.surfaceReference && result.surfaceReference.lengthSq() > 1e-8) {
-        offsetDirection.copy(result.surfaceReference).normalize();
-        if (offsetDirection.dot(viewDirection) < 0) offsetDirection.negate();
-        surfaceProjection = offsetDirection.lengthSq() > 1e-8;
-      }
-      if (offsetDirection.lengthSq() <= 1e-8) {
-        offsetDirection.crossVectors(axis, new THREE.Vector3(0, 1, 0));
-      }
-      if (offsetDirection.lengthSq() <= 1e-8) {
-        offsetDirection.crossVectors(axis, new THREE.Vector3(1, 0, 0));
-      }
-      offsetDirection.normalize();
-      if (!surfaceProjection) {
-        offsetDirection.cross(axis).normalize();
-      }
-      if (offsetDirection.dot(viewDirection) < 0) offsetDirection.negate();
+      const offsetDirection = getLinearDimensionProjectionDirection(axis, viewDirection, result);
+      if (!offsetDirection) return;
 
       const offsetDistance = Math.max(modelSizeMax * 0.045, distance * 0.08, 0.15);
       const dimStart = start.clone().addScaledVector(offsetDirection, offsetDistance);
@@ -1943,8 +2392,12 @@ export default function CadCanvas3D({
 
     const makeSelectionBlock = (match: THREE.Intersection): any | null => {
       const obj = match.object;
-      if (!obj.name.startsWith("BRepFace-") && !obj.name.startsWith("BRepEdge-")) return null;
-      const type = obj.name.startsWith("BRepFace-") ? "face" : "edge";
+      if (!obj.name.startsWith("BRepFace-") && !obj.name.startsWith("BRepEdge-") && !obj.name.startsWith("BRepVertex-")) return null;
+      const type = obj.name.startsWith("BRepFace-")
+        ? "face"
+        : obj.name.startsWith("BRepVertex-")
+        ? "vertex"
+        : "edge";
       const idx = obj.userData.index;
       const pt = match.point;
 
@@ -1952,7 +2405,11 @@ export default function CadCanvas3D({
         id: obj.name,
         type,
         index: idx,
-        name: type === "face" ? `B-Rep Face #${idx + 1}` : `B-Rep Edge #${idx + 1}`,
+        name: type === "face"
+          ? `B-Rep Face #${idx + 1}`
+          : type === "vertex"
+          ? `B-Rep Vertex #${idx + 1}`
+          : `B-Rep Edge #${idx + 1}`,
         point: {
           x: parseFloat((pt.x + assemblyGroup.position.x).toFixed(2)),
           y: parseFloat((pt.y + assemblyGroup.position.y).toFixed(2)),
@@ -1966,7 +2423,7 @@ export default function CadCanvas3D({
         let pathLen = 0;
         const pointsPos = obj.userData.positions;
         if (pointsPos && pointsPos.length >= 6) {
-          for (let i = 0; i < pointsPos.length - 3; i += 3) {
+          for (let i = 0; i < pointsPos.length - 3; i += 6) {
             const dx = pointsPos[i + 3] - pointsPos[i];
             const dy = pointsPos[i + 4] - pointsPos[i + 1];
             const dz = pointsPos[i + 5] - pointsPos[i + 2];
@@ -1974,6 +2431,10 @@ export default function CadCanvas3D({
           }
         }
         blockDetails.length = parseFloat(pathLen.toFixed(2)) || 4.5;
+      } else if (type === "vertex") {
+        blockDetails.edgeIds = obj.userData.edgeIds || [];
+        blockDetails.parentFaceIndices = obj.userData.parentFaceIndices || [];
+        blockDetails.parentFaceIds = obj.userData.parentFaceIds || [];
       } else {
         blockDetails.triangles = obj.userData.triangles;
         blockDetails.colorString = obj.userData.color;
@@ -2030,7 +2491,7 @@ export default function CadCanvas3D({
       const tId = targetId.startsWith("#") ? targetId : `#${targetId}`;
       const visibleFace = (name?: string | null) => {
         if (!name) return null;
-        return assemblyGroup.getObjectByName(name) ? name : null;
+        return renderedObjectByName.has(name) ? name : null;
       };
 
       // 0. Use the explicit STEP target id first. Datum letters are semantic
@@ -2078,7 +2539,7 @@ export default function CadCanvas3D({
       const tId = targetId.startsWith("#") ? targetId : `#${targetId}`;
       const visibleFace = (name?: string | null) => {
         if (!name) return null;
-        return assemblyGroup.getObjectByName(name) ? name : null;
+        return renderedObjectByName.has(name) ? name : null;
       };
 
       const directIdx = currentFaceRecords.findIndex(f => f.id === tId);
@@ -2107,7 +2568,7 @@ export default function CadCanvas3D({
       if (!key) return null;
       const currMapping = propsRef.current.customFaceMapping || {};
       const mapped = currMapping[key] || (key.startsWith("#") ? undefined : currMapping[`#${key}`]);
-      return mapped && assemblyGroup.getObjectByName(mapped) ? mapped : null;
+      return mapped && renderedObjectByName.has(mapped) ? mapped : null;
     };
 
     const getFaceFrameInAssembly = (faceName: string): {
@@ -2116,7 +2577,7 @@ export default function CadCanvas3D({
       normal: THREE.Vector3 | null;
       area: number;
     } | null => {
-      const object = assemblyGroup.getObjectByName(faceName);
+      const object = renderedObjectByName.get(faceName);
       if (!object?.name.startsWith("BRepFace-")) return null;
 
       const cache = object.userData.interactionCache;
@@ -2136,6 +2597,48 @@ export default function CadCanvas3D({
         const assemblyRotation = new THREE.Quaternion();
         assemblyGroup.getWorldQuaternion(assemblyRotation);
         normal = worldNormal.applyQuaternion(assemblyRotation.invert()).normalize();
+      } else if (object instanceof THREE.Mesh && geometry) {
+        const cachedFallbackNormal = object.userData.fallbackPlanarNormal;
+        const localNormal = cachedFallbackNormal instanceof THREE.Vector3
+          ? cachedFallbackNormal.clone()
+          : (() => {
+              const positionAttribute = geometry.getAttribute("position");
+              const indexAttribute = geometry.getIndex();
+              const a = new THREE.Vector3();
+              const b = new THREE.Vector3();
+              const c = new THREE.Vector3();
+              const edgeA = new THREE.Vector3();
+              const edgeB = new THREE.Vector3();
+              const triangleNormal = new THREE.Vector3();
+              const accumulated = new THREE.Vector3();
+              const triangleCount = indexAttribute ? Math.floor(indexAttribute.count / 3) : Math.floor(positionAttribute.count / 3);
+              const readVertex = (vertexIndex: number, target: THREE.Vector3) => target.fromBufferAttribute(positionAttribute, vertexIndex);
+              for (let i = 0; i < triangleCount; i++) {
+                if (indexAttribute) {
+                  readVertex(indexAttribute.getX(i * 3), a);
+                  readVertex(indexAttribute.getX(i * 3 + 1), b);
+                  readVertex(indexAttribute.getX(i * 3 + 2), c);
+                } else {
+                  readVertex(i * 3, a);
+                  readVertex(i * 3 + 1, b);
+                  readVertex(i * 3 + 2, c);
+                }
+                edgeA.subVectors(b, a);
+                edgeB.subVectors(c, a);
+                triangleNormal.crossVectors(edgeA, edgeB);
+                if (triangleNormal.lengthSq() > 1e-12) accumulated.add(triangleNormal);
+              }
+              if (accumulated.lengthSq() <= 1e-12) return null;
+              const computed = accumulated.normalize();
+              object.userData.fallbackPlanarNormal = computed.clone();
+              return computed;
+            })();
+        if (localNormal) {
+          const worldNormal = localNormal.transformDirection(object.matrixWorld).normalize();
+          const assemblyRotation = new THREE.Quaternion();
+          assemblyGroup.getWorldQuaternion(assemblyRotation);
+          normal = worldNormal.applyQuaternion(assemblyRotation.invert()).normalize();
+        }
       }
 
       return {
@@ -2225,6 +2728,7 @@ export default function CadCanvas3D({
     const getDatumRenderKind = (datum: any): "twoFaceDimension" | "medianPlane" | "multiface" => {
       if (datum?.derivedDatum === "twoFaceDimension") return "twoFaceDimension";
       if (datum?.derivedDatum === "medianPlane") return "medianPlane";
+      if (datum?.derivedDatum === "multiface") return "multiface";
       if (
         datum?.identifier &&
         propsRef.current.selectedEntityId === `Datum-${datum.identifier}-Dimension`
@@ -2246,6 +2750,8 @@ export default function CadCanvas3D({
       datum: any,
       mappedFaceNames: string[]
     ): "twoFaceDimension" | "medianPlane" | "multiface" => {
+      if (datum?.derivedDatum === "multiface") return "multiface";
+
       const baseKind = getDatumRenderKind(datum);
       if (baseKind !== "multiface") return baseKind;
 
@@ -2254,33 +2760,28 @@ export default function CadCanvas3D({
       const isTwoPlanarDatumFeature =
         mappedFaceNames.length === 2 &&
         /^Planar Datum Feature$/i.test(typeText.trim());
-      const isExplicitMultiFeature = /primary flat|pattern|cylind|hole|bore|target set/i.test(semanticText);
+      const isExplicitMultiFeature = /primary flat|pattern|multi[-\s]?face|multiple physical faces|cylind|hole|bore|target set/i.test(semanticText);
       return isTwoPlanarDatumFeature && !isExplicitMultiFeature ? "twoFaceDimension" : "multiface";
     };
 
     const updateHighlightStyles = () => {
-      const { selectedEntityId: selectId, selectedRelatedEntityIds, hoveredEntityId: hoverId, wireframeOverlay: overlayOn } = propsRef.current;
+      const { selectedEntityId: selectId, selectedRelatedEntityIds } = propsRef.current;
+      const hoverId = currentHoverObj?.name || propsRef.current.hoveredEntityId || "";
       const selectedNames = new Set<string>([
         ...(selectId ? [selectId] : []),
         ...(selectedRelatedEntityIds || []),
       ]);
 
-      const faceParentIndicesForEdge = (id?: string | null) => {
-        if (!id?.startsWith("BRepEdge-") || !occtResult?.lines) return [];
-        const edgeIdx = parseInt(id.replace("BRepEdge-", ""), 10);
-        const edge = occtResult.lines[edgeIdx];
-        return edge?.parentFaceIndices || (edge?.parentFaceIndex !== undefined ? [edge.parentFaceIndex] : []);
-      };
-
       const edgeNamesForActiveEntity = (id?: string | null) => {
         const edgeNames = new Set<string>();
         if (!id) return edgeNames;
 
+        if (id.startsWith("BRepVertex-")) {
+          return edgeNames;
+        }
+
         if (id.startsWith("BRepEdge-")) {
           edgeNames.add(id);
-          faceParentIndicesForEdge(id).forEach((faceIdx: number) => {
-            (edgeNamesByFaceIndex.get(faceIdx) || []).forEach((edgeName) => edgeNames.add(edgeName));
-          });
           return edgeNames;
         }
 
@@ -2296,7 +2797,11 @@ export default function CadCanvas3D({
       selectedNames.forEach((name) => {
         edgeNamesForActiveEntity(name).forEach((edgeName) => selectedEdgeNames.add(edgeName));
       });
-      const hoveredEdgeNames = edgeNamesForActiveEntity(hoverId);
+      const hoveredEdgeNames = hoverId?.startsWith("BRepVertex-")
+        ? new Set<string>()
+        : edgeNamesForActiveEntity(hoverId);
+      const directSelectedEdgeNames = new Set<string>(selectId?.startsWith("BRepEdge-") ? [selectId] : []);
+      const directHoveredEdgeNames = new Set<string>(hoverId?.startsWith("BRepEdge-") ? [hoverId] : []);
       const activeNames = new Set<string>([
         ...selectedNames,
         ...(hoverId ? [hoverId] : []),
@@ -2310,6 +2815,117 @@ export default function CadCanvas3D({
         ...selectedEdgeNames,
         ...hoveredEdgeNames,
       ]);
+
+      const activeVertexNames = [...nextHighlightNames].filter((name) => name.startsWith("BRepVertex-"));
+      if (edgeHighlightGroup) {
+        edgeHighlightGroup.traverse((item) => {
+          if (item instanceof LineSegments2) {
+            item.geometry.dispose();
+            if (Array.isArray(item.material)) {
+              item.material.forEach((material) => material.dispose());
+            } else {
+              item.material.dispose();
+            }
+          }
+        });
+        assemblyGroup.remove(edgeHighlightGroup);
+        edgeHighlightGroup = null;
+      }
+      const activeEdgeNames = [...new Set([
+        ...directSelectedEdgeNames,
+        ...directHoveredEdgeNames,
+      ])];
+      if (activeEdgeNames.length > 0) {
+        edgeHighlightGroup = new THREE.Group();
+        edgeHighlightGroup.name = "BRepActiveEdgeWideHighlights";
+        activeEdgeNames.forEach((edgeName) => {
+          const edgeObject = renderedObjectByName.get(edgeName) as THREE.LineSegments | undefined;
+          const edgeGeometry = edgeObject?.geometry as THREE.BufferGeometry | undefined;
+          const position = edgeGeometry?.getAttribute("position") as THREE.BufferAttribute | undefined;
+          if (!position || position.count < 2) return;
+          const index = edgeGeometry.getIndex();
+          const positions: number[] = [];
+          const appendSegment = (aIndex: number, bIndex: number) => {
+            if (aIndex < 0 || bIndex < 0 || aIndex >= position.count || bIndex >= position.count) return;
+            positions.push(
+              position.getX(aIndex), position.getY(aIndex), position.getZ(aIndex),
+              position.getX(bIndex), position.getY(bIndex), position.getZ(bIndex)
+            );
+          };
+          if (index && index.count >= 2) {
+            for (let i = 0; i < index.count - 1; i += 2) {
+              appendSegment(index.getX(i), index.getX(i + 1));
+            }
+          } else {
+            for (let i = 0; i < position.count - 1; i += 2) {
+              appendSegment(i, i + 1);
+            }
+          }
+          if (positions.length < 6) return;
+          const geometry = new LineSegmentsGeometry();
+          geometry.setPositions(positions);
+          const material = new LineMaterial({
+            color: selectedEdgeNames.has(edgeName) ? 0x10b981 : 0xf43f5e,
+            linewidth: selectedEdgeNames.has(edgeName) ? 3.0 : 2.6,
+            transparent: true,
+            opacity: 0.88,
+            depthTest: false,
+            depthWrite: false,
+          });
+          material.resolution.set(Math.max(viewportWidth, 1), Math.max(viewportHeight, 1));
+          const wideLine = new LineSegments2(geometry, material);
+          wideLine.name = `BRepWideHighlight-${edgeName}`;
+          wideLine.renderOrder = 19;
+          wideLine.raycast = () => undefined;
+          edgeHighlightGroup!.add(wideLine);
+        });
+        if (edgeHighlightGroup.children.length > 0) {
+          assemblyGroup.add(edgeHighlightGroup);
+          updateEdgeHighlightResolution();
+        } else {
+          edgeHighlightGroup = null;
+        }
+      }
+      if (vertexHighlightGroup) {
+        vertexHighlightGroup.traverse((item) => {
+          if (item instanceof THREE.Points || item instanceof THREE.Mesh) {
+            item.geometry.dispose();
+            if (Array.isArray(item.material)) {
+              item.material.forEach((material) => material.dispose());
+            } else {
+              item.material.dispose();
+            }
+          }
+        });
+        assemblyGroup.remove(vertexHighlightGroup);
+        vertexHighlightGroup = null;
+      }
+      if (activeVertexNames.length > 0) {
+        const sphereGeometry = new THREE.SphereGeometry(1, 12, 8);
+        activeVertexNames.forEach((name) => {
+          const record = vertexRecordsByName.get(name);
+          if (!record) return;
+          if (!vertexHighlightGroup) {
+            vertexHighlightGroup = new THREE.Group();
+            vertexHighlightGroup.name = "BRepVertexActiveMarkers";
+            assemblyGroup.add(vertexHighlightGroup);
+          }
+          const material = new THREE.MeshBasicMaterial({
+            color: selectedNames.has(name) ? 0x10b981 : 0xf43f5e,
+            transparent: true,
+            opacity: 0.95,
+            depthWrite: false,
+          });
+          const marker = new THREE.Mesh(sphereGeometry.clone(), material);
+          marker.name = `BRepVertexMarker-${record.index}`;
+          marker.position.set(record.point.x, record.point.y, record.point.z);
+          marker.renderOrder = 18;
+          marker.raycast = () => undefined;
+          vertexHighlightGroup.add(marker);
+        });
+        sphereGeometry.dispose();
+        updateVertexMarkerScreenScale();
+      }
 
       activeNames.forEach((name) => {
         const child = renderedObjectByName.get(name);
@@ -2343,22 +2959,30 @@ export default function CadCanvas3D({
 
         if (child.name.startsWith("BRepEdge-")) {
           const isHighlighted = selectedEdgeNames.has(child.name) || hoveredEdgeNames.has(child.name);
-          const shouldBeVisible = overlayOn || isHighlighted;
-          child.visible = shouldBeVisible;
+          child.visible = isHighlighted;
 
           const material = (child as THREE.LineSegments).material;
           if (material instanceof THREE.LineBasicMaterial) {
-            if (selectedEdgeNames.has(child.name)) {
+            if (directSelectedEdgeNames.has(child.name)) {
               material.color.setHex(0x10b981);
               material.opacity = 1.0;
-            } else if (hoveredEdgeNames.has(child.name)) {
+            } else if (directHoveredEdgeNames.has(child.name)) {
               material.color.setHex(0xf43f5e);
               material.opacity = 1.0;
+            } else if (selectedEdgeNames.has(child.name)) {
+              material.color.setHex(0x10b981);
+              material.linewidth = 2.4;
+              material.opacity = 0.66;
+            } else if (hoveredEdgeNames.has(child.name)) {
+              material.color.setHex(0xf43f5e);
+              material.linewidth = 2.4;
+              material.opacity = 0.6;
             } else {
               material.color.setHex(0x64748b);
-              material.opacity = shouldBeVisible ? 0.35 : 0.0;
+              material.linewidth = 1.5;
+              material.opacity = 0.0;
             }
-            material.depthWrite = shouldBeVisible;
+            material.depthWrite = false;
           }
         }
       });
@@ -2369,6 +2993,15 @@ export default function CadCanvas3D({
     const getFeatureViewDirection = (obj: THREE.Object3D, center: THREE.Vector3, preferAxisView = false): THREE.Vector3 => {
       const currentViewDirection = camera.position.clone().sub(center).normalize();
       const cache = obj.userData.interactionCache;
+      const axis = (cache?.cylinderAxis ? cache.cylinderAxis.clone() : new THREE.Vector3(1, 0, 0))
+        .transformDirection(obj.matrixWorld)
+        .normalize();
+
+      const axisViewDirection = () => axis.dot(currentViewDirection) >= 0 ? axis : axis.clone().negate();
+
+      if (preferAxisView && cache?.cylinderAxis) {
+        return axisViewDirection();
+      }
 
       if (cache?.coherentNormal) {
         const normal = cache.coherentNormal.clone().transformDirection(obj.matrixWorld).normalize();
@@ -2381,26 +3014,7 @@ export default function CadCanvas3D({
         return normal;
       }
 
-      const axis = (cache?.cylinderAxis ? cache.cylinderAxis.clone() : new THREE.Vector3(1, 0, 0))
-        .transformDirection(obj.matrixWorld)
-        .normalize();
-
-      if (preferAxisView && cache?.cylinderAxis) {
-        return axis.dot(currentViewDirection) >= 0 ? axis : axis.clone().negate();
-      }
-
-      // For cylinders, focus from the current side of the axis, not down the axis.
-      const radialDirection = currentViewDirection.clone().addScaledVector(axis, -currentViewDirection.dot(axis));
-      if (radialDirection.lengthSq() > 1e-6) {
-        return radialDirection.normalize();
-      }
-
-      const fallback = new THREE.Vector3(0, 0, 1).addScaledVector(axis, -axis.z);
-      if (fallback.lengthSq() > 1e-6) {
-        return fallback.normalize();
-      }
-
-      return new THREE.Vector3(1, 0, 0);
+      return axisViewDirection();
     };
 
     const getStableSurfacePoint = (obj: THREE.Object3D): THREE.Vector3 => {
@@ -2499,11 +3113,11 @@ export default function CadCanvas3D({
       focusedDatumOrbit = true;
     };
 
-    const rotatePartAroundWorldAxis = (axis: THREE.Vector3, angle: number) => {
+    const rotatePartAroundWorldAxis = (axis: THREE.Vector3, angle: number, pivot = controls.target) => {
       const rotation = new THREE.Quaternion().setFromAxisAngle(axis.clone().normalize(), angle);
+      assemblyGroup.position.sub(pivot).applyQuaternion(rotation).add(pivot);
       assemblyGroup.quaternion.premultiply(rotation);
       assemblyGroup.updateMatrixWorld(true);
-      updateFloorGridPosition();
     };
 
     orientationViewHandlerRef.current = (direction: THREE.Vector3, up = new THREE.Vector3(0, 1, 0)) => {
@@ -2516,7 +3130,7 @@ export default function CadCanvas3D({
         target,
         up.clone().normalize()
       );
-      focusedDatumOrbit = true;
+      focusedDatumOrbit = false;
     };
 
     partRollHandlerRef.current = (angle: number) => {
@@ -2527,12 +3141,13 @@ export default function CadCanvas3D({
 
       cameraFocusTarget = null;
       focusedDatumOrbit = false;
-      rotatePartAroundWorldAxis(viewDirection, angle);
+      rotatePartAroundWorldAxis(viewDirection, angle, fixedCameraTarget);
 
       camera.position.copy(fixedCameraPosition);
       controls.target.copy(fixedCameraTarget);
       camera.up.copy(fixedCameraUp);
       controls.update();
+      controls.saveState();
       requestRenderRef.current?.(2);
     };
 
@@ -2589,11 +3204,15 @@ export default function CadCanvas3D({
         staleLeaderGeometry.forEach((item) => {
           child.remove(item);
           item.traverse((nested) => {
-            if (nested instanceof THREE.Line || nested instanceof THREE.LineSegments || nested instanceof THREE.Mesh) {
+            if (nested instanceof THREE.Line || nested instanceof THREE.LineSegments || nested instanceof THREE.Mesh || nested instanceof THREE.Sprite) {
               nested.geometry.dispose();
               if (Array.isArray(nested.material)) {
-                nested.material.forEach((material) => material.dispose());
+                nested.material.forEach((material) => {
+                  if ("map" in material && material.map) material.map.dispose();
+                  material.dispose();
+                });
               } else {
+                if ("map" in nested.material && nested.material.map) nested.material.map.dispose();
                 nested.material.dispose();
               }
             }
@@ -2602,11 +3221,98 @@ export default function CadCanvas3D({
       });
     };
 
+    const clearPmiDimensionToleranceOverlay = () => {
+      const staleDimensionGeometry: THREE.Object3D[] = [];
+      clearPmiDimensionLabelElements();
+      assemblyGroup.traverse((child) => {
+        if (
+          child.name.startsWith("PmiDimensionToleranceOverlay") &&
+          !child.parent?.name.startsWith("PmiDimensionToleranceOverlay")
+        ) {
+          staleDimensionGeometry.push(child);
+        }
+      });
+      staleDimensionGeometry.forEach((item) => {
+        item.parent?.remove(item);
+        item.traverse((nested) => {
+          if (nested instanceof THREE.Line || nested instanceof THREE.LineSegments || nested instanceof THREE.Mesh || nested instanceof THREE.Sprite) {
+            nested.geometry.dispose();
+            if (Array.isArray(nested.material)) {
+              nested.material.forEach((material) => {
+                if ("map" in material && material.map) material.map.dispose();
+                material.dispose();
+              });
+            } else {
+              if ("map" in nested.material && nested.material.map) nested.material.map.dispose();
+              nested.material.dispose();
+            }
+          }
+        });
+      });
+    };
+
+    const refreshPmiDimensionToleranceOverlay = () => {
+      clearPmiDimensionToleranceOverlay();
+      drawPmiDimensionToleranceOverlay();
+    };
+
+    function getDatumLeaderDimensionLabelLocalGeometry(anchor: (typeof datumAnchorCache)[number]): { point: THREE.Vector3; tangent: THREE.Vector3 } | null {
+      if (!anchor.hasLeader) return null;
+      if (anchor.calloutKind === "median") {
+        const tangent = anchor.leaderTangent.clone();
+        if (tangent.lengthSq() <= 1e-8) return null;
+        tangent.normalize();
+        const basePoint = (anchor.triangleApexLocal || anchor.localPoint).clone();
+        const point = basePoint.addScaledVector(tangent, Math.max(anchor.triangleHalfBase * 1.8, modelSizeMax * 0.018));
+        return { point, tangent };
+      }
+      if (anchor.calloutKind !== "cylindrical") return null;
+      const leaderAxis = anchor.leaderAxisLocal.clone();
+      if (leaderAxis.lengthSq() <= 1e-8) return null;
+      leaderAxis.normalize();
+      const tangent = getBadgeEdgeDirectionLocal(anchor.object, leaderAxis, anchor.leaderTangent);
+      if (tangent.lengthSq() <= 1e-8) return null;
+      const radialLeadEndLocal = anchor.localPoint.clone().addScaledVector(leaderAxis, anchor.leaderRadialLength);
+      const doglegExtendedEndLocal = radialLeadEndLocal
+        .clone()
+        .addScaledVector(tangent, anchor.leaderDoglegLength + Math.max(anchor.triangleHalfBase * 1.75, modelSizeMax * 0.018));
+      return {
+        point: doglegExtendedEndLocal,
+        tangent
+      };
+    }
+
+    function getDatumLeaderDimensionLabelPoint(anchor: (typeof datumAnchorCache)[number]): THREE.Vector3 | null {
+      const geometry = getDatumLeaderDimensionLabelLocalGeometry(anchor);
+      return geometry ? assemblyGroup.worldToLocal(anchor.object.localToWorld(geometry.point.clone())) : null;
+    }
+
+    function getDatumLeaderDimensionLabelTransform(anchor: (typeof datumAnchorCache)[number]): string {
+      const geometry = getDatumLeaderDimensionLabelLocalGeometry(anchor);
+      if (!geometry) return "translate(4px, -50%)";
+      const pointNdc = anchor.object.localToWorld(geometry.point.clone()).project(camera);
+      const tangentNdc = anchor.object.localToWorld(geometry.point.clone().add(geometry.tangent)).project(camera);
+      return tangentNdc.x < pointNdc.x
+        ? "translate(calc(-100% - 4px), -50%)"
+        : "translate(4px, -50%)";
+    }
+
+    const clearDatumReferenceFrameBadges = () => {
+      drfBadgeCache.forEach((badge) => {
+        badge.element.remove();
+      });
+      containerRef.current
+        ?.querySelectorAll("[data-drf-badge='true']")
+        .forEach((element) => element.remove());
+      drfBadgeCache = [];
+    };
+
     const drawDatumReferenceFrameOverlay = () => {
       const frames = propsRef.current.datumReferenceFrames || [];
       const allDatums = propsRef.current.datums || [];
       const allTolerances = propsRef.current.tolerances || [];
       if (frames.length === 0 || allDatums.length === 0) return;
+      const drfBadgeOverlay = document.getElementById("drf-badges-overlay");
 
       const datumByIdentifier = new Map<string, any>(
         allDatums.map((datum: any) => [datum.identifier, datum])
@@ -2717,7 +3423,7 @@ export default function CadCanvas3D({
           .flatMap((tolerance: any) => getToleranceTargetFaceNames(tolerance))
           .map((faceName: string) => {
             const frame = getFaceFrameInAssembly(faceName);
-            const object = assemblyGroup.getObjectByName(faceName);
+            const object = renderedObjectByName.get(faceName);
             const cylinderAxis = object?.userData.interactionCache?.cylinderAxis instanceof THREE.Vector3
               ? getAssemblyDirection(object, object.userData.interactionCache.cylinderAxis)
               : null;
@@ -2799,7 +3505,12 @@ export default function CadCanvas3D({
         }
         return /position|perpendicularity|parallelism|angularity|runout|coaxiality|concentricity|symmetry/i.test(tolerance.type || "");
       };
-      const plottedFrameByEntity = new Map<string, { frame: any; tolerances: any[]; score: number }>();
+      const plottedFrameByEntity = new Map<string, { frame: any; tolerances: any[]; score: number; showBadge: boolean }>();
+      const parsedFrameBadgeKeys = new Set(
+        frames
+          .filter((frame: any) => Array.isArray(frame.references) && frame.references.length > 0)
+          .map((frame: any) => getFrameKey(frame) || frame.entityId)
+      );
       for (const tolerance of allTolerances) {
         if (!shouldPlotToleranceFrame(tolerance)) continue;
         const frame = tolerance.datumReferenceFrame;
@@ -2814,7 +3525,12 @@ export default function CadCanvas3D({
             existing.score = score;
           }
         } else {
-          plottedFrameByEntity.set(key, { frame: makePlottedFrame(frame), tolerances: [tolerance], score });
+          plottedFrameByEntity.set(key, {
+            frame: makePlottedFrame(frame),
+            tolerances: [tolerance],
+            score,
+            showBadge: parsedFrameBadgeKeys.has(key)
+          });
         }
       }
       const uniqueFrames = Array.from(plottedFrameByEntity.values())
@@ -2830,9 +3546,9 @@ export default function CadCanvas3D({
       const fallbackFrames = [...frames]
         .filter((frame: any) => Array.isArray(frame.references) && frame.references.length > 0)
         .sort((a: any, b: any) => getUniqueFrameReferences(b).length - getUniqueFrameReferences(a).length)
-        .map((frame: any) => ({ frame, tolerances: getFrameTolerances(frame) }));
+        .map((frame: any) => ({ frame, tolerances: getFrameTolerances(frame), showBadge: true }));
 
-      const expandCylinderPatternFrame = (candidate: { frame: any; tolerances: any[] }) => {
+      const expandCylinderPatternFrame = (candidate: { frame: any; tolerances: any[]; showBadge?: boolean }) => {
         const cylinderPoints = getUniqueCylinderDatumPoints(candidate.frame);
         if (cylinderPoints.length <= 1) return [candidate];
         return cylinderPoints.map((cylinderPoint, index) => {
@@ -2847,7 +3563,8 @@ export default function CadCanvas3D({
                 origin: cylinderPoint.point
               }
             },
-            tolerances: candidate.tolerances
+            tolerances: candidate.tolerances,
+            showBadge: candidate.showBadge
           };
         });
       };
@@ -2855,7 +3572,71 @@ export default function CadCanvas3D({
       const candidateFrames = (uniqueFrames.length > 0 ? uniqueFrames : fallbackFrames)
         .flatMap(expandCylinderPatternFrame);
 
-      const drawFrame = (candidate: { frame: any; tolerances: any[] }): boolean => {
+      const getPrimaryReferenceNormal = (frame: any): THREE.Vector3 | null => {
+        const primaryReference = getUniqueFrameReferences(frame)[0];
+        if (!primaryReference) return null;
+        const faceName = getDatumFaceNames(primaryReference)[0];
+        const faceFrame = faceName ? getFaceFrameInAssembly(faceName) : null;
+        if (faceFrame?.normal && faceFrame.normal.lengthSq() > 1e-8) {
+          return faceFrame.normal.clone().normalize();
+        }
+        const primaryGeometry = (primaryReference.surfaceGeometry || [])[0];
+        const stepNormal = primaryGeometry?.normal
+          ? new THREE.Vector3(primaryGeometry.normal.x, primaryGeometry.normal.y, primaryGeometry.normal.z)
+          : null;
+        return stepNormal && stepNormal.lengthSq() > 1e-8 ? stepNormal.normalize() : null;
+      };
+
+      const getFrameBasisVectors = (frame: any, alignToPrimaryDatumNormal = false) => {
+        const basis = frame?.frameBasis;
+        if (!basis?.xAxis || !basis?.yAxis || !basis?.zAxis) return null;
+        const xAxis = new THREE.Vector3(basis.xAxis.x, basis.xAxis.y, basis.xAxis.z);
+        const yAxis = new THREE.Vector3(basis.yAxis.x, basis.yAxis.y, basis.yAxis.z);
+        const zAxis = new THREE.Vector3(basis.zAxis.x, basis.zAxis.y, basis.zAxis.z);
+        if (xAxis.lengthSq() <= 1e-8 || yAxis.lengthSq() <= 1e-8 || zAxis.lengthSq() <= 1e-8) return null;
+        if (alignToPrimaryDatumNormal) {
+          const primaryNormal = getPrimaryReferenceNormal(frame);
+          if (primaryNormal) {
+            const alignedX = xAxis.clone().addScaledVector(primaryNormal, -xAxis.dot(primaryNormal));
+            if (alignedX.lengthSq() > 1e-8) {
+              const alignedY = new THREE.Vector3().crossVectors(primaryNormal, alignedX.normalize()).normalize();
+              if (alignedY.lengthSq() > 1e-8) {
+                return {
+                  xAxis: new THREE.Vector3().crossVectors(alignedY, primaryNormal).normalize(),
+                  yAxis: alignedY,
+                  zAxis: primaryNormal,
+                };
+              }
+            }
+          }
+        }
+        return {
+          xAxis: xAxis.normalize(),
+          yAxis: yAxis.normalize(),
+          zAxis: zAxis.normalize(),
+        };
+      };
+
+      const getBaseOrientationScore = (frame: any) => {
+        const references = getUniqueFrameReferences(frame);
+        if (references.length < 3 || !getFrameBasisVectors(frame)) return -Infinity;
+        const tolerancesForFrame = getFrameTolerances(frame);
+        const toleranceScore = tolerancesForFrame
+          .reduce((score: number, tolerance: any) => score + getFramePlotScore(tolerance), 0);
+        const modifierCount = references
+          .reduce((count: number, reference: any) => count + ((reference.modifiers || []).length || 0), 0);
+        return references.length * 1000 + toleranceScore + tolerancesForFrame.length * 10 - modifierCount;
+      };
+
+      const scoredBaseOrientationFrames = [...frames]
+        .map((frame: any) => ({ frame, score: getBaseOrientationScore(frame) }))
+        .filter((candidate) => candidate.score > -Infinity);
+      const baseOrientationFrame = scoredBaseOrientationFrames
+        .sort((a, b) => b.score - a.score)
+        [0]?.frame;
+      const baseOrientationBasis = getFrameBasisVectors(baseOrientationFrame, true);
+
+      const drawFrame = (candidate: { frame: any; tolerances: any[]; showBadge?: boolean }): boolean => {
         const frame = candidate.frame;
         const uniqueReferences = getUniqueFrameReferences(frame).slice(0, 3);
         if (uniqueReferences.length === 0) return false;
@@ -2864,36 +3645,36 @@ export default function CadCanvas3D({
           value ? new THREE.Vector3(value.x, value.y, value.z) : null;
 
         const datumAnchors = uniqueReferences.map((reference: any) => {
-        const datum = datumByIdentifier.get(reference.datumIdentifier);
-        const faceName = getDatumFaceNames(reference)[0];
-        const faceFrame = faceName ? getFaceFrameInAssembly(faceName) : null;
-        const faceObject = faceName ? assemblyGroup.getObjectByName(faceName) : null;
-        const cylinderAxis = faceObject?.userData.interactionCache?.cylinderAxis instanceof THREE.Vector3
-          ? getAssemblyDirection(faceObject, faceObject.userData.interactionCache.cylinderAxis)
-          : null;
-        const stepGeometry = Array.isArray(reference.surfaceGeometry) && reference.surfaceGeometry.length > 0
-          ? reference.surfaceGeometry
-          : (Array.isArray(datum?.surfaceGeometry) ? datum.surfaceGeometry : []);
-        const primaryStepGeometry = stepGeometry[0] || null;
-        const stepPoint = toVector3(primaryStepGeometry?.point);
-        const stepNormal = toVector3(primaryStepGeometry?.normal);
-        const stepAxis = toVector3(primaryStepGeometry?.axis);
-        const stepXDirection = toVector3(primaryStepGeometry?.xDirection);
-        const datumText = `${datum?.type || ""} ${datum?.targetName || ""}`;
-        const datumAxis = /cylind|hole|bore|axis/i.test(datumText)
-          ? stepAxis || cylinderAxis || faceFrame?.normal || null
-          : stepNormal || faceFrame?.normal || cylinderAxis || null;
-        return {
-          reference,
-          faceName,
-          frame: faceFrame,
-          cylinderAxis,
-          stepGeometry,
-          stepPoint,
-          stepNormal,
-          stepAxis,
-          stepXDirection,
-          datumAxis
+          const datum = datumByIdentifier.get(reference.datumIdentifier);
+          const faceName = getDatumFaceNames(reference)[0];
+          const faceFrame = faceName ? getFaceFrameInAssembly(faceName) : null;
+          const faceObject = faceName ? renderedObjectByName.get(faceName) : null;
+          const cylinderAxis = faceObject?.userData.interactionCache?.cylinderAxis instanceof THREE.Vector3
+            ? getAssemblyDirection(faceObject, faceObject.userData.interactionCache.cylinderAxis)
+            : null;
+          const stepGeometry = Array.isArray(reference.surfaceGeometry) && reference.surfaceGeometry.length > 0
+            ? reference.surfaceGeometry
+            : (Array.isArray(datum?.surfaceGeometry) ? datum.surfaceGeometry : []);
+          const primaryStepGeometry = stepGeometry[0] || null;
+          const stepPoint = toVector3(primaryStepGeometry?.point);
+          const stepNormal = toVector3(primaryStepGeometry?.normal);
+          const stepAxis = toVector3(primaryStepGeometry?.axis);
+          const stepXDirection = toVector3(primaryStepGeometry?.xDirection);
+          const datumText = `${datum?.type || ""} ${datum?.targetName || ""}`;
+          const datumAxis = /cylind|hole|bore|axis/i.test(datumText)
+            ? stepAxis || cylinderAxis || faceFrame?.normal || null
+            : stepNormal || faceFrame?.normal || cylinderAxis || null;
+          return {
+            reference,
+            faceName,
+            frame: faceFrame,
+            cylinderAxis,
+            stepGeometry,
+            stepPoint,
+            stepNormal,
+            stepAxis,
+            stepXDirection,
+            datumAxis
           };
         });
 
@@ -2904,7 +3685,6 @@ export default function CadCanvas3D({
         const tertiary = datumAnchors[2];
         const firstTolerance = candidate.tolerances[0] || {};
         const targetIsCylindrical = (firstTolerance.targetSurfaceTypes || []).some((type: string) => /cylinder/i.test(type));
-        const primaryDatum = datumByIdentifier.get(primary?.reference?.datumIdentifier);
         const resolveDatumSurfaceKind = (datumAnchor: any): "plane" | "cylinder" | "curved" | "unknown" => {
           const stepGeometry = Array.isArray(datumAnchor?.stepGeometry) && datumAnchor.stepGeometry.length > 0
             ? datumAnchor.stepGeometry[0]
@@ -2918,6 +3698,17 @@ export default function CadCanvas3D({
         const primarySurfaceKind = resolveDatumSurfaceKind(primary);
         const primaryIsPlane = primarySurfaceKind === "plane";
         const primaryIsCylinder = primarySurfaceKind === "cylinder";
+        const primaryCylinderPointCount = (primary?.stepGeometry || [])
+          .filter((geometry: any) => geometry.surfaceType === "cylinder" && geometry.point && geometry.axis)
+          .reduce((points: string[], geometry: any) => {
+            const key = `${geometry.point.x.toFixed(6)}|${geometry.point.y.toFixed(6)}|${geometry.point.z.toFixed(6)}`;
+            return points.includes(key) ? points : [...points, key];
+          }, []).length;
+        const shouldInheritBaseOrientation =
+          !!baseOrientationBasis &&
+          uniqueReferences.length === 1 &&
+          primaryIsCylinder &&
+          primaryCylinderPointCount > 1;
         const parserFrameBasis = frame?.frameBasis;
         const hasValidParserFrameBasis = !!parserFrameBasis &&
           !!parserFrameBasis.origin &&
@@ -3097,52 +3888,81 @@ export default function CadCanvas3D({
           xAxis = new THREE.Vector3().crossVectors(yAxis, zAxis).normalize();
         }
 
+        const primaryCanonicalZ =
+          (primaryIsPlane ? primary?.frame?.normal || primary?.stepNormal || primary?.datumAxis : primary?.stepAxis || primary?.datumAxis) ||
+          primary?.datumAxis ||
+          null;
+        if (primaryCanonicalZ && primaryCanonicalZ.lengthSq() > 1e-8) {
+          const canonicalZ = primaryCanonicalZ.clone().normalize();
+
+          const pickCanonicalXAxis = (candidates: Array<THREE.Vector3 | null | undefined>) => {
+            for (const candidate of candidates) {
+              if (!candidate || candidate.lengthSq() <= 1e-8) continue;
+              const projected = candidate.clone().addScaledVector(canonicalZ, -candidate.dot(canonicalZ));
+              if (projected.lengthSq() > 1e-8) return projected.normalize();
+            }
+            const worldAxes = [
+              new THREE.Vector3(1, 0, 0),
+              new THREE.Vector3(0, 1, 0),
+              new THREE.Vector3(0, 0, 1),
+            ]
+              .map((axis) => axis.addScaledVector(canonicalZ, -axis.dot(canonicalZ)))
+              .filter((axis) => axis.lengthSq() > 1e-8)
+              .sort((a, b) => b.lengthSq() - a.lengthSq());
+            return worldAxes[0]?.normalize() || null;
+          };
+
+          const canonicalX = pickCanonicalXAxis([
+            primary?.stepXDirection,
+            hasValidParserFrameBasis && parserFrameBasis?.xAxis
+              ? new THREE.Vector3(parserFrameBasis.xAxis.x, parserFrameBasis.xAxis.y, parserFrameBasis.xAxis.z)
+              : null,
+            xAxis,
+            modelOrbitTarget.clone().sub(origin),
+          ]);
+
+          if (canonicalX) {
+            const canonicalY = new THREE.Vector3().crossVectors(canonicalZ, canonicalX).normalize();
+            if (canonicalY.lengthSq() > 1e-8) {
+              zAxis.copy(canonicalZ);
+              yAxis.copy(canonicalY);
+              xAxis.copy(new THREE.Vector3().crossVectors(yAxis, zAxis).normalize());
+            }
+          }
+        }
+
+        if (shouldInheritBaseOrientation && baseOrientationBasis) {
+          xAxis.copy(baseOrientationBasis.xAxis);
+          yAxis.copy(baseOrientationBasis.yAxis);
+          zAxis.copy(baseOrientationBasis.zAxis);
+        }
+
         const group = new THREE.Group();
         group.name = `DatumReferenceFrameOverlay-${frame.id || frame.entityId || "active"}`;
         group.renderOrder = 45;
 
         const axisLength = Math.max(modelSizeMax * 0.12, 0.65);
         const badgeText = frame.label || frame.name || "DRF";
-        const badgeCanvas = document.createElement("canvas");
-        const badgeContext = badgeCanvas.getContext("2d");
-        if (badgeContext) {
-          const paddingX = 9;
-          const fontSize = 12;
-          badgeContext.font = `700 ${fontSize}px Arial`;
-          const textMetrics = badgeContext.measureText(badgeText);
-          const width = Math.max(54, Math.ceil(textMetrics.width + paddingX * 2));
-          const height = 22;
-          badgeCanvas.width = width;
-          badgeCanvas.height = height;
-          badgeContext.font = `700 ${fontSize}px Arial`;
-          badgeContext.textAlign = "center";
-          badgeContext.textBaseline = "middle";
-          badgeContext.fillStyle = "rgba(15, 23, 42, 0.86)";
-          badgeContext.fillRect(0, 0, width, height);
-          badgeContext.strokeStyle = "rgba(255, 255, 255, 0.92)";
-          badgeContext.lineWidth = 1;
-          badgeContext.strokeRect(0.5, 0.5, width - 1, height - 1);
-          badgeContext.fillStyle = "#f8fafc";
-          badgeContext.fillText(badgeText, width / 2, height / 2);
-          const badgeTexture = new THREE.CanvasTexture(badgeCanvas);
-          badgeTexture.needsUpdate = true;
-          const badgeMaterial = new THREE.SpriteMaterial({
-            map: badgeTexture,
-            transparent: true,
-            depthTest: false,
-            depthWrite: false,
+        const badgePoint = origin.clone()
+          .addScaledVector(xAxis, axisLength * 0.2)
+          .addScaledVector(yAxis, axisLength * 0.2)
+          .addScaledVector(zAxis, axisLength * 0.12);
+        if (drfBadgeOverlay && candidate.showBadge !== false) {
+          const badgeElement = document.createElement("div");
+          badgeElement.className = "absolute left-0 top-0 hidden h-4 min-w-0 items-center justify-center border border-slate-800 bg-white/95 px-1 font-mono text-[7.5px] font-black leading-none text-slate-800 shadow-sm backdrop-blur-sm";
+          badgeElement.style.transform = "translate3d(0, 0, 0) translate(-50%, -50%)";
+          badgeElement.style.willChange = "transform";
+          badgeElement.style.whiteSpace = "nowrap";
+          badgeElement.dataset.drfBadge = "true";
+          badgeElement.textContent = badgeText;
+          badgeElement.title = `Datum reference frame ${badgeText}`;
+          drfBadgeOverlay.appendChild(badgeElement);
+          drfBadgeCache.push({
+            id: frame.id || frame.entityId || "active",
+            element: badgeElement,
+            object: assemblyGroup,
+            localPoint: badgePoint,
           });
-          const badgeSprite = new THREE.Sprite(badgeMaterial);
-          const badgeWorldHeight = Math.max(axisLength * 0.18, modelSizeMax * 0.026, 0.16);
-          const badgeWorldWidth = badgeWorldHeight * (width / height);
-          badgeSprite.scale.set(badgeWorldWidth, badgeWorldHeight, 1);
-          badgeSprite.position.copy(origin.clone()
-            .addScaledVector(xAxis, axisLength * 0.2)
-            .addScaledVector(yAxis, axisLength * 0.2)
-            .addScaledVector(zAxis, axisLength * 0.12));
-          badgeSprite.renderOrder = 49;
-          badgeSprite.name = `DatumReferenceFrameBadge-${frame.id || frame.entityId || "active"}`;
-          group.add(badgeSprite);
         }
 
         const arrowLength = Math.max(modelSizeMax * 0.017, 0.095);
@@ -3231,6 +4051,1657 @@ export default function CadCanvas3D({
           .sort((a: any, b: any) => getUniqueFrameReferences(b).length - getUniqueFrameReferences(a).length)
           .map((frame: any) => ({ frame, tolerances: getFrameTolerances(frame) }))
           .some((candidate: { frame: any; tolerances: any[] }) => drawFrame(candidate));
+      }
+    };
+
+    const drawPmiDimensionToleranceOverlay = () => {
+      if (!propsRef.current.showDimensionalTolerances) return;
+      const dimensionTolerances = (propsRef.current.tolerances || [])
+        .filter((tolerance: any) => tolerance?.category === "Dimension" && Array.isArray(tolerance.targetIds) && tolerance.targetIds.length > 0);
+      if (dimensionTolerances.length === 0) return;
+
+      const group = new THREE.Group();
+      group.name = "PmiDimensionToleranceOverlay";
+      const labelOverlay = document.getElementById("pmi-dimensional-labels-overlay");
+
+      const getFaceNamesForTolerance = (tolerance: any): string[] => {
+        const mappedNames = (tolerance.targetIds || [])
+          .map((targetId: string) =>
+            mapTargetToWebGLName(targetId, "", false) ||
+            mapTargetToTopologicalWebGLName(targetId)
+          )
+          .filter((name: string | null): name is string => !!name)
+          .filter((name: string, index: number, all: string[]) => all.indexOf(name) === index);
+        if (
+          tolerance.dimensionKind !== "linear" &&
+          tolerance.dimensionKind !== "size" &&
+          tolerance.dimensionKind !== "angular" &&
+          !tolerance.isDatumTargetDimension &&
+          !tolerance.isCounterboreDimension &&
+          !tolerance.isCountersinkDimension
+        ) {
+          const cylindricalName = mappedNames.find((name) => {
+            const object = renderedObjectByName.get(name);
+            const cache = object?.userData.interactionCache;
+            return cache?.cylinderAxis instanceof THREE.Vector3 && !(cache?.coherentNormal instanceof THREE.Vector3);
+          });
+          return (cylindricalName || mappedNames[0]) ? [cylindricalName || mappedNames[0]] : [];
+        }
+        return mappedNames;
+      };
+
+      const makeVectorFromParsedPoint = (point: any): THREE.Vector3 | null => {
+        if (!point || !Number.isFinite(point.x) || !Number.isFinite(point.y) || !Number.isFinite(point.z)) return null;
+        return new THREE.Vector3(Number(point.x), Number(point.y), Number(point.z));
+      };
+
+      const isCylindricalFace = (faceName: string) => {
+        const object = renderedObjectByName.get(faceName);
+        const cache = object?.userData.interactionCache;
+        return cache?.cylinderAxis instanceof THREE.Vector3 && !(cache?.coherentNormal instanceof THREE.Vector3);
+      };
+
+      const getPrimaryCylindricalFaceName = (faceNames: string[]) =>
+        faceNames.find(isCylindricalFace) || null;
+
+      const getCylindricalFaceRadius = (faceName: string): number | null => {
+        const object = renderedObjectByName.get(faceName);
+        const cache = object?.userData.interactionCache;
+        if (!object || !(cache?.localCenter instanceof THREE.Vector3) || !(cache.cylinderAxis instanceof THREE.Vector3)) return null;
+        const axis = getAssemblyDirection(object, cache.cylinderAxis.clone());
+        if (!axis) return null;
+        const center = assemblyGroup.worldToLocal(object.localToWorld(cache.localCenter.clone()));
+        const surfacePoint = assemblyGroup.worldToLocal(object.localToWorld(getStableSurfacePoint(object)));
+        const axisFoot = center.clone().addScaledVector(axis, surfacePoint.clone().sub(center).dot(axis));
+        const radius = surfacePoint.distanceTo(axisFoot);
+        return Number.isFinite(radius) && radius > 1e-8 ? radius : null;
+      };
+
+      const getLargestCylindricalFaceName = (faceNames: string[]): string | null =>
+        faceNames
+          .filter(isCylindricalFace)
+          .map((name) => ({ name, radius: getCylindricalFaceRadius(name) }))
+          .filter((candidate): candidate is { name: string; radius: number } => candidate.radius !== null)
+          .sort((a, b) => b.radius - a.radius)[0]?.name || null;
+
+      const getBoundarySideHoleCalloutFaceName = (faceNames: string[], tolerance: any): string | null => {
+        if (tolerance?.isCounterboreDimension) {
+          return getLargestCylindricalFaceName(faceNames) || getPrimaryCylindricalFaceName(faceNames);
+        }
+        if (tolerance?.isCountersinkDimension) {
+          return getPrimaryCylindricalFaceName(faceNames) || getNearestCylindricalFaceName(faceNames);
+        }
+        return getPrimaryCylindricalFaceName(faceNames);
+      };
+
+      const getAssemblyDirection = (object: THREE.Object3D, localDirection: THREE.Vector3): THREE.Vector3 | null => {
+        if (localDirection.lengthSq() <= 1e-8) return null;
+        const worldStart = object.localToWorld(new THREE.Vector3());
+        const worldEnd = object.localToWorld(localDirection.clone());
+        const assemblyStart = assemblyGroup.worldToLocal(worldStart);
+        const assemblyEnd = assemblyGroup.worldToLocal(worldEnd);
+        const direction = assemblyEnd.sub(assemblyStart);
+        return direction.lengthSq() > 1e-8 ? direction.normalize() : null;
+      };
+
+      const makeMeasurementFrameBasis = (frame: any): MeasurementFrameBasis | null => {
+        const basis = frame?.frameBasis;
+        if (!basis?.xAxis || !basis?.yAxis || !basis?.zAxis) return null;
+        const xAxis = new THREE.Vector3(basis.xAxis.x, basis.xAxis.y, basis.xAxis.z);
+        const yAxis = new THREE.Vector3(basis.yAxis.x, basis.yAxis.y, basis.yAxis.z);
+        const zAxis = new THREE.Vector3(basis.zAxis.x, basis.zAxis.y, basis.zAxis.z);
+        if (xAxis.lengthSq() <= 1e-8 || yAxis.lengthSq() <= 1e-8 || zAxis.lengthSq() <= 1e-8) return null;
+        return {
+          xAxis: xAxis.normalize(),
+          yAxis: yAxis.normalize(),
+          zAxis: zAxis.normalize()
+        };
+      };
+
+      const getPrimaryMeasurementFrameBasis = (): MeasurementFrameBasis | null => {
+        const frames = propsRef.current.datumReferenceFrames || [];
+        const sortedFrames = [...frames]
+          .filter((frame: any) => !!makeMeasurementFrameBasis(frame))
+          .sort((a: any, b: any) => {
+            const aRefs = Array.isArray(a.references) ? a.references.length : 0;
+            const bRefs = Array.isArray(b.references) ? b.references.length : 0;
+            const aPrimary = (a.references || []).some((reference: any) => reference.precedence === 1) ? 1 : 0;
+            const bPrimary = (b.references || []).some((reference: any) => reference.precedence === 1) ? 1 : 0;
+            return bPrimary - aPrimary || bRefs - aRefs;
+          });
+        return makeMeasurementFrameBasis(sortedFrames[0]);
+      };
+
+      const getToleranceMeasurementFrameBasis = (tolerance: any): MeasurementFrameBasis | null => {
+        return makeMeasurementFrameBasis(tolerance?.datumReferenceFrame) || getPrimaryMeasurementFrameBasis();
+      };
+
+      const makeDimensionTextElement = (tolerance: any, datumIdentifiers: string[] = []) => {
+        const nominal = Number.isFinite(tolerance.nominalDimension) ? Number(tolerance.nominalDimension) : null;
+        const upper = Number.isFinite(tolerance.upperTolerance) ? Number(tolerance.upperTolerance) : null;
+        const lower = Number.isFinite(tolerance.lowerTolerance) ? Number(tolerance.lowerTolerance) : null;
+        const dimensionLowerLimit = Number.isFinite(tolerance.dimensionLowerLimit) ? Number(tolerance.dimensionLowerLimit) : null;
+        const dimensionUpperLimit = Number.isFinite(tolerance.dimensionUpperLimit) ? Number(tolerance.dimensionUpperLimit) : null;
+        const hasDimensionLimitRange = dimensionLowerLimit !== null && dimensionUpperLimit !== null;
+        const pilotNominal = Number.isFinite(tolerance.counterboreHoleNominal) ? Number(tolerance.counterboreHoleNominal) : null;
+        const pilotUpper = Number.isFinite(tolerance.counterboreHoleUpperTolerance) ? Number(tolerance.counterboreHoleUpperTolerance) : null;
+        const pilotLower = Number.isFinite(tolerance.counterboreHoleLowerTolerance) ? Number(tolerance.counterboreHoleLowerTolerance) : null;
+        const nominalText = nominal !== null ? nominal.toFixed(3) : "DIM";
+        const preModifier = `${tolerance.dimensionPreModifier || ""}`.trim();
+        const dimensionLimitPreModifier = `${tolerance.dimensionLimitPreModifier || ""}`.trim();
+        const dimensionLimitNote = `${tolerance.dimensionLimitNote || ""}`.trim();
+        const counterboreEvaluationNote = `${tolerance.counterboreEvaluationNote || ""}`.trim();
+        const counterborePreModifier = tolerance.isCounterboreDimension && counterboreEvaluationNote ? "" : preModifier;
+        const modifiedNominalText = preModifier ? `${preModifier} ${nominalText}` : nominalText;
+        const diameterSymbol = tolerance.isSphericalDimension ? "S\u2300" : "\u2300";
+        const diameterNominalText = `${preModifier ? `${preModifier} ` : ""}${diameterSymbol}${nominalText}`;
+        const dimensionLimitText = hasDimensionLimitRange
+          ? `${dimensionLimitPreModifier ? `${dimensionLimitPreModifier} ` : ""}${tolerance.dimensionKind === "radius" ? "R" : ""}${dimensionLowerLimit.toFixed(3)} - ${dimensionUpperLimit.toFixed(3)}`
+          : "";
+        const threadDesignation = `${tolerance.threadDesignation || ""}`.trim();
+        const depthNominal = Number.isFinite(tolerance.counterboreDepthNominal)
+          ? Number(tolerance.counterboreDepthNominal)
+          : null;
+        const depthUpper = Number.isFinite(tolerance.counterboreDepthUpperTolerance)
+          ? Number(tolerance.counterboreDepthUpperTolerance)
+          : null;
+        const depthLower = Number.isFinite(tolerance.counterboreDepthLowerTolerance)
+          ? Number(tolerance.counterboreDepthLowerTolerance)
+          : null;
+        const countersinkAngle = Number.isFinite(tolerance.countersinkAngleNominal)
+          ? Number(tolerance.countersinkAngleNominal)
+          : null;
+        const countersinkAngleUpper = Number.isFinite(tolerance.countersinkAngleUpperTolerance)
+          ? Number(tolerance.countersinkAngleUpperTolerance)
+          : null;
+        const countersinkAngleLower = Number.isFinite(tolerance.countersinkAngleLowerTolerance)
+          ? Number(tolerance.countersinkAngleLowerTolerance)
+          : null;
+        const baseMainText = hasDimensionLimitRange
+          ? dimensionLimitText
+          : tolerance.isCountersinkDimension
+          ? `${preModifier ? `${preModifier} ` : ""}\u2335 \u2300${nominalText}`
+        : tolerance.isCounterboreDimension
+          ? `${counterborePreModifier ? `${counterborePreModifier} ` : ""}\u2334 \u2300${nominalText}`
+        : tolerance.dimensionKind === "threadDepth" && threadDesignation
+          ? `${preModifier ? `${preModifier} ` : ""}${threadDesignation} \u21a7 ${nominalText}`
+          : tolerance.dimensionKind === "diameter"
+          ? diameterNominalText
+          : tolerance.dimensionKind === "radius" && tolerance.isControlledRadiusDimension
+          ? `${preModifier ? `${preModifier} ` : ""}CR ${nominalText}`
+          : tolerance.dimensionKind === "radius" && tolerance.isSphericalDimension
+          ? `${preModifier ? `${preModifier} ` : ""}SR ${nominalText}`
+          : tolerance.dimensionKind === "radius"
+          ? `${preModifier ? `${preModifier} ` : ""}R ${nominalText}`
+          : `${modifiedNominalText}${tolerance.dimensionKind === "angular" ? "\u00b0" : ""}`;
+        const mainText = tolerance.isBasicDimension
+          ? `[${baseMainText}]`
+          : tolerance.isReferenceDimension
+            ? `(${baseMainText})`
+            : baseMainText;
+        const upperText = !hasDimensionLimitRange && upper !== null ? `+${upper.toFixed(3)}` : "";
+        const lowerText = !hasDimensionLimitRange && lower !== null ? `${lower.toFixed(3)}` : "";
+
+        const element = document.createElement("div");
+        element.dataset.pmiDimensionLabel = "true";
+        element.className = "absolute left-0 top-0 hidden items-center gap-1 whitespace-nowrap font-mono leading-none text-slate-900";
+        element.style.transform = "translate3d(0, 0, 0) translate(0, -50%)";
+        element.style.willChange = "transform";
+        element.style.pointerEvents = "none";
+        element.style.fontSize = "13px";
+        element.style.contain = "layout style paint";
+        element.style.zIndex = "19";
+
+        datumIdentifiers.forEach((identifier) => {
+          const datumElement = document.createElement("span");
+          datumElement.textContent = identifier;
+          datumElement.style.display = "inline-flex";
+          datumElement.style.alignItems = "center";
+          datumElement.style.justifyContent = "center";
+          datumElement.style.minWidth = "28px";
+          datumElement.style.height = "24px";
+          datumElement.style.border = "2px solid #0f172a";
+          datumElement.style.background = "rgba(248, 250, 252, 0.92)";
+          datumElement.style.color = "#0f172a";
+          datumElement.style.fontSize = "11px";
+          datumElement.style.fontWeight = "900";
+          datumElement.style.lineHeight = "1";
+          datumElement.style.padding = "0 6px";
+          datumElement.style.boxSizing = "border-box";
+          element.appendChild(datumElement);
+        });
+
+        const makeNominalSpan = (text: string) => {
+          const span = document.createElement("span");
+          span.textContent = text;
+          span.style.fontSize = "13px";
+          span.style.fontWeight = "300";
+          span.style.lineHeight = "1";
+          return span;
+        };
+
+        const nominalElement = document.createElement("span");
+        nominalElement.textContent = mainText;
+        nominalElement.style.fontSize = "13px";
+        nominalElement.style.fontWeight = "300";
+        nominalElement.style.lineHeight = "1";
+
+        const makeLimitsElement = (topText: string, bottomText: string) => {
+          const limitsElement = document.createElement("span");
+          limitsElement.className = "flex flex-col items-start justify-center";
+          limitsElement.style.fontSize = "9px";
+          limitsElement.style.fontWeight = "300";
+          limitsElement.style.lineHeight = "0.9";
+          const upperElement = document.createElement("span");
+          upperElement.textContent = topText;
+          const lowerElement = document.createElement("span");
+          lowerElement.textContent = bottomText;
+          limitsElement.appendChild(upperElement);
+          limitsElement.appendChild(lowerElement);
+          return limitsElement;
+        };
+
+        if (tolerance.isCounterboreDimension && (pilotNominal !== null || counterboreEvaluationNote) && nominal !== null) {
+          element.className = "absolute left-0 top-0 hidden flex-col items-start gap-0.5 whitespace-nowrap font-mono leading-none text-slate-900";
+          element.style.transform = "translate3d(0, 0, 0) translate(0, -50%)";
+
+          const makeRow = (main: string, top: string, bottom: string) => {
+            const row = document.createElement("div");
+            row.style.display = "inline-flex";
+            row.style.alignItems = "center";
+            row.style.gap = "4px";
+            row.appendChild(makeNominalSpan(main));
+            row.appendChild(makeLimitsElement(top, bottom));
+            return row;
+          };
+
+          if (pilotNominal !== null) {
+            element.appendChild(makeRow(
+              `${preModifier ? `${preModifier} ` : ""}\u2300${pilotNominal.toFixed(3)}`,
+              pilotUpper !== null ? `+${pilotUpper.toFixed(3)}` : "",
+              pilotLower !== null ? `${pilotLower.toFixed(3)}` : ""
+            ));
+          }
+          const counterboreRow = makeRow(
+            `${counterborePreModifier ? `${counterborePreModifier} ` : ""}\u2334 \u2300${nominalText}`,
+            upper !== null ? `+${upper.toFixed(3)}` : "",
+            lower !== null ? `${lower.toFixed(3)}` : ""
+          );
+          if (depthNominal !== null) {
+            counterboreRow.appendChild(makeNominalSpan(`\u21a7 ${depthNominal.toFixed(3)}`));
+            counterboreRow.appendChild(makeLimitsElement(
+              depthUpper !== null ? `+${depthUpper.toFixed(3)}` : "",
+              depthLower !== null ? `${depthLower.toFixed(3)}` : ""
+            ));
+          }
+          element.appendChild(counterboreRow);
+          if (counterboreEvaluationNote) {
+            const noteElement = document.createElement("div");
+            noteElement.textContent = counterboreEvaluationNote;
+            noteElement.style.fontSize = "10px";
+            noteElement.style.fontWeight = "300";
+            noteElement.style.lineHeight = "1";
+            element.appendChild(noteElement);
+          }
+          return element;
+        }
+
+        element.appendChild(nominalElement);
+        if (hasDimensionLimitRange && dimensionLimitNote) {
+          element.className = "absolute left-0 top-0 hidden flex-col items-start gap-0.5 whitespace-nowrap font-mono leading-none text-slate-900";
+        }
+        if (tolerance.isStatisticalTolerance) {
+          const statisticalElement = document.createElement("span");
+          statisticalElement.textContent = "ST";
+          statisticalElement.title = "Statistical tolerance";
+          statisticalElement.style.display = "inline-flex";
+          statisticalElement.style.alignItems = "center";
+          statisticalElement.style.justifyContent = "center";
+          statisticalElement.style.width = "18px";
+          statisticalElement.style.height = "18px";
+          statisticalElement.style.border = "1.4px solid #0f172a";
+          statisticalElement.style.borderRadius = "999px";
+          statisticalElement.style.fontSize = "7px";
+          statisticalElement.style.fontWeight = "600";
+          statisticalElement.style.lineHeight = "1";
+          statisticalElement.style.letterSpacing = "0";
+          element.appendChild(statisticalElement);
+        }
+        if (!hasDimensionLimitRange) {
+          element.appendChild(makeLimitsElement(upperText, lowerText));
+        }
+        if (hasDimensionLimitRange && dimensionLimitNote) {
+          const noteElement = document.createElement("span");
+          noteElement.textContent = dimensionLimitNote;
+          noteElement.style.fontSize = "9px";
+          noteElement.style.fontWeight = "300";
+          noteElement.style.lineHeight = "1";
+          element.appendChild(noteElement);
+        }
+
+        if (depthNominal !== null) {
+          const depthNominalElement = document.createElement("span");
+          depthNominalElement.textContent = `\u21a7 ${depthNominal.toFixed(3)}`;
+          depthNominalElement.style.fontSize = "13px";
+          depthNominalElement.style.fontWeight = "300";
+          depthNominalElement.style.lineHeight = "1";
+          element.appendChild(depthNominalElement);
+          element.appendChild(makeLimitsElement(
+            depthUpper !== null ? `+${depthUpper.toFixed(3)}` : "",
+            depthLower !== null ? `${depthLower.toFixed(3)}` : ""
+          ));
+        }
+
+        if (tolerance.isCountersinkDimension && countersinkAngle !== null) {
+          const separatorElement = document.createElement("span");
+          separatorElement.textContent = "\u00d7";
+          separatorElement.style.fontSize = "12px";
+          separatorElement.style.fontWeight = "300";
+          separatorElement.style.lineHeight = "1";
+          element.appendChild(separatorElement);
+
+          const angleElement = document.createElement("span");
+          angleElement.textContent = `${countersinkAngle.toFixed(3)}\u00b0`;
+          angleElement.style.fontSize = "13px";
+          angleElement.style.fontWeight = "300";
+          angleElement.style.lineHeight = "1";
+          element.appendChild(angleElement);
+          element.appendChild(makeLimitsElement(
+            countersinkAngleUpper !== null ? `+${countersinkAngleUpper.toFixed(3)}\u00b0` : "",
+            countersinkAngleLower !== null ? `${countersinkAngleLower.toFixed(3)}\u00b0` : ""
+          ));
+        }
+        return element;
+      };
+
+      const addPmiDimensionLabel = (
+        tolerance: any,
+        point: THREE.Vector3,
+        datumIdentifiers: string[] = [],
+        resolvePoint?: () => THREE.Vector3 | null,
+        resolveTransform?: () => string
+      ) => {
+        if (!labelOverlay) return null;
+        const element = makeDimensionTextElement(tolerance, datumIdentifiers);
+        labelOverlay.appendChild(element);
+        const entry = {
+          element,
+          point: point.clone(),
+          resolvePoint,
+          resolveTransform,
+          screenX: Number.NaN,
+          screenY: Number.NaN,
+          visible: false
+        };
+        pmiDimensionLabelCache.push(entry);
+        return entry;
+      };
+
+      const makeDimensionStackTextElement = (tolerances: any[]) => {
+        const element = document.createElement("div");
+        element.dataset.pmiDimensionLabel = "true";
+        element.className = "absolute left-0 top-0 hidden flex-col items-start gap-0.5 whitespace-nowrap font-mono leading-none text-slate-900";
+        element.style.transform = "translate3d(0, 0, 0) translate(0, -50%)";
+        element.style.willChange = "transform";
+        element.style.pointerEvents = "none";
+        element.style.fontSize = "13px";
+        element.style.contain = "layout style paint";
+        element.style.zIndex = "19";
+        tolerances.forEach((tolerance) => {
+          const row = makeDimensionTextElement(tolerance);
+          row.style.position = "static";
+          row.style.display = "flex";
+          row.style.transform = "";
+          row.style.willChange = "";
+          element.appendChild(row);
+        });
+        return element;
+      };
+
+      const addPmiDimensionStackLabel = (
+        tolerances: any[],
+        point: THREE.Vector3,
+        resolvePoint?: () => THREE.Vector3 | null,
+        resolveTransform?: () => string
+      ) => {
+        if (!labelOverlay || tolerances.length === 0) return null;
+        const element = tolerances.length === 1
+          ? makeDimensionTextElement(tolerances[0])
+          : makeDimensionStackTextElement(tolerances);
+        labelOverlay.appendChild(element);
+        const entry = {
+          element,
+          point: point.clone(),
+          resolvePoint,
+          resolveTransform,
+          screenX: Number.NaN,
+          screenY: Number.NaN,
+          visible: false
+        };
+        pmiDimensionLabelCache.push(entry);
+        return entry;
+      };
+
+      const makeFaceSample = (faceName: string): MeasurementSample | null => {
+        const object = renderedObjectByName.get(faceName);
+        if (!object) return null;
+        const frame = getFaceFrameInAssembly(faceName);
+        const localAnchor = getStableSurfacePoint(object);
+        const point = assemblyGroup.worldToLocal(object.localToWorld(localAnchor.clone()));
+        const normal = frame?.normal?.clone().normalize();
+        const isCylinder = isCylindricalFace(faceName);
+        return {
+          point,
+          kind: isCylinder ? "cylinder" : "face",
+          objectName: faceName,
+          normal,
+          planeConstant: normal && frame ? normal.dot(frame.center) : undefined
+        };
+      };
+
+      const makePointTargetDimensionResult = (tolerance: any): LinearMeasurementResult | null => {
+        const points = (tolerance.targetPoints || [])
+          .map(makeVectorFromParsedPoint)
+          .filter((point: THREE.Vector3 | null): point is THREE.Vector3 => !!point);
+        if (points.length < 2) return null;
+
+        let bestPair: { start: THREE.Vector3; end: THREE.Vector3; distanceSq: number } | null = null;
+        for (let i = 0; i < points.length; i++) {
+          for (let j = i + 1; j < points.length; j++) {
+            const distanceSq = points[i].distanceToSquared(points[j]);
+            if (!bestPair || distanceSq > bestPair.distanceSq) {
+              bestPair = { start: points[i], end: points[j], distanceSq };
+            }
+          }
+        }
+        if (!bestPair || bestPair.distanceSq <= 1e-10) return null;
+
+        return {
+          mode: "linear",
+          start: bestPair.start,
+          end: bestPair.end,
+          text: Number.isFinite(tolerance.nominalDimension)
+            ? Number(tolerance.nominalDimension).toFixed(3)
+          : Math.sqrt(bestPair.distanceSq).toFixed(3)
+        };
+      };
+
+      const getLineSegmentClosestPoints = (
+        firstStart: THREE.Vector3,
+        firstEnd: THREE.Vector3,
+        secondStart: THREE.Vector3,
+        secondEnd: THREE.Vector3
+      ): { start: THREE.Vector3; end: THREE.Vector3; distanceSq: number } | null => {
+        const u = firstEnd.clone().sub(firstStart);
+        const v = secondEnd.clone().sub(secondStart);
+        const w = firstStart.clone().sub(secondStart);
+        const a = u.dot(u);
+        const b = u.dot(v);
+        const c = v.dot(v);
+        const d = u.dot(w);
+        const e = v.dot(w);
+        const small = 1e-10;
+        if (a <= small || c <= small) return null;
+
+        const denominator = a * c - b * b;
+        let s = denominator <= small ? 0 : THREE.MathUtils.clamp((b * e - c * d) / denominator, 0, 1);
+        let t = (b * s + e) / c;
+        if (t < 0) {
+          t = 0;
+          s = THREE.MathUtils.clamp(-d / a, 0, 1);
+        } else if (t > 1) {
+          t = 1;
+          s = THREE.MathUtils.clamp((b - d) / a, 0, 1);
+        }
+
+        const start = firstStart.clone().addScaledVector(u, s);
+        const end = secondStart.clone().addScaledVector(v, t);
+        return { start, end, distanceSq: start.distanceToSquared(end) };
+      };
+
+      const makeLineTargetMinimumDistanceResult = (tolerance: any): LinearMeasurementResult | null => {
+        const points = (tolerance.targetPoints || [])
+          .map(makeVectorFromParsedPoint)
+          .filter((point: THREE.Vector3 | null): point is THREE.Vector3 => !!point);
+        if (points.length !== 4) return null;
+
+        const pairings: Array<[number, number, number, number]> = [
+          [0, 1, 2, 3],
+          [0, 2, 1, 3],
+          [0, 3, 1, 2]
+        ];
+        const nominal = Number.isFinite(tolerance.nominalDimension) ? Number(tolerance.nominalDimension) : null;
+        const candidates = pairings
+          .map(([a, b, c, d]) => getLineSegmentClosestPoints(points[a], points[b], points[c], points[d]))
+          .filter((candidate): candidate is { start: THREE.Vector3; end: THREE.Vector3; distanceSq: number } =>
+            !!candidate && candidate.distanceSq > 1e-10
+          )
+          .map((candidate) => ({
+            ...candidate,
+            distance: Math.sqrt(candidate.distanceSq)
+          }))
+          .sort((a, b) => {
+            if (nominal !== null) {
+              const nominalScoreA = Math.abs(a.distance - nominal);
+              const nominalScoreB = Math.abs(b.distance - nominal);
+              if (Math.abs(nominalScoreA - nominalScoreB) > 1e-6) return nominalScoreA - nominalScoreB;
+            }
+            return a.distance - b.distance;
+          });
+
+        const best = candidates[0];
+        if (!best) return null;
+        return {
+          mode: "linear",
+          start: best.start,
+          end: best.end,
+          text: nominal !== null ? nominal.toFixed(3) : best.distance.toFixed(3)
+        };
+      };
+
+      const getPointTargetLabelPoint = (tolerance: any): THREE.Vector3 | null => {
+        const points = (tolerance.targetPoints || [])
+          .map(makeVectorFromParsedPoint)
+          .filter((point: THREE.Vector3 | null): point is THREE.Vector3 => !!point);
+        if (points.length === 0) return null;
+        return points
+          .reduce((acc, point) => acc.add(point), new THREE.Vector3())
+          .multiplyScalar(1 / points.length);
+      };
+
+      const canDrawCircularPointTargetDimension = (tolerance: any): boolean => {
+        const pointCount = Array.isArray(tolerance.targetPoints) ? tolerance.targetPoints.length : 0;
+        const targetCount = Array.isArray(tolerance.targetIds) ? tolerance.targetIds.length : 0;
+        const preModifier = `${tolerance.dimensionPreModifier || ""}`.trim();
+        if (preModifier && targetCount > 1) return false;
+        return pointCount >= 2 && pointCount <= 4;
+      };
+
+      const isRepeatedCircularPointTargetPattern = (tolerance: any): boolean => {
+        const pointCount = Array.isArray(tolerance.targetPoints) ? tolerance.targetPoints.length : 0;
+        const targetCount = Array.isArray(tolerance.targetIds) ? tolerance.targetIds.length : 0;
+        const preModifier = `${tolerance.dimensionPreModifier || ""}`.trim();
+        return !!preModifier && targetCount > 1 && pointCount > 4;
+      };
+
+      const getNearestCylindricalFaceName = (faceNames: string[]): string | null => {
+        const referenceSamples = faceNames
+          .map(makeFaceSample)
+          .filter((sample): sample is MeasurementSample => !!sample);
+        if (referenceSamples.length === 0) return null;
+
+        const referenceCenter = referenceSamples
+          .reduce((acc, sample) => acc.add(sample.point), new THREE.Vector3())
+          .multiplyScalar(1 / referenceSamples.length);
+
+        return Array.from(renderedObjectByName.keys())
+          .filter((name) => name.startsWith("BRepFace-") && isCylindricalFace(name))
+          .map((name) => {
+            const object = renderedObjectByName.get(name);
+            const cache = object?.userData.interactionCache;
+            const cylinderCenter = object && cache?.localCenter instanceof THREE.Vector3
+              ? assemblyGroup.worldToLocal(object.localToWorld(cache.localCenter.clone()))
+              : getFaceFrameInAssembly(name)?.center;
+            return cylinderCenter
+              ? { name, distance: cylinderCenter.distanceToSquared(referenceCenter) }
+              : null;
+          })
+          .filter((candidate): candidate is { name: string; distance: number } => !!candidate)
+          .sort((a, b) => a.distance - b.distance)[0]?.name || null;
+      };
+
+      const makeDiameterResult = (faceName: string): LinearMeasurementResult | null => {
+        const object = renderedObjectByName.get(faceName);
+        const cache = object?.userData.interactionCache;
+        if (!object || !cache?.localCenter || !(cache.cylinderAxis instanceof THREE.Vector3)) return null;
+
+        const axis = getAssemblyDirection(object, cache.cylinderAxis.clone());
+        if (!axis) return null;
+        const center = assemblyGroup.worldToLocal(object.localToWorld(cache.localCenter.clone()));
+        const surfacePoint = assemblyGroup.worldToLocal(object.localToWorld(getStableSurfacePoint(object)));
+        const axisFoot = center.clone().addScaledVector(axis, surfacePoint.clone().sub(center).dot(axis));
+        let radial = surfacePoint.clone().sub(axisFoot);
+        let radius = radial.length();
+        if (radius <= 1e-8) {
+          const viewDirection = assemblyGroup.worldToLocal(camera.position.clone()).sub(center).normalize();
+          radial = new THREE.Vector3().crossVectors(axis, viewDirection);
+          if (radial.lengthSq() <= 1e-8) radial.crossVectors(axis, new THREE.Vector3(1, 0, 0));
+          if (radial.lengthSq() <= 1e-8) radial.crossVectors(axis, new THREE.Vector3(0, 1, 0));
+          radial.normalize();
+          const size = cache.size instanceof THREE.Vector3 ? cache.size : new THREE.Vector3(modelSizeMax * 0.03, modelSizeMax * 0.03, modelSizeMax * 0.03);
+          const sorted = [size.x, size.y, size.z].filter((value) => value > 1e-8).sort((a, b) => a - b);
+          radius = Math.max((sorted[0] || modelSizeMax * 0.03) * 0.5, modelSizeMax * 0.005);
+        } else {
+          radial.normalize();
+        }
+
+        return {
+          mode: "linear",
+          start: center.clone().addScaledVector(radial, -radius),
+          end: center.clone().addScaledVector(radial, radius),
+          text: `DIA ${formatMm(radius * 2)}`,
+          diameterReference: true
+        };
+      };
+
+      const getCylinderAxisCenter = (faceName: string): THREE.Vector3 | null => {
+        const object = renderedObjectByName.get(faceName);
+        const cache = object?.userData.interactionCache;
+        if (!object || !(cache?.localCenter instanceof THREE.Vector3)) return null;
+        return assemblyGroup.worldToLocal(object.localToWorld(cache.localCenter.clone()));
+      };
+
+      const getStackedHoleDimensionKey = (tolerance: any): string | null => {
+        if (tolerance.dimensionKind !== "diameter" && tolerance.dimensionKind !== "radius") return null;
+        if (tolerance.isCounterboreDimension || tolerance.isCountersinkDimension || tolerance.isSphericalDimension) return null;
+        if (!Number.isFinite(tolerance.nominalDimension)) return null;
+        const targets = Array.isArray(tolerance.targetIds) ? [...tolerance.targetIds].sort() : [];
+        if (targets.length === 0) return null;
+        return [
+          tolerance.dimensionKind,
+          `${Number(tolerance.nominalDimension).toFixed(6)}`,
+          `${tolerance.dimensionPreModifier || ""}`.trim(),
+          targets.join("|")
+        ].join("::");
+      };
+
+      const stackedHoleDimensionGroups = new Map<string, any[]>();
+      dimensionTolerances.forEach((tolerance: any) => {
+        const key = getStackedHoleDimensionKey(tolerance);
+        if (!key) return;
+        const groupItems = stackedHoleDimensionGroups.get(key) || [];
+        groupItems.push(tolerance);
+        stackedHoleDimensionGroups.set(key, groupItems);
+      });
+      const stackedHoleDimensionOwnerById = new Map<string, any[]>();
+      stackedHoleDimensionGroups.forEach((groupItems) => {
+        if (groupItems.length < 2) return;
+        groupItems.forEach((item, index) => {
+          stackedHoleDimensionOwnerById.set(item.id, index === 0 ? groupItems : []);
+        });
+      });
+
+      const makeCylinderCenterDistanceResult = (faceNames: string[], tolerance?: any): LinearMeasurementResult | null => {
+        const cylinderCenters = faceNames
+          .filter(isCylindricalFace)
+          .map((name) => ({ name, center: getCylinderAxisCenter(name) }))
+          .filter((item): item is { name: string; center: THREE.Vector3 } => !!item.center);
+        if (cylinderCenters.length < 2) return null;
+
+        let bestPair: [THREE.Vector3, THREE.Vector3] | null = null;
+        let bestScore = Number.POSITIVE_INFINITY;
+        const nominal = Number.isFinite(tolerance?.nominalDimension)
+          ? Number(tolerance.nominalDimension)
+          : null;
+        for (let i = 0; i < cylinderCenters.length; i++) {
+          for (let j = i + 1; j < cylinderCenters.length; j++) {
+            const distance = cylinderCenters[i].center.distanceTo(cylinderCenters[j].center);
+            const score = nominal !== null ? Math.abs(distance - nominal) : distance;
+            if (score < bestScore) {
+              bestScore = score;
+              bestPair = [cylinderCenters[i].center, cylinderCenters[j].center];
+            }
+          }
+        }
+
+        if (!bestPair) return null;
+        const selectedDistance = bestPair[0].distanceTo(bestPair[1]);
+        if (selectedDistance <= 1e-8) return null;
+        const axis = bestPair[1].clone().sub(bestPair[0]).normalize();
+        return {
+          mode: "linear",
+          start: bestPair[0].clone(),
+          end: bestPair[0].clone().addScaledVector(axis, selectedDistance),
+          text: formatMm(selectedDistance)
+        };
+      };
+
+      const computeHoleToleranceLeaderGeometry = (
+        faceName: string,
+        slotIndex = 0,
+        slotCount = 1,
+        fixedAnchor?: { surfacePoint: THREE.Vector3; radialDirection: THREE.Vector3 },
+        tolerance?: any
+      ) => {
+        const object = renderedObjectByName.get(faceName);
+        const cache = object?.userData.interactionCache;
+        if (!object || !cache?.localCenter || !(cache.cylinderAxis instanceof THREE.Vector3)) return null;
+
+        const cylinderAxis = getAssemblyDirection(object, cache.cylinderAxis.clone());
+        if (!cylinderAxis) return null;
+        const viewLocal = assemblyGroup.worldToLocal(camera.position.clone());
+
+        let surfacePoint: THREE.Vector3;
+        let radialDirection: THREE.Vector3;
+        if (fixedAnchor) {
+          surfacePoint = fixedAnchor.surfacePoint.clone();
+          radialDirection = fixedAnchor.radialDirection.clone();
+        } else {
+          const localAxis = cache.cylinderAxis.clone().normalize();
+          const localAxisOrigin = cache.localCenter.clone();
+          let localPoint = getStableSurfacePoint(object);
+          let localAxisFoot = localAxisOrigin.clone().addScaledVector(
+            localAxis,
+            localPoint.clone().sub(localAxisOrigin).dot(localAxis)
+          );
+          let localRadialDirection = localPoint.clone().sub(localAxisFoot);
+          if (localRadialDirection.lengthSq() <= 1e-8) {
+            localRadialDirection.crossVectors(localAxis, new THREE.Vector3(1, 0, 0));
+            if (localRadialDirection.lengthSq() <= 1e-8) {
+              localRadialDirection.crossVectors(localAxis, new THREE.Vector3(0, 1, 0));
+            }
+          }
+          localRadialDirection.normalize();
+          if (slotCount > 1) {
+            const stepAngle = Math.PI / Math.max(slotCount + 1, 2);
+            const slotOffset = (slotIndex - (slotCount - 1) / 2) * stepAngle;
+            localRadialDirection.applyAxisAngle(localAxis, slotOffset).normalize();
+          }
+          const biasRadialAwayFromCameraHorizontal = () => {
+            const cameraWorldPoint = camera.position.clone();
+            const cameraRightWorldPoint = cameraWorldPoint.clone().add(new THREE.Vector3(1, 0, 0).transformDirection(camera.matrixWorld));
+            const cameraUpWorldPoint = cameraWorldPoint.clone().add(new THREE.Vector3(0, 1, 0).transformDirection(camera.matrixWorld));
+            const localCameraPoint = object.worldToLocal(cameraWorldPoint.clone());
+            const localCameraRight = object.worldToLocal(cameraRightWorldPoint).sub(localCameraPoint);
+            const localCameraUp = object.worldToLocal(cameraUpWorldPoint).sub(localCameraPoint);
+            localCameraRight.addScaledVector(localAxis, -localCameraRight.dot(localAxis));
+            localCameraUp.addScaledVector(localAxis, -localCameraUp.dot(localAxis));
+            if (localCameraRight.lengthSq() <= 1e-8 || localCameraUp.lengthSq() <= 1e-8) return;
+            localCameraRight.normalize();
+            localCameraUp.normalize();
+            const horizontalAlignment = Math.abs(localRadialDirection.dot(localCameraRight));
+            const verticalAlignment = Math.abs(localRadialDirection.dot(localCameraUp));
+            if (horizontalAlignment < 0.82 || verticalAlignment > 0.32) return;
+            const signedUp = localCameraUp.dot(localRadialDirection) >= 0
+              ? localCameraUp
+              : localCameraUp.clone().negate();
+            localRadialDirection.lerp(signedUp, 0.45).addScaledVector(localAxis, -localRadialDirection.dot(localAxis));
+            if (localRadialDirection.lengthSq() > 1e-8) localRadialDirection.normalize();
+          };
+          biasRadialAwayFromCameraHorizontal();
+
+          if (object instanceof THREE.Mesh) {
+            const cachedBounds = object.userData.pmiHoleAxisBounds as { minAxis: number; maxAxis: number } | undefined;
+            const bounds = cachedBounds || (() => {
+              const positionAttribute = object.geometry.getAttribute("position");
+              let minAxis = Infinity;
+              let maxAxis = -Infinity;
+              for (let i = 0; i < positionAttribute.count; i++) {
+                const vertex = new THREE.Vector3().fromBufferAttribute(positionAttribute, i);
+                const axisValue = vertex.sub(localAxisOrigin).dot(localAxis);
+                minAxis = Math.min(minAxis, axisValue);
+                maxAxis = Math.max(maxAxis, axisValue);
+              }
+              const nextBounds = { minAxis, maxAxis };
+              object.userData.pmiHoleAxisBounds = nextBounds;
+              return nextBounds;
+            })();
+
+            if (Number.isFinite(bounds.minAxis) && Number.isFinite(bounds.maxAxis)) {
+              const localPointAtAxis = (axisValue: number) =>
+                localAxisOrigin.clone().addScaledVector(localAxis, axisValue);
+              const radius = Math.max(localPoint.distanceTo(localAxisFoot), 1e-6);
+              const minCandidate = {
+                axisFoot: localPointAtAxis(bounds.minAxis),
+                surfacePoint: localPointAtAxis(bounds.minAxis).addScaledVector(localRadialDirection, radius)
+              };
+              const maxCandidate = {
+                axisFoot: localPointAtAxis(bounds.maxAxis),
+                surfacePoint: localPointAtAxis(bounds.maxAxis).addScaledVector(localRadialDirection, radius)
+              };
+              const minWorld = object.localToWorld(minCandidate.surfacePoint.clone());
+              const maxWorld = object.localToWorld(maxCandidate.surfacePoint.clone());
+              const minAxisFootAssembly = assemblyGroup.worldToLocal(object.localToWorld(minCandidate.axisFoot.clone()));
+              const maxAxisFootAssembly = assemblyGroup.worldToLocal(object.localToWorld(maxCandidate.axisFoot.clone()));
+              const findCounterboreLipBoundaryCandidate = () => {
+                if (!tolerance?.isCounterboreDimension) return null;
+                const targetFaces = getFaceNamesForTolerance(tolerance).filter((name) => name !== faceName);
+                if (targetFaces.length === 0) return null;
+                const currentAxisOrigin = assemblyGroup.worldToLocal(object.localToWorld(localAxisOrigin.clone()));
+                const currentDiameter = radius * 2;
+                const candidates = targetFaces
+                  .map((name) => {
+                    const targetObject = renderedObjectByName.get(name);
+                    const targetCache = targetObject?.userData.interactionCache;
+                    if (!targetObject || !(targetCache?.localCenter instanceof THREE.Vector3) || !(targetCache.cylinderAxis instanceof THREE.Vector3)) return null;
+                    if (targetCache.coherentNormal instanceof THREE.Vector3) return null;
+                    const targetAxis = getAssemblyDirection(targetObject, targetCache.cylinderAxis.clone());
+                    if (!targetAxis || Math.abs(targetAxis.dot(cylinderAxis)) < 0.92) return null;
+                    const targetCenter = assemblyGroup.worldToLocal(targetObject.localToWorld(targetCache.localCenter.clone()));
+                    const centerDelta = targetCenter.clone().sub(currentAxisOrigin);
+                    const radialDistance = centerDelta.clone().addScaledVector(cylinderAxis, -centerDelta.dot(cylinderAxis)).length();
+                    if (radialDistance > Math.max(radius * 0.35, modelSizeMax * 0.003, 1e-4)) return null;
+                    const targetSurfacePoint = assemblyGroup.worldToLocal(targetObject.localToWorld(getStableSurfacePoint(targetObject)));
+                    const targetAxisFoot = targetCenter.clone().addScaledVector(targetAxis, targetSurfacePoint.clone().sub(targetCenter).dot(targetAxis));
+                    const targetDiameter = targetSurfacePoint.distanceTo(targetAxisFoot) * 2;
+                    if (!Number.isFinite(targetDiameter) || targetDiameter <= currentDiameter + Math.max(currentDiameter * 0.08, modelSizeMax * 0.001)) return null;
+                    return { name, targetDiameter };
+                  })
+                  .filter((candidate): candidate is { name: string; targetDiameter: number } => !!candidate)
+                  .sort((a, b) => b.targetDiameter - a.targetDiameter);
+                if (candidates.length === 0) return null;
+                const counterboreObject = renderedObjectByName.get(candidates[0].name);
+                const counterboreCache = counterboreObject?.userData.interactionCache;
+                if (!counterboreObject || !(counterboreCache?.localCenter instanceof THREE.Vector3) || !(counterboreCache.cylinderAxis instanceof THREE.Vector3)) return null;
+                const counterboreLocalAxis = counterboreCache.cylinderAxis.clone().normalize();
+                const counterboreLocalOrigin = counterboreCache.localCenter.clone();
+                const positionAttribute = (counterboreObject as THREE.Mesh).geometry?.getAttribute("position");
+                if (!(positionAttribute instanceof THREE.BufferAttribute)) return null;
+                let cbMinAxis = Infinity;
+                let cbMaxAxis = -Infinity;
+                for (let i = 0; i < positionAttribute.count; i++) {
+                  const vertex = new THREE.Vector3().fromBufferAttribute(positionAttribute, i);
+                  const axisValue = vertex.sub(counterboreLocalOrigin).dot(counterboreLocalAxis);
+                  cbMinAxis = Math.min(cbMinAxis, axisValue);
+                  cbMaxAxis = Math.max(cbMaxAxis, axisValue);
+                }
+                if (!Number.isFinite(cbMinAxis) || !Number.isFinite(cbMaxAxis)) return null;
+                const counterborePointAtAxis = (axisValue: number) =>
+                  assemblyGroup.worldToLocal(counterboreObject.localToWorld(
+                    counterboreLocalOrigin.clone().addScaledVector(counterboreLocalAxis, axisValue)
+                  ));
+                const cbMinFoot = counterborePointAtAxis(cbMinAxis);
+                const cbMaxFoot = counterborePointAtAxis(cbMaxAxis);
+                const minDistance = Math.min(minAxisFootAssembly.distanceTo(cbMinFoot), minAxisFootAssembly.distanceTo(cbMaxFoot));
+                const maxDistance = Math.min(maxAxisFootAssembly.distanceTo(cbMinFoot), maxAxisFootAssembly.distanceTo(cbMaxFoot));
+                return minDistance <= maxDistance ? minCandidate : maxCandidate;
+              };
+              const findCoaxialConicalBoundaryCandidate = () => {
+                const cachedPreference = object.userData.pmiConeBoundaryPreference as "min" | "max" | "none" | undefined;
+                if (cachedPreference === "min") return minCandidate;
+                if (cachedPreference === "max") return maxCandidate;
+                if (cachedPreference === "none") return null;
+
+                const axisOriginAssembly = assemblyGroup.worldToLocal(object.localToWorld(localAxisOrigin.clone()));
+                const axisSpan = Math.abs(bounds.maxAxis - bounds.minAxis);
+                const axisTolerance = Math.max(axisSpan * 0.22, modelSizeMax * 0.006, 1e-4);
+                const radialTolerance = Math.max(radius * 1.6, modelSizeMax * 0.008, 1e-4);
+                const coneRadiusTolerance = Math.max(radius * 0.12, modelSizeMax * 0.0015, 1e-4);
+                let bestPreference: "min" | "max" | null = null;
+                let bestScore = Infinity;
+
+                assemblyGroup.children.forEach((child) => {
+                  if (child === object || !child.name.startsWith("BRepFace-") || !(child instanceof THREE.Mesh)) return;
+                  const childCache = child.userData.interactionCache;
+                  if (childCache?.coherentNormal instanceof THREE.Vector3) return;
+                  if (!(childCache?.cylinderAxis instanceof THREE.Vector3)) return;
+                  const childAxis = getAssemblyDirection(child, childCache.cylinderAxis.clone());
+                  if (!childAxis || Math.abs(childAxis.dot(cylinderAxis)) < 0.92) return;
+
+                  const childOrigin = childCache.localCenter instanceof THREE.Vector3
+                    ? assemblyGroup.worldToLocal(child.localToWorld(childCache.localCenter.clone()))
+                    : getFaceFrameInAssembly(child.name)?.center;
+                  if (!childOrigin) return;
+                  const originDelta = childOrigin.clone().sub(axisOriginAssembly);
+                  const originRadial = originDelta.clone().addScaledVector(cylinderAxis, -originDelta.dot(cylinderAxis)).length();
+                  if (originRadial > radialTolerance) return;
+
+                  const positionAttribute = child.geometry.getAttribute("position");
+                  if (!(positionAttribute instanceof THREE.BufferAttribute) || positionAttribute.count < 6) return;
+
+                  const samples: { axisValue: number; radiusValue: number }[] = [];
+                  let childMinAxis = Infinity;
+                  let childMaxAxis = -Infinity;
+                  for (let i = 0; i < positionAttribute.count; i++) {
+                    const vertex = new THREE.Vector3().fromBufferAttribute(positionAttribute, i);
+                    const vertexAssembly = assemblyGroup.worldToLocal(child.localToWorld(vertex));
+                    const delta = vertexAssembly.clone().sub(childOrigin);
+                    const axisValue = delta.dot(childAxis);
+                    const radialVector = delta.addScaledVector(childAxis, -axisValue);
+                    const radiusValue = radialVector.length();
+                    if (!Number.isFinite(axisValue) || !Number.isFinite(radiusValue)) continue;
+                    samples.push({ axisValue, radiusValue });
+                    childMinAxis = Math.min(childMinAxis, axisValue);
+                    childMaxAxis = Math.max(childMaxAxis, axisValue);
+                  }
+                  const childAxisSpan = childMaxAxis - childMinAxis;
+                  if (samples.length < 6 || childAxisSpan <= 1e-6) return;
+
+                  const endBand = Math.max(childAxisSpan * 0.2, 1e-5);
+                  const summarizeEnd = (atMin: boolean) => {
+                    let total = 0;
+                    let count = 0;
+                    samples.forEach((sample) => {
+                      const inBand = atMin
+                        ? sample.axisValue <= childMinAxis + endBand
+                        : sample.axisValue >= childMaxAxis - endBand;
+                      if (!inBand) return;
+                      total += sample.radiusValue;
+                      count++;
+                    });
+                    return count > 0 ? total / count : null;
+                  };
+                  const minEndRadius = summarizeEnd(true);
+                  const maxEndRadius = summarizeEnd(false);
+                  if (minEndRadius === null || maxEndRadius === null) return;
+                  if (Math.abs(minEndRadius - maxEndRadius) <= coneRadiusTolerance) return;
+
+                  const coneEndAxis = minEndRadius < maxEndRadius ? childMinAxis : childMaxAxis;
+                  const coneEndPoint = childOrigin.clone().addScaledVector(childAxis, coneEndAxis);
+                  const minDistance = coneEndPoint.distanceTo(minAxisFootAssembly);
+                  const maxDistance = coneEndPoint.distanceTo(maxAxisFootAssembly);
+                  const endpointDistance = Math.min(minDistance, maxDistance);
+                  if (endpointDistance > axisTolerance) return;
+
+                  const preference = minDistance <= maxDistance ? "min" : "max";
+                  const score = endpointDistance + originRadial;
+                  if (score < bestScore) {
+                    bestScore = score;
+                    bestPreference = preference;
+                  }
+                });
+
+                object.userData.pmiConeBoundaryPreference = bestPreference ?? "none";
+                if (bestPreference === "min") return minCandidate;
+                if (bestPreference === "max") return maxCandidate;
+                return null;
+              };
+              const getPlanarCapsAt = (axisFootAssembly: THREE.Vector3) => {
+                const axisTolerance = Math.max(Math.abs(bounds.maxAxis - bounds.minAxis) * 0.045, modelSizeMax * 0.002, 1e-4);
+                const radialTolerance = Math.max(radius * 1.35, modelSizeMax * 0.01);
+                const getPlanarProjectionBounds = (
+                  child: THREE.Object3D,
+                  frame: NonNullable<ReturnType<typeof getFaceFrameInAssembly>>
+                ) => {
+                  const cachedBounds = child.userData.pmiPlanarProjectionBounds as {
+                    center: THREE.Vector3;
+                    normal: THREE.Vector3;
+                    uAxis: THREE.Vector3;
+                    vAxis: THREE.Vector3;
+                    minU: number;
+                    maxU: number;
+                    minV: number;
+                    maxV: number;
+                  } | undefined;
+                  if (
+                    cachedBounds &&
+                    cachedBounds.center.distanceToSquared(frame.center) <= 1e-10 &&
+                    cachedBounds.normal.dot(frame.normal) > 0.9999
+                  ) {
+                    return cachedBounds;
+                  }
+                  if (!(child instanceof THREE.Mesh)) return null;
+                  const positionAttribute = child.geometry.getAttribute("position");
+                  if (!(positionAttribute instanceof THREE.BufferAttribute) || positionAttribute.count < 3) return null;
+
+                  let uAxis = new THREE.Vector3().crossVectors(frame.normal, new THREE.Vector3(1, 0, 0));
+                  if (uAxis.lengthSq() <= 1e-8) {
+                    uAxis = new THREE.Vector3().crossVectors(frame.normal, new THREE.Vector3(0, 1, 0));
+                  }
+                  if (uAxis.lengthSq() <= 1e-8) return null;
+                  uAxis.normalize();
+                  const vAxis = new THREE.Vector3().crossVectors(frame.normal, uAxis).normalize();
+                  let minU = Infinity;
+                  let maxU = -Infinity;
+                  let minV = Infinity;
+                  let maxV = -Infinity;
+                  for (let i = 0; i < positionAttribute.count; i++) {
+                    const vertex = new THREE.Vector3().fromBufferAttribute(positionAttribute, i);
+                    const vertexAssembly = assemblyGroup.worldToLocal(child.localToWorld(vertex));
+                    const vertexDelta = vertexAssembly.sub(frame.center);
+                    const u = vertexDelta.dot(uAxis);
+                    const v = vertexDelta.dot(vAxis);
+                    minU = Math.min(minU, u);
+                    maxU = Math.max(maxU, u);
+                    minV = Math.min(minV, v);
+                    maxV = Math.max(maxV, v);
+                  }
+                  if (![minU, maxU, minV, maxV].every(Number.isFinite)) return null;
+                  const nextBounds = {
+                    center: frame.center.clone(),
+                    normal: frame.normal.clone(),
+                    uAxis,
+                    vAxis,
+                    minU,
+                    maxU,
+                    minV,
+                    maxV
+                  };
+                  child.userData.pmiPlanarProjectionBounds = nextBounds;
+                  return nextBounds;
+                };
+                return assemblyGroup.children
+                  .map((child) => {
+                    if (child === object || !child.name.startsWith("BRepFace-")) return false;
+                    const frame = getFaceFrameInAssembly(child.name);
+                    if (!frame?.normal) return false;
+                    const normalAlignment = Math.abs(frame.normal.dot(cylinderAxis));
+                    if (normalAlignment < 0.92) return false;
+                    const planeDistance = Math.abs(frame.normal.dot(axisFootAssembly.clone().sub(frame.center)));
+                    if (planeDistance > axisTolerance) return false;
+
+                    const delta = frame.center.clone().sub(axisFootAssembly);
+                    const radialDistance = delta.clone().addScaledVector(cylinderAxis, -delta.dot(cylinderAxis)).length();
+                    if (radialDistance <= radialTolerance) return frame;
+
+                    const projectionBounds = getPlanarProjectionBounds(child, frame);
+                    if (!projectionBounds) return false;
+                    const targetDelta = axisFootAssembly.clone().sub(projectionBounds.center);
+                    const targetU = targetDelta.dot(projectionBounds.uAxis);
+                    const targetV = targetDelta.dot(projectionBounds.vAxis);
+                    const boundsPadding = Math.max(radius * 0.4, modelSizeMax * 0.002, 1e-4);
+                    return targetU >= projectionBounds.minU - boundsPadding &&
+                      targetU <= projectionBounds.maxU + boundsPadding &&
+                      targetV >= projectionBounds.minV - boundsPadding &&
+                      targetV <= projectionBounds.maxV + boundsPadding
+                      ? frame
+                      : false;
+                  })
+                  .filter((frame): frame is NonNullable<ReturnType<typeof getFaceFrameInAssembly>> => !!frame);
+              };
+              const minCaps = getPlanarCapsAt(minAxisFootAssembly);
+              const maxCaps = getPlanarCapsAt(maxAxisFootAssembly);
+              const minHasCap = minCaps.length > 0;
+              const maxHasCap = maxCaps.length > 0;
+              const nearestCandidate = minWorld.distanceToSquared(camera.position) <= maxWorld.distanceToSquared(camera.position)
+                ? minCandidate
+                : maxCandidate;
+              const minBulkDistance = minAxisFootAssembly.distanceToSquared(modelOrbitTarget);
+              const maxBulkDistance = maxAxisFootAssembly.distanceToSquared(modelOrbitTarget);
+              const bulkDistanceDelta = Math.abs(minBulkDistance - maxBulkDistance);
+              const exteriorCandidate = bulkDistanceDelta > Math.max(modelSizeMax * modelSizeMax * 0.0001, 1e-8)
+                ? (minBulkDistance > maxBulkDistance ? minCandidate : maxCandidate)
+                : null;
+              const cappedBoundaryCandidate =
+                minHasCap !== maxHasCap
+                  ? (minHasCap ? minCandidate : maxCandidate)
+                  : null;
+              const getLargestCapArea = (caps: typeof minCaps) =>
+                caps.reduce((largest, cap) => Math.max(largest, cap.area || 0), 0);
+              const isHoleStyleCallout =
+                tolerance?.isCounterboreDimension ||
+                tolerance?.isCountersinkDimension ||
+                (tolerance?.dimensionKind !== "linear" && tolerance?.dimensionKind !== "angular" && !tolerance?.isDatumTargetDimension);
+              const outerFaceBoundaryCandidate = isHoleStyleCallout
+                ? minHasCap && maxHasCap
+                  ? (getLargestCapArea(minCaps) >= getLargestCapArea(maxCaps) ? minCandidate : maxCandidate)
+                  : cappedBoundaryCandidate || exteriorCandidate
+                : null;
+              const counterboreLipCandidate = findCounterboreLipBoundaryCandidate();
+              const coneBoundaryCandidate = findCoaxialConicalBoundaryCandidate();
+              const selected = outerFaceBoundaryCandidate || counterboreLipCandidate || cappedBoundaryCandidate || coneBoundaryCandidate || exteriorCandidate || nearestCandidate || minCandidate;
+              localAxisFoot = selected.axisFoot;
+              localPoint = selected.surfacePoint;
+            }
+          }
+
+          if (tolerance?.isSphericalDimension && object instanceof THREE.Mesh) {
+            const sphereCenter = cache.localCenter.clone();
+            const localCameraPoint = object.worldToLocal(camera.position.clone());
+            const viewRadialDirection = localCameraPoint.clone().sub(sphereCenter);
+            if (viewRadialDirection.lengthSq() > 1e-8) {
+              viewRadialDirection.normalize();
+              const positionAttribute = object.geometry.getAttribute("position");
+              let radius = localPoint.distanceTo(sphereCenter);
+              if (positionAttribute instanceof THREE.BufferAttribute && positionAttribute.count > 0) {
+                let totalRadius = 0;
+                let sampleCount = 0;
+                for (let i = 0; i < positionAttribute.count; i++) {
+                  const vertex = new THREE.Vector3().fromBufferAttribute(positionAttribute, i);
+                  const vertexRadius = vertex.distanceTo(sphereCenter);
+                  if (!Number.isFinite(vertexRadius) || vertexRadius <= 1e-8) continue;
+                  totalRadius += vertexRadius;
+                  sampleCount++;
+                }
+                if (sampleCount > 0) radius = totalRadius / sampleCount;
+              }
+              localPoint = sphereCenter.clone().addScaledVector(viewRadialDirection, radius);
+              localAxisFoot = sphereCenter.clone();
+              localRadialDirection.copy(viewRadialDirection);
+            }
+          }
+
+          surfacePoint = assemblyGroup.worldToLocal(object.localToWorld(localPoint.clone()));
+          const axisFoot = assemblyGroup.worldToLocal(object.localToWorld(localAxisFoot.clone()));
+          radialDirection = surfacePoint.clone().sub(axisFoot);
+          if (radialDirection.lengthSq() <= 1e-8) {
+            radialDirection = getAssemblyDirection(object, localRadialDirection) || localRadialDirection.clone();
+          }
+          radialDirection.normalize();
+        }
+
+        const cameraWorldPoint = camera.position.clone();
+        const cameraRightWorldPoint = cameraWorldPoint.clone().add(new THREE.Vector3(1, 0, 0).transformDirection(camera.matrixWorld));
+        const cameraPointLocal = assemblyGroup.worldToLocal(cameraWorldPoint.clone());
+        const cameraRightLocal = assemblyGroup.worldToLocal(cameraRightWorldPoint).sub(cameraPointLocal).normalize();
+        let doglegDirection = cameraRightLocal.clone();
+        if (doglegDirection.lengthSq() <= 1e-8) {
+          doglegDirection.crossVectors(radialDirection, new THREE.Vector3(1, 0, 0));
+        }
+        if (doglegDirection.lengthSq() <= 1e-8) {
+          doglegDirection.crossVectors(radialDirection, new THREE.Vector3(0, 1, 0));
+        }
+        doglegDirection.normalize();
+        if (doglegDirection.dot(cameraRightLocal) < 0) doglegDirection.negate();
+
+        const normalOffset = Math.max(modelSizeMax * 0.065, 1e-4);
+        const radialEnd = surfacePoint.clone().addScaledVector(radialDirection, Math.max(normalOffset * 0.7, modelSizeMax * 0.045));
+        const doglegEnd = radialEnd.clone().addScaledVector(doglegDirection, Math.max(normalOffset * 0.5, modelSizeMax * 0.032));
+        const arrowLength = normalOffset * 0.18;
+        const arrowHalfWidth = arrowLength * 0.36;
+        const arrowTip = surfacePoint.clone();
+        const leaderDirection = radialEnd.clone().sub(arrowTip).normalize();
+        const arrowBase = arrowTip.clone().addScaledVector(leaderDirection, arrowLength);
+        const arrowSide = doglegDirection.clone().addScaledVector(leaderDirection, -doglegDirection.dot(leaderDirection));
+        if (arrowSide.lengthSq() <= 1e-8) {
+          arrowSide.crossVectors(cylinderAxis, leaderDirection);
+        }
+        if (arrowSide.lengthSq() <= 1e-8) {
+          arrowSide.crossVectors(leaderDirection, new THREE.Vector3(1, 0, 0));
+          arrowSide.addScaledVector(cylinderAxis, -arrowSide.dot(cylinderAxis));
+        }
+        if (arrowSide.lengthSq() <= 1e-8) {
+          arrowSide.crossVectors(leaderDirection, new THREE.Vector3(0, 1, 0));
+          arrowSide.addScaledVector(cylinderAxis, -arrowSide.dot(cylinderAxis));
+        }
+        arrowSide.normalize().multiplyScalar(arrowHalfWidth);
+
+        const cameraUpWorldPoint = cameraWorldPoint.clone().add(new THREE.Vector3(0, 1, 0).transformDirection(camera.matrixWorld));
+        const cameraUpLocal = assemblyGroup.worldToLocal(cameraUpWorldPoint).sub(cameraPointLocal).normalize();
+        const labelPosition = doglegEnd.clone()
+          .addScaledVector(cameraRightLocal, Math.max(modelSizeMax * 0.0075, 0.035))
+          .addScaledVector(cameraUpLocal, Math.max(modelSizeMax * 0.0025, 0.01));
+
+        return {
+          linePoints: [arrowBase, radialEnd, radialEnd, doglegEnd],
+          arrowPoints: [
+            arrowTip,
+            arrowBase.clone().add(arrowSide),
+            arrowBase.clone().sub(arrowSide)
+          ],
+          labelPosition,
+          anchor: {
+            surfacePoint: surfacePoint.clone(),
+            radialDirection: radialDirection.clone()
+          }
+        };
+      };
+
+      const updatePmiGeometryPoints = (geometry: THREE.BufferGeometry, points: THREE.Vector3[]) => {
+        const position = geometry.getAttribute("position");
+        if (position instanceof THREE.BufferAttribute && position.count === points.length) {
+          points.forEach((point, index) => {
+            position.setXYZ(index, point.x, point.y, point.z);
+          });
+          position.needsUpdate = true;
+        } else {
+          geometry.setFromPoints(points);
+        }
+      };
+
+      const updatePmiLeaderObjects = (entry: (typeof pmiDimensionLeaderCache)[number]) => {
+        const geometry = computeHoleToleranceLeaderGeometry(entry.faceName, entry.slotIndex, entry.slotCount, entry.anchor, entry.tolerance);
+        if (!geometry) return false;
+        updatePmiGeometryPoints(entry.line.geometry, geometry.linePoints);
+        updatePmiGeometryPoints(entry.arrow.geometry, geometry.arrowPoints);
+        entry.labelEntry?.point.copy(geometry.labelPosition);
+        return true;
+      };
+      updatePmiDimensionLeaderFacing = () => {
+        pmiDimensionLeaderCache = pmiDimensionLeaderCache.filter(updatePmiLeaderObjects);
+      };
+
+      const drawHoleToleranceLeader = (tolerance: any, faceName: string) => {
+        const stackedGroup = stackedHoleDimensionOwnerById.get(tolerance.id);
+        if (stackedGroup && stackedGroup.length === 0) return true;
+        const shouldAttachDimensionToDatumLeader = !tolerance.isCounterboreDimension && !tolerance.isCountersinkDimension;
+        const datumAnchorForFace = shouldAttachDimensionToDatumLeader && propsRef.current.showDatumFeatures
+          ? datumAnchorCache.find((anchor) =>
+              anchor.annotationKind === "datum" &&
+              anchor.calloutKind === "cylindrical" &&
+              mapDatumTargetsToWebGLNames(anchor.datum).includes(faceName)
+            )
+          : null;
+        if (datumAnchorForFace) {
+          const resolveDatumDimensionPoint = () => getDatumLeaderDimensionLabelPoint(datumAnchorForFace);
+          const resolveDatumDimensionTransform = () => getDatumLeaderDimensionLabelTransform(datumAnchorForFace);
+          const labelPoint = resolveDatumDimensionPoint();
+          if (labelPoint) {
+            if (stackedGroup && stackedGroup.length > 1) {
+              addPmiDimensionStackLabel(stackedGroup, labelPoint, resolveDatumDimensionPoint, resolveDatumDimensionTransform);
+            } else {
+              addPmiDimensionLabel(tolerance, labelPoint, [], resolveDatumDimensionPoint, resolveDatumDimensionTransform);
+            }
+            return true;
+          }
+        }
+
+        const faceDatumIds = (propsRef.current.showDatumFeatures ? (propsRef.current.datums || []) : [])
+          .filter((datum: any) => datum.type !== "Datum Target Set")
+          .filter((datum: any) => mapDatumTargetsToWebGLNames(datum).includes(faceName))
+          .map((datum: any) => `datum:${datum.id || datum.identifier || datum.entityId}`)
+          .sort();
+        const faceToleranceIds = dimensionTolerances
+          .filter((candidate: any) => getFaceNamesForTolerance(candidate).includes(faceName))
+          .map((candidate: any) => `tolerance:${candidate.id}`)
+          .sort();
+        const occupiedSlots = [...faceDatumIds, ...faceToleranceIds];
+        const slotCount = Math.max(occupiedSlots.length, 1);
+        const slotIndex = Math.max(occupiedSlots.indexOf(`tolerance:${tolerance.id}`), faceDatumIds.length);
+        const geometry = computeHoleToleranceLeaderGeometry(faceName, slotIndex, slotCount, undefined, tolerance);
+        if (!geometry) return false;
+
+        const lineGeometry = new THREE.BufferGeometry().setFromPoints(geometry.linePoints);
+        const lineMaterial = new THREE.LineBasicMaterial({
+          color: 0x0f172a,
+          depthTest: false,
+          depthWrite: false,
+          transparent: true,
+          opacity: 0.96
+        });
+        const line = new THREE.LineSegments(lineGeometry, lineMaterial);
+        line.name = `PmiDimensionToleranceOverlay-${tolerance.id}-Leader`;
+        line.renderOrder = 43;
+        line.frustumCulled = false;
+        line.raycast = () => undefined;
+        group.add(line);
+
+        const arrowGeometry = new THREE.BufferGeometry().setFromPoints(geometry.arrowPoints);
+        const arrowMaterial = new THREE.MeshBasicMaterial({
+          color: 0x0f172a,
+          depthTest: false,
+          depthWrite: false,
+          transparent: true,
+          opacity: 0.96,
+          side: THREE.DoubleSide
+        });
+        const arrow = new THREE.Mesh(arrowGeometry, arrowMaterial);
+        arrow.name = `PmiDimensionToleranceOverlay-${tolerance.id}-Arrow`;
+        arrow.renderOrder = 44;
+        arrow.frustumCulled = false;
+        arrow.raycast = () => undefined;
+        group.add(arrow);
+
+        const labelEntry = stackedGroup && stackedGroup.length > 1
+          ? addPmiDimensionStackLabel(stackedGroup, geometry.labelPosition)
+          : addPmiDimensionLabel(tolerance, geometry.labelPosition);
+        pmiDimensionLeaderCache.push({
+          tolerance,
+          faceName,
+          slotIndex,
+          slotCount,
+          anchor: geometry.anchor,
+          line,
+          arrow,
+          labelEntry
+        });
+        return true;
+      };
+
+      const addPmiLineSegments = (points: THREE.Vector3[], name: string) => {
+        const lineGeometry = new THREE.BufferGeometry().setFromPoints(points);
+        const lineMaterial = new THREE.LineBasicMaterial({
+          color: 0x0f172a,
+          depthTest: false,
+          depthWrite: false,
+          transparent: true,
+          opacity: 0.96
+        });
+        const lineObject = new THREE.LineSegments(lineGeometry, lineMaterial);
+        lineObject.name = name;
+        lineObject.renderOrder = 43;
+        lineObject.frustumCulled = false;
+        lineObject.raycast = () => undefined;
+        group.add(lineObject);
+        return lineObject;
+      };
+
+      const addPmiPolyline = (points: THREE.Vector3[], name: string) => {
+        if (points.length < 2) return null;
+        const lineGeometry = new THREE.BufferGeometry().setFromPoints(points);
+        const lineMaterial = new THREE.LineBasicMaterial({
+          color: 0x0f172a,
+          depthTest: false,
+          depthWrite: false,
+          transparent: true,
+          opacity: 0.96
+        });
+        const lineObject = new THREE.Line(lineGeometry, lineMaterial);
+        lineObject.name = name;
+        lineObject.renderOrder = 43;
+        lineObject.frustumCulled = false;
+        lineObject.raycast = () => undefined;
+        group.add(lineObject);
+        return lineObject;
+      };
+
+      const addPmiArrowHead = (
+        apex: THREE.Vector3,
+        backDirection: THREE.Vector3,
+        sideDirection: THREE.Vector3,
+        arrowLength: number,
+        arrowHalfWidth: number,
+        name: string
+      ) => {
+        if (backDirection.lengthSq() <= 1e-8 || sideDirection.lengthSq() <= 1e-8 || arrowLength <= 1e-8) return;
+        const back = backDirection.clone().normalize().multiplyScalar(arrowLength);
+        const side = sideDirection.clone().normalize().multiplyScalar(arrowHalfWidth);
+        const arrowGeometry = new THREE.BufferGeometry().setFromPoints([
+          apex.clone(),
+          apex.clone().add(back).add(side),
+          apex.clone().add(back).sub(side),
+        ]);
+        const arrowMaterial = new THREE.MeshBasicMaterial({
+          color: 0x0f172a,
+          side: THREE.DoubleSide,
+          depthTest: false,
+          depthWrite: false,
+          transparent: true,
+          opacity: 0.96,
+        });
+        const arrow = new THREE.Mesh(arrowGeometry, arrowMaterial);
+        arrow.name = name;
+        arrow.renderOrder = 44;
+        arrow.frustumCulled = false;
+        arrow.raycast = () => undefined;
+        group.add(arrow);
+      };
+
+      const drawAngularDimension = (result: AngularMeasurementResult, tolerance: any, name: string) => {
+        const cross = new THREE.Vector3().crossVectors(result.directionA, result.directionB);
+        const signedAngle = Math.atan2(result.axis.dot(cross), result.directionA.dot(result.directionB));
+        if (Math.abs(signedAngle) <= 1e-5) return;
+
+        const steps = Math.max(14, Math.ceil(Math.abs(signedAngle) / (Math.PI / 48)));
+        const arcPoints: THREE.Vector3[] = [];
+        for (let i = 0; i <= steps; i++) {
+          const rotation = new THREE.Quaternion().setFromAxisAngle(result.axis, signedAngle * (i / steps));
+          const direction = result.directionA.clone().applyQuaternion(rotation).normalize();
+          arcPoints.push(result.center.clone().addScaledVector(direction, result.radius));
+        }
+        const arcStart = arcPoints[0];
+        const arcEnd = arcPoints[arcPoints.length - 1];
+        const extensionLengthA = Math.max(
+          Math.abs(result.sourceA.clone().sub(result.center).dot(result.directionA)),
+          result.radius * 1.35
+        );
+        const extensionLengthB = Math.max(
+          Math.abs(result.sourceB.clone().sub(result.center).dot(result.directionB)),
+          result.radius * 1.35
+        );
+        const extensionStartA = result.center.clone().addScaledVector(result.directionA, extensionLengthA);
+        const extensionStartB = result.center.clone().addScaledVector(result.directionB, extensionLengthB);
+
+        addPmiLineSegments([
+          extensionStartA,
+          arcStart.clone(),
+          extensionStartB,
+          arcEnd.clone(),
+        ], `${name}-AngleProjectionLines`);
+
+        const midIndex = Math.floor(arcPoints.length / 2);
+        const gapPointCount = Math.max(2, Math.ceil(arcPoints.length * 0.12));
+        const gapStart = Math.max(1, midIndex - gapPointCount);
+        const gapEnd = Math.min(arcPoints.length - 2, midIndex + gapPointCount);
+        addPmiPolyline(arcPoints.slice(0, gapStart + 1), `${name}-AngleArcA`);
+        addPmiPolyline(arcPoints.slice(gapEnd), `${name}-AngleArcB`);
+
+        const arrowLength = Math.min(Math.max(modelSizeMax * 0.012, 0.055), result.radius * 0.22);
+        const arrowHalfWidth = arrowLength * 0.36;
+        const sign = signedAngle >= 0 ? 1 : -1;
+        const tangentStart = new THREE.Vector3().crossVectors(result.axis, result.directionA).multiplyScalar(sign).normalize();
+        const tangentEnd = new THREE.Vector3().crossVectors(result.axis, result.directionB).multiplyScalar(sign).normalize();
+        addPmiArrowHead(arcStart, tangentStart, result.axis, arrowLength, arrowHalfWidth, `${name}-AngleStartArrow`);
+        addPmiArrowHead(arcEnd, tangentEnd.negate(), result.axis, arrowLength, arrowHalfWidth, `${name}-AngleEndArrow`);
+
+        const midRotation = new THREE.Quaternion().setFromAxisAngle(result.axis, signedAngle * 0.5);
+        const midDirection = result.directionA.clone().applyQuaternion(midRotation).normalize();
+        addPmiDimensionLabel(tolerance, result.center.clone().addScaledVector(midDirection, result.radius));
+      };
+
+      const drawLinearDimension = (result: LinearMeasurementResult, name: string, tolerance?: any, datumIdentifiers: string[] = []) => {
+        const start = result.start;
+        const end = result.end;
+        const axis = end.clone().sub(start);
+        const distance = axis.length();
+        if (distance <= 1e-8) return;
+
+        axis.normalize();
+        const midpoint = start.clone().add(end).multiplyScalar(0.5);
+        const viewDirection = assemblyGroup.worldToLocal(camera.position.clone()).sub(midpoint).normalize();
+        const targetLeaderOffset = Math.max(modelSizeMax * 0.065, 1e-4);
+        const arrowLength = Math.min(targetLeaderOffset * 0.18, distance * 0.35);
+        const arrowHalfWidth = arrowLength * 0.36;
+
+        if (result.diameterReference) {
+          let arrowSide = new THREE.Vector3().crossVectors(axis, viewDirection);
+          if (arrowSide.lengthSq() <= 1e-8) arrowSide.crossVectors(axis, new THREE.Vector3(0, 1, 0));
+          if (arrowSide.lengthSq() <= 1e-8) arrowSide.crossVectors(axis, new THREE.Vector3(1, 0, 0));
+          arrowSide.normalize();
+          addMeasurementLineSegments(group, [start, end], `${name}-Diameter`);
+          addMeasurementArrowHead(group, start, axis, arrowSide, arrowLength, arrowHalfWidth);
+          addMeasurementArrowHead(group, end, axis.clone().negate(), arrowSide, arrowLength, arrowHalfWidth);
+          return;
+        }
+
+        const offsetDirection = getLinearDimensionProjectionDirection(
+          axis,
+          viewDirection,
+          result,
+          getToleranceMeasurementFrameBasis(tolerance)
+        );
+        if (!offsetDirection) return;
+
+        const offsetDistance = Math.max(modelSizeMax * 0.045, distance * 0.08, 0.15);
+        const dimStart = start.clone().addScaledVector(offsetDirection, offsetDistance);
+        const dimEnd = end.clone().addScaledVector(offsetDirection, offsetDistance);
+        addMeasurementLineSegments(group, [
+          start, dimStart,
+          end, dimEnd,
+          dimStart, dimEnd,
+        ], name);
+        addMeasurementArrowHead(group, dimStart, axis, offsetDirection, arrowLength, arrowHalfWidth);
+        addMeasurementArrowHead(group, dimEnd, axis.clone().negate(), offsetDirection, arrowLength, arrowHalfWidth);
+        if (tolerance) {
+          addPmiDimensionLabel(
+            tolerance,
+            dimStart.clone().add(dimEnd).multiplyScalar(0.5).addScaledVector(offsetDirection, Math.max(modelSizeMax * 0.01, 0.04)),
+            datumIdentifiers
+          );
+        }
+      };
+
+      const resolveAngularDimensionFromFaces = (faceNames: string[], tolerance: any): AngularMeasurementResult | null => {
+        const makeAngularSamples = (names: string[]) => names
+          .map(makeFaceSample)
+          .filter((sample): sample is MeasurementSample => !!sample && sample.kind === "face" && !!sample.normal && sample.normal.lengthSq() > 1e-8);
+        const preferredSamples = makeAngularSamples(faceNames);
+        const fallbackSamples = preferredSamples.length >= 2
+          ? preferredSamples
+          : makeAngularSamples(
+              assemblyGroup.children
+                .filter((child) => child.name.startsWith("BRepFace-"))
+                .map((child) => child.name)
+            );
+        const samples = fallbackSamples;
+        const nominalAngle = Number.isFinite(tolerance.nominalDimension) ? Number(tolerance.nominalDimension) : null;
+
+        let bestResult: AngularMeasurementResult | null = null;
+        let bestScore = -Infinity;
+        for (let i = 0; i < samples.length; i++) {
+          for (let j = i + 1; j < samples.length; j++) {
+            const result = resolveMeasurement(samples[i], samples[j]);
+            if (result.mode !== "angle") continue;
+            const angle = Math.acos(THREE.MathUtils.clamp(result.directionA.dot(result.directionB), -1, 1));
+            const angleDegrees = THREE.MathUtils.radToDeg(angle);
+            const nominalPenalty = nominalAngle !== null
+              ? Math.min(
+                  Math.abs(angleDegrees - nominalAngle),
+                  Math.abs((180 - angleDegrees) - nominalAngle)
+                )
+              : 0;
+            const preferredBonus = preferredSamples.includes(samples[i]) && preferredSamples.includes(samples[j]) ? 100 : 0;
+            const score =
+              preferredBonus +
+              Math.sin(angle) * 10 +
+              Math.min(result.sourceA.distanceTo(result.sourceB) / Math.max(modelSizeMax, 1e-6), 1) -
+              nominalPenalty * 12;
+            if (score > bestScore) {
+              bestScore = score;
+              bestResult = result;
+            }
+          }
+        }
+        return bestResult;
+      };
+
+      for (const tolerance of dimensionTolerances) {
+        const faceNames = getFaceNamesForTolerance(tolerance);
+        const mergedDatumIdentifiers: string[] = [];
+        const isAngularDimension = /angular/i.test(`${tolerance.dimensionKind || ""} ${tolerance.type || ""}`);
+        const isLinearLikeDimension = tolerance.dimensionKind === "linear" || tolerance.dimensionKind === "size";
+
+        if (tolerance.associatedDatumIdentifier) {
+          const datumAnchor = datumAnchorCache.find((anchor) =>
+            anchor.annotationKind === "datum" &&
+            anchor.datum?.identifier === tolerance.associatedDatumIdentifier
+          );
+          if (datumAnchor) {
+            const resolveDatumDimensionPoint = () => getDatumLeaderDimensionLabelPoint(datumAnchor);
+            const resolveDatumDimensionTransform = () => getDatumLeaderDimensionLabelTransform(datumAnchor);
+            const labelPoint = resolveDatumDimensionPoint();
+            if (labelPoint) {
+              addPmiDimensionLabel(
+                tolerance,
+                labelPoint,
+                [],
+                resolveDatumDimensionPoint,
+                resolveDatumDimensionTransform
+              );
+            }
+          }
+          continue;
+        }
+
+        if (isAngularDimension) {
+          const result = resolveAngularDimensionFromFaces(faceNames, tolerance);
+          if (result) {
+            drawAngularDimension(result, tolerance, `PmiDimensionToleranceOverlay-${tolerance.id}`);
+          } else if (faceNames.length >= 2) {
+            const frames = faceNames
+              .map(getFaceFrameInAssembly)
+              .filter((frame): frame is NonNullable<ReturnType<typeof getFaceFrameInAssembly>> => !!frame);
+            if (frames.length >= 2) {
+              const midpoint = frames[0].center.clone().add(frames[1].center).multiplyScalar(0.5);
+              addPmiDimensionLabel(tolerance, midpoint, mergedDatumIdentifiers);
+            }
+          }
+          continue;
+        }
+
+        const cylindricalFaceName = getBoundarySideHoleCalloutFaceName(faceNames, tolerance);
+        if (tolerance.dimensionKind === "threadDepth") {
+          const threadCylinderFaceNames = (tolerance.threadCylinderTargetIds || [])
+            .map((targetId: string) =>
+              mapTargetToWebGLName(targetId, "", false) ||
+              mapTargetToTopologicalWebGLName(targetId)
+            )
+            .filter((name: string | null): name is string => !!name)
+            .filter((name: string, index: number, all: string[]) => all.indexOf(name) === index)
+            .filter(isCylindricalFace);
+          const threadHoleFaceName = threadCylinderFaceNames[0] || cylindricalFaceName || getNearestCylindricalFaceName(faceNames);
+          if (threadHoleFaceName && drawHoleToleranceLeader(tolerance, threadHoleFaceName)) continue;
+
+          const samples = faceNames.map(makeFaceSample).filter((sample): sample is MeasurementSample => !!sample);
+          if (samples.length > 0) {
+            const center = samples
+              .reduce((acc, sample) => acc.add(sample.point), new THREE.Vector3())
+              .multiplyScalar(1 / samples.length);
+            addPmiDimensionLabel(tolerance, center, mergedDatumIdentifiers);
+          }
+          continue;
+        }
+
+        if (tolerance.isCounterboreDimension) {
+          const counterboreFaceName = cylindricalFaceName || getNearestCylindricalFaceName(faceNames);
+          if (counterboreFaceName && drawHoleToleranceLeader(tolerance, counterboreFaceName)) continue;
+          continue;
+        }
+
+        if (tolerance.isCountersinkDimension) {
+          const countersinkHoleFaceName = cylindricalFaceName || getNearestCylindricalFaceName(faceNames);
+          if (countersinkHoleFaceName && drawHoleToleranceLeader(tolerance, countersinkHoleFaceName)) continue;
+          continue;
+        }
+
+        if (!isAngularDimension && cylindricalFaceName) {
+          const isLinearCylinderDistance =
+            tolerance.dimensionKind === "linear" &&
+            faceNames.filter(isCylindricalFace).length >= 2;
+          if (isLinearCylinderDistance) {
+            const result = makeCylinderCenterDistanceResult(faceNames, tolerance);
+            if (result) {
+              drawLinearDimension(result, `PmiDimensionToleranceOverlay-${tolerance.id}`, tolerance, mergedDatumIdentifiers);
+              continue;
+            }
+          }
+          if (drawHoleToleranceLeader(tolerance, cylindricalFaceName)) continue;
+          if (!isLinearLikeDimension) {
+            const samples = faceNames.map(makeFaceSample).filter((sample): sample is MeasurementSample => !!sample);
+            if (samples.length > 0) {
+              const center = samples
+                .reduce((acc, sample) => acc.add(sample.point), new THREE.Vector3())
+                .multiplyScalar(1 / samples.length);
+              addPmiDimensionLabel(tolerance, center, mergedDatumIdentifiers);
+            }
+            continue;
+          }
+        }
+
+        if (!isAngularDimension && isLinearLikeDimension && faceNames.length >= 2) {
+          const samples = faceNames.slice(0, 2).map(makeFaceSample).filter((sample): sample is MeasurementSample => !!sample);
+          if (samples.length >= 2) {
+            const result = resolveMeasurement(samples[0], samples[1]);
+            if (result.mode === "angle") {
+              drawAngularDimension(result, tolerance, `PmiDimensionToleranceOverlay-${tolerance.id}`);
+              continue;
+            }
+            if (result.mode === "linear") drawLinearDimension(result, `PmiDimensionToleranceOverlay-${tolerance.id}`, tolerance, mergedDatumIdentifiers);
+          }
+          continue;
+        }
+
+        if (
+          !isAngularDimension &&
+          (tolerance.dimensionKind === "diameter" || tolerance.dimensionKind === "radius") &&
+          faceNames.length === 0
+        ) {
+          if (canDrawCircularPointTargetDimension(tolerance)) {
+            const result = makePointTargetDimensionResult(tolerance);
+            if (result) {
+              drawLinearDimension(result, `PmiDimensionToleranceOverlay-${tolerance.id}`, tolerance, mergedDatumIdentifiers);
+              continue;
+            }
+          }
+          if (isRepeatedCircularPointTargetPattern(tolerance)) {
+            continue;
+          }
+          const labelPoint = getPointTargetLabelPoint(tolerance);
+          if (labelPoint) {
+            addPmiDimensionLabel(tolerance, labelPoint, mergedDatumIdentifiers);
+            continue;
+          }
+        }
+
+        if (!isAngularDimension && (isLinearLikeDimension || tolerance.isDatumTargetDimension)) {
+          const result =
+            isLinearLikeDimension
+              ? makeLineTargetMinimumDistanceResult(tolerance) || makePointTargetDimensionResult(tolerance)
+              : makePointTargetDimensionResult(tolerance);
+          if (result) {
+            drawLinearDimension(result, `PmiDimensionToleranceOverlay-${tolerance.id}`, tolerance, mergedDatumIdentifiers);
+            continue;
+          }
+          const labelPoint = getPointTargetLabelPoint(tolerance);
+          if (labelPoint) {
+            addPmiDimensionLabel(tolerance, labelPoint, mergedDatumIdentifiers);
+            continue;
+          }
+        }
+      }
+
+      if (group.children.length > 0) {
+        assemblyGroup.add(group);
       }
     };
 
@@ -3578,15 +6049,22 @@ export default function CadCanvas3D({
 
     const refreshDatumAnchorCache = () => {
       const currentAnnotations = [
-        ...(propsRef.current.datums || [])
-          .filter((d: any) => d.type !== "Datum Target Set")
-          .map((d: any) => ({ ...d, annotationKind: "datum" })),
-        ...(propsRef.current.datumTargets || []).map((d: any) => ({ ...d, annotationKind: "datumTarget" })),
+        ...(propsRef.current.showDatumFeatures
+          ? (propsRef.current.datums || [])
+              .filter((d: any) => d.type !== "Datum Target Set")
+              .map((d: any) => ({ ...d, annotationKind: "datum" }))
+          : []),
+        ...(propsRef.current.showDatumTargets
+          ? (propsRef.current.datumTargets || []).map((d: any) => ({ ...d, annotationKind: "datumTarget" }))
+          : []),
       ];
       datumCacheMissingElements = 0;
       clearDatumTargetRegionOverlays();
       clearDatumLeaderGeometry();
-      drawDatumReferenceFrameOverlay();
+      clearDatumReferenceFrameBadges();
+      if (propsRef.current.showDatumReferenceFrames) {
+        drawDatumReferenceFrameOverlay();
+      }
       const sharedHoleLeaderDirections = new Map<string, THREE.Vector3>();
       const quantizeForGrouping = (value: number, tolerance: number) =>
         Math.round(value / tolerance);
@@ -3664,12 +6142,51 @@ export default function CadCanvas3D({
 
         return getFaceFrameInAssembly(primaryFaceName)?.normal || null;
       };
+      const selectPhysicalDatumLeaderFaceName = (datum: any, faceNames: string[]) => {
+        if (faceNames.length <= 1) return faceNames[0] || null;
+        const renderKind = getDatumRenderKindForFaces(datum, faceNames);
+        if (renderKind !== "multiface") return faceNames[0] || null;
+
+        const semanticText = `${datum?.type || ""} ${datum?.targetName || ""} ${datum?.clinicalContext || ""}`;
+        if (/cylind|hole|bore|axis|target set/i.test(semanticText)) return faceNames[0] || null;
+
+        const cameraLocal = assemblyGroup.worldToLocal(camera.position.clone());
+        const centerReference = modelOrbitTarget.clone();
+        const maxArea = Math.max(
+          ...faceNames.map((name) => Math.max(getFaceFrameInAssembly(name)?.area || 0, 0)),
+          1e-6
+        );
+
+        return faceNames
+          .map((name, index) => {
+            const frame = getFaceFrameInAssembly(name);
+            if (!frame?.normal) return null;
+            const viewDirection = cameraLocal.clone().sub(frame.center);
+            if (viewDirection.lengthSq() <= 1e-8) return null;
+            viewDirection.normalize();
+            const cameraFacing = Math.abs(frame.normal.dot(viewDirection));
+            const exteriorScore = Math.min(
+              frame.center.distanceTo(centerReference) / Math.max(modelSizeMax, 1e-6),
+              1
+            );
+            const areaScore = Math.min(Math.sqrt(Math.max(frame.area, 0) / maxArea), 1);
+            return {
+              name,
+              score: cameraFacing * 6 + exteriorScore * 2 + areaScore - index * 1e-3
+            };
+          })
+          .filter((candidate): candidate is { name: string; score: number } => !!candidate)
+          .sort((a, b) => b.score - a.score)[0]?.name || faceNames[0] || null;
+      };
       datumAnchorCache = currentAnnotations.flatMap((d: any) => {
         const element = document.getElementById(`3d-datum-badge-${d.id}`);
         const leaderElement = document.getElementById(`3d-datum-leader-${d.id}`);
         const triangleElement = document.getElementById(`3d-datum-triangle-${d.id}`);
         const webglNames = mapDatumTargetsToWebGLNames(d);
-        const webglName = webglNames[0] ||
+        const selectedDatumFaceName = d.annotationKind === "datumTarget"
+          ? webglNames[0] || null
+          : selectPhysicalDatumLeaderFaceName(d, webglNames);
+        const webglName = selectedDatumFaceName ||
           (d.annotationKind === "datumTarget"
             ? findFaceNameForDatumTargetPoint(d.targetPoint || d.targetLine?.center || d.targetCircle?.center || d.targetCurve?.center)
             : null);
@@ -3682,7 +6199,7 @@ export default function CadCanvas3D({
           return [];
         }
 
-        const child = webglName ? assemblyGroup.getObjectByName(webglName) : assemblyGroup;
+        const child = webglName ? renderedObjectByName.get(webglName) : assemblyGroup;
         if (!child) {
           element.style.display = "none";
           if (leaderElement) leaderElement.style.display = "none";
@@ -3714,10 +6231,14 @@ export default function CadCanvas3D({
           return [];
         }
         let isMedianDatum = isDimensionDatum && medianWebglNames.length >= 2;
-        const isPlanarDatum = /plane|planar|flat/i.test(datumTargetText);
+        const isPhysicalMultiPlaneDatum = d.annotationKind !== "datumTarget" &&
+          datumRenderKind === "multiface" &&
+          baseWebglNames.length > 1 &&
+          !/cylind|hole wall|bore|axis|target set/i.test(datumTargetText);
+        const isPlanarDatum = /plane|planar|flat/i.test(datumTargetText) || isPhysicalMultiPlaneDatum;
         const isCylindricalDatum = /cylind|hole wall|bore/i.test(datumTargetText);
         const isHoleDatum = /hole|bore/i.test(datumTargetText);
-        const hasLeader = d.annotationKind === "datumTarget" || isMedianDatum || (isPlanarDatum || isCylindricalDatum);
+        const hasLeader = d.annotationKind === "datumTarget" || d.annotationKind === "datum";
 
         const datumTargetCenter = d.targetPoint || d.targetLine?.center || d.targetCircle?.center || d.targetCurve?.center;
         const usePresentationPoint = d.annotationKind === "datumTarget" &&
@@ -3766,7 +6287,7 @@ export default function CadCanvas3D({
 
         if (isMedianDatum) {
           const faceObjects = medianWebglNames
-            .map((name) => assemblyGroup.getObjectByName(name))
+            .map((name) => renderedObjectByName.get(name))
             .filter((obj): obj is THREE.Object3D => !!obj && obj.name.startsWith("BRepFace-"))
             .slice(0, 2);
 
@@ -3835,7 +6356,7 @@ export default function CadCanvas3D({
               calloutKind = "median";
               const normalOffset = Math.max(modelSizeMax * 0.065, 1e-4);
               leaderDoglegLength = 0;
-              leaderStemLength = Math.max(normalOffset * 0.88, modelSizeMax * 0.058);
+              leaderStemLength = Math.max(normalOffset * 0.66, modelSizeMax * 0.0435);
               triangleHeight = Math.max(normalOffset * 0.28, modelSizeMax * 0.018);
               triangleHalfBase = triangleHeight / Math.sqrt(3);
               arrowLength = normalOffset * 0.18;
@@ -3846,19 +6367,50 @@ export default function CadCanvas3D({
               dimensionEndLocal = localPoint.clone().addScaledVector(dimensionAxis, dimensionHalfLength);
               dimensionTouchStartLocal = dimensionStartLocal.clone();
               dimensionTouchEndLocal = dimensionEndLocal.clone();
-              const triangleBaseCenterLocal = localPoint.clone();
+              const useExternalDimensionArrows =
+                dimensionHalfLength < triangleHalfBase + arrowLength * 1.25;
+              const externalArrowLineLength = Math.max(
+                triangleHalfBase + arrowLength * 1.75,
+                modelSizeMax * 0.04
+              );
+              const triangleBaseCenterLocal = useExternalDimensionArrows
+                ? (() => {
+                    const startSideCenter = dimensionStartLocal!
+                      .clone()
+                      .addScaledVector(dimensionAxis, -externalArrowLineLength * 0.58);
+                    const endSideCenter = dimensionEndLocal!
+                      .clone()
+                      .addScaledVector(dimensionAxis, externalArrowLineLength * 0.58);
+                    return startSideCenter.distanceToSquared(modelOrbitTarget) >
+                      endSideCenter.distanceToSquared(modelOrbitTarget)
+                      ? startSideCenter
+                      : endSideCenter;
+                  })()
+                : localPoint.clone();
               triangleApexLocal = triangleBaseCenterLocal.clone().addScaledVector(leaderDirection, triangleHeight);
               const badgeStemEndLocal = triangleApexLocal.clone().addScaledVector(leaderDirection, leaderStemLength);
               offset.copy(badgeStemEndLocal).sub(localPoint);
 
-              const dimensionGeometry = new THREE.BufferGeometry().setFromPoints([
-                dimensionStartLocal.clone(),
-                dimensionEndLocal.clone(),
-                dimensionStartLocal.clone().addScaledVector(leaderDirection, -dimensionTickLength * 0.5),
-                dimensionStartLocal.clone().addScaledVector(leaderDirection, dimensionTickLength * 0.5),
-                dimensionEndLocal.clone().addScaledVector(leaderDirection, -dimensionTickLength * 0.5),
-                dimensionEndLocal.clone().addScaledVector(leaderDirection, dimensionTickLength * 0.5),
-              ]);
+              const dimensionLinePoints = useExternalDimensionArrows
+                ? [
+                    dimensionStartLocal.clone().addScaledVector(dimensionAxis, -externalArrowLineLength),
+                    dimensionStartLocal.clone().addScaledVector(dimensionAxis, -arrowLength),
+                    dimensionEndLocal.clone().addScaledVector(dimensionAxis, arrowLength),
+                    dimensionEndLocal.clone().addScaledVector(dimensionAxis, externalArrowLineLength),
+                    dimensionStartLocal.clone().addScaledVector(leaderDirection, -dimensionTickLength * 0.5),
+                    dimensionStartLocal.clone().addScaledVector(leaderDirection, dimensionTickLength * 0.5),
+                    dimensionEndLocal.clone().addScaledVector(leaderDirection, -dimensionTickLength * 0.5),
+                    dimensionEndLocal.clone().addScaledVector(leaderDirection, dimensionTickLength * 0.5),
+                  ]
+                : [
+                    dimensionStartLocal.clone(),
+                    dimensionEndLocal.clone(),
+                    dimensionStartLocal.clone().addScaledVector(leaderDirection, -dimensionTickLength * 0.5),
+                    dimensionStartLocal.clone().addScaledVector(leaderDirection, dimensionTickLength * 0.5),
+                    dimensionEndLocal.clone().addScaledVector(leaderDirection, -dimensionTickLength * 0.5),
+                    dimensionEndLocal.clone().addScaledVector(leaderDirection, dimensionTickLength * 0.5),
+                  ];
+              const dimensionGeometry = new THREE.BufferGeometry().setFromPoints(dimensionLinePoints);
               const dimensionMaterial = new THREE.LineBasicMaterial({
                 color: 0x1e293b,
                 depthTest: false,
@@ -3873,8 +6425,12 @@ export default function CadCanvas3D({
               assemblyGroup.add(dimensionObject);
 
               const arrowSide = leaderDirection.clone().multiplyScalar(arrowHalfWidth);
-              const startArrowBase = dimensionStartLocal.clone().addScaledVector(dimensionAxis, arrowLength);
-              const endArrowBase = dimensionEndLocal.clone().addScaledVector(dimensionAxis, -arrowLength);
+              const startArrowBase = dimensionStartLocal
+                .clone()
+                .addScaledVector(dimensionAxis, useExternalDimensionArrows ? -arrowLength : arrowLength);
+              const endArrowBase = dimensionEndLocal
+                .clone()
+                .addScaledVector(dimensionAxis, useExternalDimensionArrows ? arrowLength : -arrowLength);
               const arrowGeometry = new THREE.BufferGeometry().setFromPoints([
                 dimensionStartLocal.clone(),
                 startArrowBase.clone().add(arrowSide),
@@ -4306,7 +6862,7 @@ export default function CadCanvas3D({
               leaderTangent.copy(doglegDirection);
               leaderRadialLength = Math.max(normalOffset * 0.7, modelSizeMax * 0.045);
               leaderDoglegLength = Math.max(normalOffset * 0.85, modelSizeMax * 0.055);
-              leaderStemLength = Math.max(normalOffset * 0.88, modelSizeMax * 0.058);
+              leaderStemLength = Math.max(normalOffset * 0.66, modelSizeMax * 0.0435);
               triangleHeight = Math.max(normalOffset * 0.28, modelSizeMax * 0.018);
               triangleHalfBase = triangleHeight / Math.sqrt(3);
               const stemDirection = getPerpendicularBadgeStemDirectionLocal(
@@ -4322,7 +6878,7 @@ export default function CadCanvas3D({
               leaderAxisLocal.copy(radialDirection);
               calloutKind = "cylindrical";
             } else {
-              offset.copy(unitNormal.clone().multiplyScalar(normalOffset));
+              offset.copy(unitNormal.clone().multiplyScalar(normalOffset * 0.82));
               leaderAxisLocal.copy(unitNormal);
               calloutKind = "planar";
             }
@@ -4369,10 +6925,13 @@ export default function CadCanvas3D({
                   }
                   arrowSide.normalize().multiplyScalar(arrowHalfWidth);
 
+                  const doglegExtendedEndLocal = triangleBaseCenterLocal
+                    .clone()
+                    .addScaledVector(leaderTangent, Math.max(triangleHalfBase * 1.35, modelSizeMax * 0.012));
                   const shaftGeometry = new THREE.BufferGeometry().setFromPoints([
                     arrowBaseLocal.clone(),
                     radialLeadEndLocal.clone(),
-                    triangleBaseCenterLocal.clone(),
+                    doglegExtendedEndLocal,
                   ]);
                   const shaftMaterial = new THREE.LineBasicMaterial({
                     color: 0x1e293b,
@@ -4501,9 +7060,10 @@ export default function CadCanvas3D({
           }
         }
 
-        return [{
-          id: d.id,
-          element,
+          return [{
+            id: d.id,
+            datum: d,
+            element,
           leaderElement,
           triangleElement,
           triangleObject,
@@ -4624,10 +7184,14 @@ export default function CadCanvas3D({
         arrowSide.multiplyScalar(anchor.arrowHalfWidth);
         const arrowBaseLocal = anchor.localPoint.clone().addScaledVector(arrowDirection, -anchor.arrowLength);
 
+        const doglegExtendedEndLocal = triangleBaseCenterLocal
+          .clone()
+          .addScaledVector(tangent, Math.max(anchor.triangleHalfBase * 1.35, modelSizeMax * 0.012));
+
         updateGeometryPoints(anchor.arrowShaftObject.geometry, [
           arrowBaseLocal,
           radialLeadEndLocal,
-          triangleBaseCenterLocal,
+          doglegExtendedEndLocal,
         ]);
         updateGeometryPoints(anchor.arrowHeadObject.geometry, [
           anchor.localPoint.clone(),
@@ -4687,12 +7251,18 @@ export default function CadCanvas3D({
       }
     };
 
+    dimensionOverlayVisibilityRefreshRef.current = () => {
+      refreshDatumAnchorCache();
+      refreshPmiDimensionToleranceOverlay();
+      requestRenderRef.current?.(3);
+    };
+
     datumClickHandlerRef.current = (datum: any) => {
       const webglNames = mapDatumTargetsToWebGLNames(datum);
       const webglName = webglNames[0] || mapTargetToWebGLName(datum.targetId, datum.identifier);
       if (!webglName) return;
 
-      const obj = assemblyGroup.getObjectByName(webglName);
+      const obj = renderedObjectByName.get(webglName);
       if (!obj) return;
 
       const type = obj.name.startsWith("BRepFace-") ? "face" : "edge";
@@ -4711,7 +7281,7 @@ export default function CadCanvas3D({
         webglNames.length > 1;
       const dimensionSelectionPoints = isDatumDimensionSelection
         ? webglNames
-          .map((name) => assemblyGroup.getObjectByName(name))
+          .map((name) => renderedObjectByName.get(name))
           .filter((faceObject): faceObject is THREE.Object3D => !!faceObject)
           .map((faceObject) => {
             const localAnchor = getStableSurfacePoint(faceObject);
@@ -4775,7 +7345,12 @@ export default function CadCanvas3D({
       isNavigatingView = true;
       pendingMouseEvent = null;
       clearHoverState();
-      releaseFocusedDatumOrbit();
+      if (wheelNavigationPending) {
+        cameraFocusTarget = null;
+        focusedDatumOrbit = false;
+      } else {
+        releaseFocusedDatumOrbit();
+      }
       requestRenderRef.current?.(60);
     };
 
@@ -4791,6 +7366,18 @@ export default function CadCanvas3D({
       requestRenderRef.current?.(12);
     };
 
+    const handleWheelNavigation = () => {
+      wheelNavigationPending = true;
+      if (wheelNavigationResetId !== null) {
+        window.clearTimeout(wheelNavigationResetId);
+      }
+      wheelNavigationResetId = window.setTimeout(() => {
+        wheelNavigationPending = false;
+        wheelNavigationResetId = null;
+      }, 80);
+    };
+
+    canvas.addEventListener("wheel", handleWheelNavigation, { passive: true });
     controls.addEventListener("start", handleControlsStart);
     controls.addEventListener("change", handleControlsChange);
     controls.addEventListener("end", handleControlsEnd);
@@ -4798,15 +7385,22 @@ export default function CadCanvas3D({
     // Dynamic cache keys trackers
     let prevResToken = "";
     let prevViewMode = "";
-    let prevOverlay = false;
     let prevMat = "";
     let prevDatumDatumsRef: any[] | null = null;
     let prevDatumTargetsRef: any[] | null = null;
     let prevDatumReferenceFramesRef: any[] | null = null;
+    let prevToleranceRef: any[] | null = null;
     let prevDatumMappingRef: Record<string, string> | null = null;
+    let prevShowDatumFeatures = true;
+    let prevShowDatumTargets = true;
+    let prevShowDatumReferenceFrames = true;
+    let prevShowDimensionalTolerances = true;
     let prevDatumSceneFaces = -1;
     let prevFocusRequestNonce = -1;
     const projectedDatumPoint = new THREE.Vector3();
+    const orientationCubeCameraDirection = new THREE.Vector3();
+    let wheelNavigationPending = false;
+    let wheelNavigationResetId: number | null = null;
 
     let animationFrameId: number | null = null;
     let requestedContinuationFrames = 0;
@@ -4822,14 +7416,15 @@ export default function CadCanvas3D({
       animationFrameId = null;
       requestedContinuationFrames = Math.max(0, requestedContinuationFrames - 1);
 
+      switchCameraProjection(propsRef.current.cameraProjection);
+
       // Dampened rotation controls update
       const controlsChanged = controls.update();
 
-      const { viewMode: vMode, wireframeOverlay: wOverlay, materialType: mType, autoRotate: spinOn } = propsRef.current;
+      const { viewMode: vMode, materialType: mType, autoRotate: spinOn } = propsRef.current;
 
       if (spinOn) {
         assemblyGroup.rotation.y += 0.003;
-        updateFloorGridPosition();
       }
 
       if (cameraFocusTarget) {
@@ -4871,7 +7466,6 @@ export default function CadCanvas3D({
       if (
         isNewModel ||
         vMode !== prevViewMode ||
-        wOverlay !== prevOverlay ||
         mType !== prevMat
       ) {
         measurementPoints = [];
@@ -4880,15 +7474,27 @@ export default function CadCanvas3D({
         rebuildSceneTopology(isNewModel);
         prevResToken = activeToken;
         prevViewMode = vMode;
-        prevOverlay = wOverlay;
         prevMat = mType;
         prevHighlightToken = "";
         previousHighlightNames = new Set();
         prevDatumDatumsRef = null;
         prevDatumTargetsRef = null;
         prevDatumReferenceFramesRef = null;
+        prevToleranceRef = null;
         prevDatumMappingRef = null;
         prevDatumSceneFaces = -1;
+        refreshDatumAnchorCache();
+        refreshPmiDimensionToleranceOverlay();
+        prevDatumDatumsRef = propsRef.current.datums || [];
+        prevDatumTargetsRef = propsRef.current.datumTargets || [];
+        prevDatumReferenceFramesRef = propsRef.current.datumReferenceFrames || [];
+        prevToleranceRef = propsRef.current.tolerances || [];
+        prevDatumMappingRef = propsRef.current.customFaceMapping || {};
+        prevShowDatumFeatures = propsRef.current.showDatumFeatures;
+        prevShowDatumTargets = propsRef.current.showDatumTargets;
+        prevShowDatumReferenceFrames = propsRef.current.showDatumReferenceFrames;
+        prevShowDimensionalTolerances = propsRef.current.showDimensionalTolerances;
+        prevDatumSceneFaces = renderedObjectByName.size;
       }
 
       const highlightToken = getHighlightToken();
@@ -4911,11 +7517,13 @@ export default function CadCanvas3D({
       // GL coordinates to overlay pixels.
       camera.updateMatrixWorld(true);
       assemblyGroup.updateMatrixWorld(true);
+      updateEdgeHighlightResolution();
+      updateVertexMarkerScreenScale();
 
       if (orientationCubeRef.current) {
-        const cameraDirection = camera.position.clone().sub(controls.target).normalize();
-        const yaw = Math.atan2(cameraDirection.x, cameraDirection.z);
-        const pitch = Math.asin(THREE.MathUtils.clamp(cameraDirection.y, -1, 1));
+        orientationCubeCameraDirection.copy(camera.position).sub(controls.target).normalize();
+        const yaw = Math.atan2(orientationCubeCameraDirection.x, orientationCubeCameraDirection.z);
+        const pitch = Math.asin(THREE.MathUtils.clamp(orientationCubeCameraDirection.y, -1, 1));
         orientationCubeRef.current.style.transform = `rotateX(${pitch}rad) rotateY(${-yaw}rad)`;
       }
 
@@ -4923,25 +7531,52 @@ export default function CadCanvas3D({
       const currentDatumsRef = propsRef.current.datums || [];
       const currentDatumTargetsRef = propsRef.current.datumTargets || [];
       const currentDatumReferenceFramesRef = propsRef.current.datumReferenceFrames || [];
+      const currentToleranceRef = propsRef.current.tolerances || [];
       const currentMappingRef = propsRef.current.customFaceMapping || {};
+      const currentShowDatumFeatures = propsRef.current.showDatumFeatures;
+      const currentShowDatumTargets = propsRef.current.showDatumTargets;
+      const currentShowDatumReferenceFrames = propsRef.current.showDatumReferenceFrames;
+      const currentShowDimensionalTolerances = propsRef.current.showDimensionalTolerances;
+      const currentSceneObjectCount = renderedObjectByName.size;
+      const pmiDimensionInputsChanged =
+        currentToleranceRef !== prevToleranceRef ||
+        currentMappingRef !== prevDatumMappingRef ||
+        currentShowDimensionalTolerances !== prevShowDimensionalTolerances ||
+        currentSceneObjectCount !== prevDatumSceneFaces;
       const datumAnchorInputsChanged =
         currentDatumsRef !== prevDatumDatumsRef ||
         currentDatumTargetsRef !== prevDatumTargetsRef ||
         currentDatumReferenceFramesRef !== prevDatumReferenceFramesRef ||
+        currentToleranceRef !== prevToleranceRef ||
         currentMappingRef !== prevDatumMappingRef ||
-        assemblyGroup.children.length !== prevDatumSceneFaces;
+        currentShowDatumFeatures !== prevShowDatumFeatures ||
+        currentShowDatumTargets !== prevShowDatumTargets ||
+        currentShowDatumReferenceFrames !== prevShowDatumReferenceFrames ||
+        currentSceneObjectCount !== prevDatumSceneFaces;
 
-      if (datumAnchorInputsChanged) {
-        refreshDatumAnchorCache();
+      if (datumAnchorInputsChanged || pmiDimensionInputsChanged) {
+        if (datumAnchorInputsChanged) {
+          refreshDatumAnchorCache();
+        }
+        if (pmiDimensionInputsChanged) {
+          refreshPmiDimensionToleranceOverlay();
+        }
         prevDatumDatumsRef = currentDatumsRef;
         prevDatumTargetsRef = currentDatumTargetsRef;
         prevDatumReferenceFramesRef = currentDatumReferenceFramesRef;
+        prevToleranceRef = currentToleranceRef;
         prevDatumMappingRef = currentMappingRef;
-        prevDatumSceneFaces = assemblyGroup.children.length;
+        prevShowDatumFeatures = currentShowDatumFeatures;
+        prevShowDatumTargets = currentShowDatumTargets;
+        prevShowDatumReferenceFrames = currentShowDatumReferenceFrames;
+        prevShowDimensionalTolerances = currentShowDimensionalTolerances;
+        prevDatumSceneFaces = currentSceneObjectCount;
         datumCacheRetryFrame = 0;
       } else if (datumCacheMissingElements > 0 && datumCacheRetryFrame < 12) {
         datumCacheRetryFrame++;
         refreshDatumAnchorCache();
+      } else if (controlsChanged || isNavigatingView || !!cameraFocusTarget) {
+        updatePmiDimensionLeaderFacing();
       }
 
       if (datumAnchorCache.length > 0) {
@@ -5003,6 +7638,80 @@ export default function CadCanvas3D({
         });
       }
 
+      if (drfBadgeCache.length > 0) {
+        const width = renderer.domElement.clientWidth;
+        const height = renderer.domElement.clientHeight;
+        drfBadgeCache.forEach((badge) => {
+          projectedDatumPoint.copy(badge.localPoint);
+          badge.object.localToWorld(projectedDatumPoint);
+          projectedDatumPoint.project(camera);
+
+          const rawX = (projectedDatumPoint.x * 0.5 + 0.5) * width;
+          const rawY = (projectedDatumPoint.y * -0.5 + 0.5) * height;
+          if (
+            !Number.isFinite(rawX) ||
+            !Number.isFinite(rawY) ||
+            projectedDatumPoint.z < -1 ||
+            projectedDatumPoint.z > 1
+          ) {
+            badge.element.style.display = "none";
+            return;
+          }
+
+          badge.element.style.transform = `translate3d(${rawX}px, ${rawY}px, 0) translate(-50%, -50%)`;
+          badge.element.style.display = "flex";
+          badge.element.style.zIndex = "18";
+        });
+      }
+
+      if (pmiDimensionLabelCache.length > 0) {
+        const width = renderer.domElement.clientWidth;
+        const height = renderer.domElement.clientHeight;
+        pmiDimensionLabelCache.forEach((entry) => {
+          const resolvedPoint = entry.resolvePoint?.();
+          if (resolvedPoint) {
+            entry.point.copy(resolvedPoint);
+          }
+          projectedDatumPoint.copy(entry.point);
+          assemblyGroup.localToWorld(projectedDatumPoint);
+          projectedDatumPoint.project(camera);
+
+          const rawX = (projectedDatumPoint.x * 0.5 + 0.5) * width;
+          const rawY = (projectedDatumPoint.y * -0.5 + 0.5) * height;
+          if (
+            !Number.isFinite(rawX) ||
+            !Number.isFinite(rawY) ||
+            projectedDatumPoint.z < -1 ||
+            projectedDatumPoint.z > 1
+          ) {
+            if (entry.visible) {
+              entry.element.style.display = "none";
+              entry.visible = false;
+            }
+            return;
+          }
+
+          const screenX = Math.round(rawX * 2) / 2;
+          const screenY = Math.round(rawY * 2) / 2;
+          const labelTransform = entry.resolveTransform?.() || "translate(0, -50%)";
+          const fullTransform = `translate3d(${screenX}px, ${screenY}px, 0) ${labelTransform}`;
+          if (
+            !entry.visible ||
+            Math.abs(screenX - entry.screenX) >= 0.5 ||
+            Math.abs(screenY - entry.screenY) >= 0.5 ||
+            entry.element.style.transform !== fullTransform
+          ) {
+            entry.element.style.transform = fullTransform;
+            entry.screenX = screenX;
+            entry.screenY = screenY;
+          }
+          if (!entry.visible) {
+            entry.element.style.display = "flex";
+            entry.visible = true;
+          }
+        });
+      }
+
       if (measurementLabelRef.current && measurementLabelPoint) {
         projectedDatumPoint.copy(measurementLabelPoint);
         assemblyGroup.localToWorld(projectedDatumPoint);
@@ -5047,6 +7756,7 @@ export default function CadCanvas3D({
     // Release GPU materials and event handlers cleanly
     return () => {
       requestRenderRef.current = null;
+      dimensionOverlayVisibilityRefreshRef.current = null;
       if (animationFrameId !== null) {
         cancelAnimationFrame(animationFrameId);
       }
@@ -5059,15 +7769,21 @@ export default function CadCanvas3D({
       if (hoverNotifyTimeoutId !== null) {
         window.clearTimeout(hoverNotifyTimeoutId);
       }
+      if (wheelNavigationResetId !== null) {
+        window.clearTimeout(wheelNavigationResetId);
+      }
       resizeObserver.disconnect();
       canvas.removeEventListener("mousemove", handleMouseMove);
       canvas.removeEventListener("pointerdown", handlePointerDown);
       canvas.removeEventListener("mouseleave", handleMouseLeave);
       canvas.removeEventListener("click", handleMouseClick);
+      canvas.removeEventListener("wheel", handleWheelNavigation);
       controls.removeEventListener("start", handleControlsStart);
       controls.removeEventListener("change", handleControlsChange);
       controls.removeEventListener("end", handleControlsEnd);
       controls.dispose();
+      clearPmiDimensionToleranceOverlay();
+      clearDatumReferenceFrameBadges();
       disposeMeasurementGroup();
       disposePreviousMeasurementGroup();
       renderer.dispose();
@@ -5094,16 +7810,36 @@ export default function CadCanvas3D({
         className="block w-full h-full active:cursor-grabbing"
         id="cad_viewport_canvas"
         style={{
-          cursor: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='25' height='25' viewBox='0 0 25 25'%3E%3Cpath d='M12 1v23M1 12h23' stroke='black' stroke-width='1' stroke-linecap='square'/%3E%3Ccircle cx='12' cy='12' r='3' fill='none' stroke='black' stroke-width='1'/%3E%3C/svg%3E") 12 12, crosshair`,
+          cursor: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='25' height='25' viewBox='0 0 25 25'%3E%3Cpath d='M12.5 1v23M1 12.5h23' stroke='black' stroke-width='1' stroke-linecap='square'/%3E%3Ccircle cx='12.5' cy='12.5' r='3' fill='none' stroke='black' stroke-width='1'/%3E%3C/svg%3E") 12 12, crosshair`,
         }}
       />
 
+      {/* Datum reference frame labels */}
+      {showDatumReferenceFrames && datumReferenceFrames.length > 0 && (
+        <div
+          className="absolute inset-0 pointer-events-none z-10 overflow-hidden"
+          id="drf-badges-overlay"
+          style={{ width: "100%", height: "100%" }}
+        />
+      )}
+
+      {/* Dimensional PMI labels */}
+      <div
+        className="absolute inset-0 pointer-events-none z-10 overflow-hidden"
+        id="pmi-dimensional-labels-overlay"
+        style={{ width: "100%", height: "100%" }}
+      />
+
       {/* 3D Datums Overlay */}
-      {(datums.length > 0 || datumTargets.length > 0) && (
+      {((showDatumFeatures && datums.length > 0) || (showDatumTargets && datumTargets.length > 0)) && (
         <div className="absolute inset-0 pointer-events-none z-10 overflow-hidden" id="datum-annotations-overlay" style={{ width: '100%', height: '100%' }}>
           {[
-            ...datums.filter((d) => d.type !== "Datum Target Set").map((d) => ({ ...d, annotationKind: "datum" })),
-            ...datumTargets.map((d) => ({ ...d, annotationKind: "datumTarget" })),
+            ...(showDatumFeatures
+              ? datums.filter((d) => d.type !== "Datum Target Set").map((d) => ({ ...d, annotationKind: "datum" }))
+              : []),
+            ...(showDatumTargets
+              ? datumTargets.map((d) => ({ ...d, annotationKind: "datumTarget" }))
+              : []),
           ].map((d) => (
             <div key={d.id}>
               <div
@@ -5158,7 +7894,7 @@ export default function CadCanvas3D({
                 title={`${d.name}: ${d.type}`}
                 className={`pointer-events-auto relative flex items-center justify-center bg-white font-mono font-black shadow-md cursor-pointer select-none shrink-0 ${
                   d.annotationKind === "datumTarget"
-                    ? "h-8 w-8 min-w-8 overflow-hidden rounded-full border-2 border-emerald-700 p-0 text-emerald-800 hover:border-emerald-600 hover:bg-emerald-50 hover:text-emerald-700"
+                    ? "h-8 w-8 min-w-8 overflow-visible rounded-full border-2 border-emerald-700 p-0 text-emerald-800 hover:border-emerald-600 hover:bg-emerald-50 hover:text-emerald-700"
                     : "h-6 min-w-7 rounded-none border-2 border-slate-800 px-1.5 text-[10.5px] text-slate-800 hover:border-blue-600 hover:bg-blue-50 hover:text-blue-700"
                 }`}
               >

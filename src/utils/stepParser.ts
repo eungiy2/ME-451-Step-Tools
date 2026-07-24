@@ -31,8 +31,41 @@ export interface ParsedStepTolerance {
   targetId: string;    // resolved STEP entity id, e.g. "#123"
   targetIds?: string[]; // all resolved STEP entities for composite toleranced geometry
   targetSurfaceTypes?: string[];
+  targetPoints?: { x: number; y: number; z: number }[];
   targetName: string;  // e.g. "Main Base Face"
   hasToleranceModifiers?: boolean;
+  dimensionEntityId?: string;
+  dimensionKind?: "linear" | "angular" | "diameter" | "radius" | "size" | "threadDepth";
+  nominalDimension?: number;
+  upperTolerance?: number;
+  lowerTolerance?: number;
+  dimensionLowerLimit?: number;
+  dimensionUpperLimit?: number;
+  dimensionLimitPreModifier?: string;
+  dimensionLimitNote?: string;
+  isReferenceDimension?: boolean;
+  isBasicDimension?: boolean;
+  isStatisticalTolerance?: boolean;
+  isDatumTargetDimension?: boolean;
+  associatedDatumIdentifier?: string;
+  isSphericalDimension?: boolean;
+  isControlledRadiusDimension?: boolean;
+  isCounterboreDimension?: boolean;
+  counterboreHoleNominal?: number;
+  counterboreHoleUpperTolerance?: number;
+  counterboreHoleLowerTolerance?: number;
+  counterboreDepthNominal?: number;
+  counterboreDepthUpperTolerance?: number;
+  counterboreDepthLowerTolerance?: number;
+  holeDepthFromBoundaryTopology?: boolean;
+  counterboreEvaluationNote?: string;
+  isCountersinkDimension?: boolean;
+  countersinkAngleNominal?: number;
+  countersinkAngleUpperTolerance?: number;
+  countersinkAngleLowerTolerance?: number;
+  dimensionPreModifier?: string;
+  threadDesignation?: string;
+  threadCylinderTargetIds?: string[];
   datumReferenceFrame?: ParsedStepDatumReferenceFrame;
   category: "Form" | "Orientation" | "Location" | "Profile" | "Dimension";
   clinicalContext: string; // clinical/medical justification
@@ -61,7 +94,7 @@ export interface ParsedStepDatum {
   semanticTargetIds?: string[];
   presentationTargetPoint?: { x: number; y: number; z: number };
   targetSource?: "semantic" | "presentation";
-  derivedDatum?: "medianPlane" | "twoFaceDimension" | "axis";
+  derivedDatum?: "medianPlane" | "twoFaceDimension" | "axis" | "multiface";
   targetName: string;  // e.g. "Main Base Face"
   clinicalContext: string; // Dynamic clinical significance
 }
@@ -106,6 +139,7 @@ export interface ParsedStepDatumTarget {
     xDirection: { x: number; y: number; z: number };
     yDirection: { x: number; y: number; z: number };
   };
+  sizeLabels?: string[];
   clinicalContext: string;
 }
 
@@ -190,7 +224,18 @@ export function parseStepFile(fileName: string, text: string): StepParseResult {
     entityStatements.set(`#${match[1]}`, match[2].replace(/\s+/g, " ").trim());
   }
 
-  const getEntityRefs = (entityId: string): string[] => entityStatements.get(entityId)?.match(/#\d+/g) || [];
+  const entityRefsCache = new Map<string, string[]>();
+  const entityTypeNamesCache = new Map<string, string[]>();
+  const entityParamsCache = new Map<string, string[]>();
+  let usedInIndex: Map<string, string[]> | null = null;
+
+  const getEntityRefs = (entityId: string): string[] => {
+    const cached = entityRefsCache.get(entityId);
+    if (cached) return cached;
+    const refs = entityStatements.get(entityId)?.match(/#\d+/g) || [];
+    entityRefsCache.set(entityId, refs);
+    return refs;
+  };
 
   const splitTopLevel = (value: string): string[] => {
     const parts: string[] = [];
@@ -231,12 +276,15 @@ export function parseStepFile(fileName: string, text: string): StepParseResult {
   };
 
   const getEntityTypeNames = (entityId: string): string[] => {
+    const cached = entityTypeNamesCache.get(entityId);
+    if (cached) return cached;
     const statement = entityStatements.get(entityId) || "";
     const names: string[] = [];
     for (const match of statement.matchAll(/(?:^|\s|\()\s*([A-Z0-9_]+)\s*\(/gi)) {
       const name = match[1].toUpperCase();
       if (!names.includes(name)) names.push(name);
     }
+    entityTypeNamesCache.set(entityId, names);
     return names;
   };
 
@@ -247,16 +295,23 @@ export function parseStepFile(fileName: string, text: string): StepParseResult {
 
   const isGeometryTargetEntity = (entityId: string): boolean => {
     return getEntityTypeNames(entityId).some((type) =>
-      /^(ADVANCED_FACE|FACE_SURFACE|FACE_BOUND|EDGE_CURVE|TRIMMED_CURVE|LINE|CIRCLE|VERTEX_POINT|CARTESIAN_POINT|AXIS2_PLACEMENT_3D|PLANE|CYLINDRICAL_SURFACE|CONICAL_SURFACE|SPHERICAL_SURFACE|TOROIDAL_SURFACE|B_SPLINE_SURFACE|SHAPE_ASPECT|COMPOSITE_SHAPE_ASPECT|DATUM_FEATURE|DATUM_TARGET|PLACED_DATUM_TARGET_FEATURE|CENTRE_OF_SYMMETRY)$/i.test(type)
+      /^(ADVANCED_FACE|FACE_SURFACE|FACE_BOUND|EDGE_CURVE|TRIMMED_CURVE|LINE|CIRCLE|VERTEX_POINT|CARTESIAN_POINT|AXIS2_PLACEMENT_3D|PLANE|CYLINDRICAL_SURFACE|CONICAL_SURFACE|SPHERICAL_SURFACE|TOROIDAL_SURFACE|B_SPLINE_SURFACE|GEOMETRIC_CURVE_SET|SHAPE_ASPECT|COMPOSITE_SHAPE_ASPECT|DATUM_FEATURE|DATUM_TARGET|PLACED_DATUM_TARGET_FEATURE|CENTRE_OF_SYMMETRY)$/i.test(type)
     );
   };
 
   const getEntityParams = (entityId: string): string[] => {
+    const cached = entityParamsCache.get(entityId);
+    if (cached) return cached;
     const statement = entityStatements.get(entityId) || "";
     const start = statement.indexOf("(");
     const end = statement.lastIndexOf(")");
-    if (start === -1 || end === -1 || end <= start) return [];
-    return splitTopLevel(statement.slice(start + 1, end));
+    if (start === -1 || end === -1 || end <= start) {
+      entityParamsCache.set(entityId, []);
+      return [];
+    }
+    const params = splitTopLevel(statement.slice(start + 1, end));
+    entityParamsCache.set(entityId, params);
+    return params;
   };
 
   const getQuotedValues = (value: string): string[] => {
@@ -265,14 +320,32 @@ export function parseStepFile(fileName: string, text: string): StepParseResult {
   };
 
   const getUsedIn = (targetId: string, typePattern?: RegExp): string[] => {
-    const usedIn: string[] = [];
-    for (const [entityId, statement] of entityStatements.entries()) {
-      if (!statement.includes(targetId)) continue;
-      if (typePattern && !getEntityTypeNames(entityId).some((type) => typePattern.test(type))) continue;
-      usedIn.push(entityId);
+    if (!usedInIndex) {
+      usedInIndex = new Map<string, string[]>();
+      for (const entityId of entityStatements.keys()) {
+        for (const ref of getEntityRefs(entityId)) {
+          const users = usedInIndex.get(ref) || [];
+          users.push(entityId);
+          usedInIndex.set(ref, users);
+        }
+      }
     }
-    return usedIn;
+    const usedIn = usedInIndex.get(targetId) || [];
+    return typePattern
+      ? usedIn.filter((entityId) => getEntityTypeNames(entityId).some((type) => typePattern.test(type)))
+      : usedIn;
   };
+
+  for (const [entityId, statement] of entityStatements.entries()) {
+    if (!/^DRAUGHTING_MODEL_ITEM_ASSOCIATION(?:_WITH_PLACEHOLDER)?\s*\(/i.test(statement)) continue;
+    const refs = getEntityRefs(entityId);
+    const shapeAspectId = refs[0];
+    const annotationId = refs[2];
+    if (!shapeAspectId || !annotationId) continue;
+    if (!draughtingAssociations.some((assoc) => assoc.shapeAspectId === shapeAspectId && assoc.annotationId === annotationId)) {
+      draughtingAssociations.push({ shapeAspectId, annotationId });
+    }
+  }
 
   const getMeasureValue = (entityId: string): number | null => {
     const statement = entityStatements.get(entityId);
@@ -363,6 +436,21 @@ export function parseStepFile(fileName: string, text: string): StepParseResult {
   let defaultLengthScaleToMillimeters: number | null = null;
   const getDefaultLengthScaleToMillimeters = (): number => {
     if (defaultLengthScaleToMillimeters !== null) return defaultLengthScaleToMillimeters;
+
+    for (const [entityId, statement] of entityStatements.entries()) {
+      if (!/GEOMETRIC_REPRESENTATION_CONTEXT/i.test(statement) || !/GLOBAL_UNIT_ASSIGNED_CONTEXT/i.test(statement)) {
+        continue;
+      }
+
+      const refs = getEntityRefs(entityId);
+      for (const ref of refs) {
+        const scale = getLengthUnitScaleToMillimeters(ref);
+        if (scale !== null && Number.isFinite(scale)) {
+          defaultLengthScaleToMillimeters = scale;
+          return scale;
+        }
+      }
+    }
 
     for (const entityId of entityStatements.keys()) {
       const scale = getLengthUnitScaleToMillimeters(entityId);
@@ -461,6 +549,21 @@ export function parseStepFile(fileName: string, text: string): StepParseResult {
   };
 
   const entityPointCache = new Map<string, { x: number; y: number; z: number }[]>();
+  const getCoordinateListPoints = (statement: string): { x: number; y: number; z: number }[] => {
+    if (!/^COORDINATES_LIST\s*\(/i.test(statement)) return [];
+
+    const tupleStart = statement.indexOf("((");
+    if (tupleStart === -1) return [];
+
+    const values = Array.from(statement.slice(tupleStart).matchAll(/[-+]?(?:\d+\.?\d*|\.\d+)(?:[Ee][-+]?\d+)?/g))
+      .map((match) => parseFloat(match[0]));
+    const points: { x: number; y: number; z: number }[] = [];
+    for (let index = 0; index + 2 < values.length; index += 3) {
+      points.push({ x: values[index], y: values[index + 1], z: values[index + 2] });
+    }
+    return points;
+  };
+
   const getEntityCartesianPoints = (
     entityId: string,
     depth = 8,
@@ -475,6 +578,14 @@ export function parseStepFile(fileName: string, text: string): StepParseResult {
       visited.delete(entityId);
       entityPointCache.set(entityId, [directPoint]);
       return [directPoint];
+    }
+
+    const statement = entityStatements.get(entityId) || "";
+    const coordinateListPoints = getCoordinateListPoints(statement);
+    if (coordinateListPoints.length > 0) {
+      visited.delete(entityId);
+      entityPointCache.set(entityId, coordinateListPoints);
+      return coordinateListPoints;
     }
 
     const points: { x: number; y: number; z: number }[] = [];
@@ -573,28 +684,39 @@ export function parseStepFile(fileName: string, text: string): StepParseResult {
     if (!curveSetId) return null;
 
     const curveRefs = getEntityRefs(curveSetId);
-    const signature = curveRefs
+    const strokePointCounts = curveRefs
       .map((ref) => getEntityRefs(ref).length)
-      .filter((count) => count > 0)
-      .join(",");
+      .filter((count) => count > 0);
 
-    // NIST AP203 datum target labels are presentation geometry. These signatures
-    // decode the visible target labels in the CTC casting samples without using
-    // filename-specific entity overrides.
-    const targetLabelSignatures: Record<string, string> = {
-      "2,2,2,13,9,15,16,2,2": "A1",
-      "2,2,2,13,9,15,131,2,2": "A2",
-      "2,2,2,13,9,15,78,2,2": "A3",
-      "2,2,2,13,49,34,24,16,2,2": "B1",
-      "2,2,2,13,49,34,24,131,2,2": "B2",
-      "2,2,2,13,49,34,24,78,2,2": "B3",
-      "2,2,2,13,49,34,24,12,5,2,2": "B4",
-      "2,2,2,13,83,16,2,2": "C1",
-      "2,2,2,13,149,21": "C1",
-      "2,2,2,13,44,44,21": "D1"
+    while (strokePointCounts.length > 0 && strokePointCounts[0] <= 2) {
+      strokePointCounts.shift();
+    }
+    while (strokePointCounts.length > 0 && strokePointCounts[strokePointCounts.length - 1] <= 2) {
+      strokePointCounts.pop();
+    }
+
+    const letterGlyphSignatures: Record<string, string> = {
+      "13,9,15": "A",
+      "13,49,34,24": "B",
+      "13,83": "C",
+      "13,149": "C",
+      "13,44,44": "D"
+    };
+    const digitGlyphSignatures: Record<string, string> = {
+      "16": "1",
+      "21": "1",
+      "131": "2",
+      "78": "3",
+      "12,5": "4"
     };
 
-    return targetLabelSignatures[signature] || null;
+    for (let splitIndex = 1; splitIndex < strokePointCounts.length; splitIndex++) {
+      const letter = letterGlyphSignatures[strokePointCounts.slice(0, splitIndex).join(",")];
+      const digit = digitGlyphSignatures[strokePointCounts.slice(splitIndex).join(",")];
+      if (letter && digit) return `${letter}${digit}`;
+    }
+
+    return null;
   };
 
   const getDatumTargetPresentationType = (annotationId: string): string => {
@@ -743,6 +865,9 @@ export function parseStepFile(fileName: string, text: string): StepParseResult {
 
       const ap203Landing = getDatumPresentationLandingPoint(annotationId);
       if (ap203Landing) return ap203Landing;
+
+      const presentationCentroid = pointCentroid(getEntityCartesianPoints(annotationId, 8));
+      if (presentationCentroid) return presentationCentroid;
     }
 
     return null;
@@ -1393,6 +1518,33 @@ export function parseStepFile(fileName: string, text: string): StepParseResult {
     if (lineRegex.test(line)) linesCount++;
   }
 
+  const collectTopologicalFaceRefs = (
+    entityId: string,
+    depth = 0,
+    visited = new Set<string>()
+  ): string[] => {
+    if (depth > 8 || visited.has(entityId)) return [];
+    visited.add(entityId);
+
+    const refs = getEntityRefs(entityId).filter((ref) =>
+      getEntityTypeNames(ref).some((type) =>
+        /ADVANCED_FACE|FACE_SURFACE|FACE_BOUND|FACE_OUTER_BOUND|EDGE_LOOP|ORIENTED_EDGE|EDGE_CURVE|VERTEX_POINT|TRIMMED_CURVE|CIRCLE|LINE|CONIC|PLANE|CYLINDRICAL_SURFACE|CONICAL_SURFACE|SPHERICAL_SURFACE|TOROIDAL_SURFACE|B_SPLINE_SURFACE|AXIS2_PLACEMENT_3D|CARTESIAN_POINT|DIRECTION/i.test(type)
+      )
+    );
+
+    return [
+      ...refs,
+      ...refs.flatMap((ref) => collectTopologicalFaceRefs(ref, depth + 1, new Set(visited)))
+    ].filter((ref, index, all) => all.indexOf(ref) === index);
+  };
+
+  faceRecords.forEach((faceRecord) => {
+    faceRecord.referencedIds = [
+      ...faceRecord.referencedIds,
+      ...collectTopologicalFaceRefs(faceRecord.id)
+    ].filter((ref, index, all) => all.indexOf(ref) === index);
+  });
+
   const holes = cylinders.flatMap((cyl, index) => {
     const centerPointId = cyl.centerId ? axisPlacementPointIds.get(cyl.centerId) || cyl.centerId : undefined;
     const pointRef = points.find(p => p.id === centerPointId);
@@ -1529,6 +1681,37 @@ export function parseStepFile(fileName: string, text: string): StepParseResult {
     if (surfaceStatements.some((value) => /^CYLINDRICAL_SURFACE\s*\(/i.test(value))) return "cylinder";
     if (surfaceStatements.some((value) => /^(CONICAL_SURFACE|SPHERICAL_SURFACE|TOROIDAL_SURFACE|B_SPLINE_SURFACE)\s*\(/i.test(value))) return "curved";
     return "unknown";
+  };
+
+  const getOwningFaceIdsForTarget = (targetId: string): string[] => {
+    const owners = faceRecords
+      .filter((faceRecord) => faceRecord.id === targetId || faceRecord.referencedIds.includes(targetId))
+      .map((faceRecord) => faceRecord.id);
+    return owners.filter((owner, index, all) => all.indexOf(owner) === index);
+  };
+
+  const isLinearDimensionSubEntityOfSingleCurvedFace = (
+    dimensionKind: ParsedStepTolerance["dimensionKind"],
+    targetIds: string[],
+    isDatumTargetDimension = false
+  ): boolean => {
+    if (dimensionKind !== "linear" || isDatumTargetDimension || targetIds.length < 2) return false;
+
+    const ownerGroups = targetIds
+      .map(getOwningFaceIdsForTarget)
+      .filter((owners) => owners.length > 0);
+    if (ownerGroups.length < 2) return false;
+
+    const commonOwners = ownerGroups
+      .slice(1)
+      .reduce(
+        (common, owners) => common.filter((owner) => owners.includes(owner)),
+        ownerGroups[0]
+      );
+    if (commonOwners.length !== 1) return false;
+
+    const ownerSurfaceType = getTargetSurfaceType(commonOwners[0]);
+    return /cylinder|curved/i.test(ownerSurfaceType);
   };
 
   const getTargetSurfaceGeometry = (targetId: string): ParsedStepSurfaceGeometry => {
@@ -1757,7 +1940,7 @@ export function parseStepFile(fileName: string, text: string): StepParseResult {
     },
     SURFACE_PROFILE_TOLERANCE: {
       type: "Surface Profile",
-      symbol: "SURF_PROFILE",
+      symbol: "SURF_PROF",
       category: "Profile",
       clinicalContext: "Controls a three-dimensional surface boundary for fit and clearance."
     },
@@ -1787,41 +1970,106 @@ export function parseStepFile(fileName: string, text: string): StepParseResult {
     };
   };
 
+  const directShapeAspectGeometryTargetsCache = new Map<string, string[]>();
+  const shapeAspectGeometryTargetsCache = new Map<string, string[]>();
+  const expandedShapeAspectFeatureIdsCache = new Map<string, string[]>();
+  const immediateShapeAspectChildrenCache = new Map<string, string[]>();
+  const descendantShapeAspectGeometryTargetsCache = new Map<string, string[]>();
+
+  const getDirectShapeAspectGeometryTargets = (shapeAspectId: string): string[] => {
+    const cached = directShapeAspectGeometryTargetsCache.get(shapeAspectId);
+    if (cached) return cached;
+    const targets = (resolveTargetsForId(shapeAspectId) || []).filter(isGeometryTargetEntity);
+    directShapeAspectGeometryTargetsCache.set(shapeAspectId, targets);
+    return targets;
+  };
+
   const getShapeAspectGeometryTargets = (shapeAspectId: string): string[] => {
-    const directTargets = resolveTargetsForId(shapeAspectId).filter(isGeometryTargetEntity);
-    if (directTargets.length > 0) return directTargets;
+    const cached = shapeAspectGeometryTargetsCache.get(shapeAspectId);
+    if (cached) return cached;
+
+    const directTargets = getDirectShapeAspectGeometryTargets(shapeAspectId);
+    if (directTargets.length > 0) {
+      shapeAspectGeometryTargetsCache.set(shapeAspectId, directTargets);
+      return directTargets;
+    }
 
     const resolved: string[] = [];
     for (const relationshipId of getUsedIn(shapeAspectId, /SHAPE_ASPECT_RELATIONSHIP/i)) {
       for (const ref of getEntityRefs(relationshipId)) {
         if (ref === shapeAspectId) continue;
-        const targets = resolveTargetsForId(ref).filter(isGeometryTargetEntity);
+        const targets = collectShapeAspectTargets(ref).filter(isGeometryTargetEntity);
         for (const target of targets) {
           if (!resolved.includes(target)) resolved.push(target);
         }
       }
     }
+    shapeAspectGeometryTargetsCache.set(shapeAspectId, resolved);
     return resolved;
   };
 
   const uniqueGeometryTargets = (targets: string[]): string[] =>
     targets.filter((target, index, all) => isGeometryTargetEntity(target) && all.indexOf(target) === index);
 
+  const preferDatumSurfaceTargets = (targets: string[]): string[] => {
+    const surfaceTargets = targets.filter((targetId) => getTargetSurfaceType(targetId) !== "unknown");
+    return surfaceTargets.length > 0 ? surfaceTargets : targets;
+  };
+
+  const expandShapeAspectFeatureIds = (featureIds: string[]): string[] => {
+    const cacheKey = featureIds.join("|");
+    const cached = expandedShapeAspectFeatureIdsCache.get(cacheKey);
+    if (cached) return cached;
+
+    const visited = new Set<string>();
+    const queue = [...featureIds];
+
+    while (queue.length > 0) {
+      const featureId = queue.shift()!;
+      if (!featureId || visited.has(featureId)) continue;
+      visited.add(featureId);
+
+      for (const relationshipId of getUsedIn(featureId, /SHAPE_ASPECT_RELATIONSHIP/i)) {
+        for (const ref of getEntityRefs(relationshipId)) {
+          if (ref === featureId || visited.has(ref)) continue;
+          const typeNames = getEntityTypeNames(ref);
+          if (typeNames.some((type) => /SHAPE_ASPECT|DATUM_FEATURE|CENTRE_OF_SYMMETRY/i.test(type))) {
+            queue.push(ref);
+          }
+        }
+      }
+    }
+
+    const expanded = Array.from(visited);
+    expandedShapeAspectFeatureIdsCache.set(cacheKey, expanded);
+    return expanded;
+  };
+
   const getPlanarDatumFeatureKind = (featureIds: string[], targetIds: string[]): "medianPlane" | "twoFaceDimension" | undefined => {
     const planarTargets = targetIds.filter((targetId) => getTargetSurfaceType(targetId) === "plane");
     if (planarTargets.length < 2) return undefined;
 
-    const featureText = featureIds
+    const expandedFeatureIds = expandShapeAspectFeatureIds(featureIds);
+    const featureText = expandedFeatureIds
       .map((featureId) => `${getEntityTypeNames(featureId).join(" ")} ${entityStatements.get(featureId) || ""}`)
       .join(" ");
     if (/CENTRE_OF_SYMMETRY|CENTER_OF_SYMMETRY|DERIVED_SHAPE_ASPECT|MEDIAN\s+PLANE/i.test(featureText)) {
       return "medianPlane";
     }
 
+    const relationshipText = expandedFeatureIds
+      .flatMap((featureId) => getUsedIn(featureId, /SHAPE_ASPECT_RELATIONSHIP/i))
+      .filter((relationshipId, index, all) => all.indexOf(relationshipId) === index)
+      .map((relationshipId) => entityStatements.get(relationshipId) || "")
+      .join(" ");
+    if (planarTargets.length === 2 && /linear\s+dimension|dimensional\s+location/i.test(`${featureText} ${relationshipText}`)) {
+      return "twoFaceDimension";
+    }
+
     const componentAspectIds = new Set<string>();
     const planarTargetSet = new Set(planarTargets);
 
-    for (const featureId of featureIds) {
+    for (const featureId of expandedFeatureIds) {
       const featureTargets = getShapeAspectGeometryTargets(featureId);
       if (featureTargets.some((targetId) => planarTargetSet.has(targetId))) {
         componentAspectIds.add(featureId);
@@ -1858,6 +2106,162 @@ export function parseStepFile(fileName: string, text: string): StepParseResult {
     return undefined;
   };
 
+  const getExplicitMultiFaceDatumFeatureKind = (featureIds: string[], targetIds: string[]): "multiface" | undefined => {
+    if (targetIds.length <= 1) return undefined;
+    const featureText = featureIds
+      .map((featureId) => `${getEntityTypeNames(featureId).join(" ")} ${entityStatements.get(featureId) || ""}`)
+      .join(" ");
+    return /DATUM_FEATURE/i.test(featureText) &&
+      /multiple\s+elements|COMPOSITE_GROUP_SHAPE_ASPECT/i.test(featureText)
+      ? "multiface"
+      : undefined;
+  };
+
+  const getDirectDatumFeatureDimensionKind = (featureIds: string[], targetIds: string[]): "twoFaceDimension" | undefined => {
+    if (targetIds.length !== 2) return undefined;
+    const childIds = featureIds
+      .flatMap((featureId) => getImmediateShapeAspectChildren(featureId))
+      .filter((childId, index, all) => all.indexOf(childId) === index);
+    if (childIds.length < 2) return undefined;
+
+    const childSet = new Set(childIds);
+    for (const [entityId] of entityStatements.entries()) {
+      const typeNames = getEntityTypeNames(entityId);
+      if (!typeNames.some((type) => /DIMENSIONAL_LOCATION/i.test(type))) continue;
+      const relatedChildren = getEntityRefs(entityId).filter((ref, index, refs) =>
+        childSet.has(ref) && refs.indexOf(ref) === index
+      );
+      if (relatedChildren.length >= 2) return "twoFaceDimension";
+    }
+
+    return undefined;
+  };
+
+  const getDerivedDatumKind = (
+    featureIds: string[],
+    targetIds: string[]
+  ): ParsedStepDatum["derivedDatum"] => (
+    getDirectDatumFeatureDimensionKind(featureIds, targetIds) ||
+    getExplicitMultiFaceDatumFeatureKind(featureIds, targetIds) ||
+    getPlanarDatumFeatureKind(featureIds, targetIds)
+  );
+
+  const sameTargetSet = (a: string[], b: string[]) => {
+    if (a.length !== b.length) return false;
+    const bSet = new Set(b);
+    return a.every((target) => bSet.has(target));
+  };
+
+  const getImmediateShapeAspectChildren = (shapeAspectId: string): string[] => {
+    const cached = immediateShapeAspectChildrenCache.get(shapeAspectId);
+    if (cached) return cached;
+
+    const children: string[] = [];
+    for (const relationshipId of getUsedIn(shapeAspectId, /SHAPE_ASPECT_RELATIONSHIP/i)) {
+      const refs = getEntityRefs(relationshipId);
+      if (refs[0] !== shapeAspectId) continue;
+
+      for (const ref of refs.slice(1)) {
+        const typeNames = getEntityTypeNames(ref);
+        if (!typeNames.some((type) => /SHAPE_ASPECT|DATUM_FEATURE|CENTRE_OF_SYMMETRY/i.test(type))) continue;
+        if (!children.includes(ref)) children.push(ref);
+      }
+    }
+    immediateShapeAspectChildrenCache.set(shapeAspectId, children);
+    return children;
+  };
+
+  const getDescendantShapeAspectGeometryTargets = (
+    shapeAspectId: string,
+    visited = new Set<string>()
+  ): string[] => {
+    if (!shapeAspectId || visited.has(shapeAspectId)) return [];
+    const isRoot = visited.size === 0;
+    if (isRoot) {
+      const cached = descendantShapeAspectGeometryTargetsCache.get(shapeAspectId);
+      if (cached) return cached;
+    }
+    visited.add(shapeAspectId);
+
+    const targets = [...getDirectShapeAspectGeometryTargets(shapeAspectId)];
+    for (const childId of getImmediateShapeAspectChildren(shapeAspectId)) {
+      for (const target of getDescendantShapeAspectGeometryTargets(childId, visited)) {
+        if (!targets.includes(target)) targets.push(target);
+      }
+    }
+
+    if (isRoot) {
+      descendantShapeAspectGeometryTargetsCache.set(shapeAspectId, targets);
+    }
+    return targets;
+  };
+
+  const getTargetComparisonPoint = (targetId: string): { x: number; y: number; z: number } | null => {
+    const surfaceId = [targetId, ...getEntityRefs(targetId)]
+      .find((ref) => /^(PLANE|CYLINDRICAL_SURFACE|CONICAL_SURFACE|SPHERICAL_SURFACE|TOROIDAL_SURFACE|B_SPLINE_SURFACE)$/i.test(getEntityType(ref)));
+    const placementId = surfaceId
+      ? getEntityRefs(surfaceId).find((ref) => getEntityType(ref) === "AXIS2_PLACEMENT_3D")
+      : undefined;
+    const pointId = placementId
+      ? getEntityRefs(placementId).find((ref) => getEntityType(ref) === "CARTESIAN_POINT")
+      : undefined;
+    return pointId
+      ? getCartesianPoint(pointId)
+      : pointCentroid(getEntityCartesianPoints(targetId, 10));
+  };
+
+  const selectDatumTargetsFromPresentationComposite = (
+    featureIds: string[],
+    targetIds: string[],
+    presentationPoint?: { x: number; y: number; z: number } | null
+  ): string[] => {
+    if (!presentationPoint || targetIds.length < 3) return targetIds;
+    const featureText = featureIds
+      .map((featureId) => `${getEntityTypeNames(featureId).join(" ")} ${entityStatements.get(featureId) || ""}`)
+      .join(" ");
+    if (/PATTERN\s+OF\s+FEATURES/i.test(featureText)) return targetIds;
+
+    const candidateGroups = Array.from(entityStatements.keys())
+      .filter((entityId) => getEntityTypeNames(entityId).some((type) => /COMPOSITE_GROUP_SHAPE_ASPECT/i.test(type)))
+      .flatMap((entityId) => {
+        const children = getImmediateShapeAspectChildren(entityId)
+          .map((childId) => {
+            const targets = uniqueGeometryTargets(getDescendantShapeAspectGeometryTargets(childId));
+            return { childId, targets };
+          })
+          .filter((child) => child.targets.length > 0 && child.targets.length < targetIds.length);
+        const childTargetUnion = uniqueGeometryTargets(children.flatMap((child) => child.targets));
+        return sameTargetSet(childTargetUnion, targetIds) ? children : [];
+      });
+
+    const childGroups = candidateGroups;
+
+    if (childGroups.length === 0) return targetIds;
+
+    const scoredGroups = childGroups
+      .map((child, index) => {
+        const center = pointCentroid(
+          child.targets
+            .map(getTargetComparisonPoint)
+            .filter((point): point is { x: number; y: number; z: number } => !!point)
+        );
+        return center
+          ? { ...child, index, distance: squaredDistance(presentationPoint, center) }
+          : null;
+      })
+      .filter((child): child is { childId: string; targets: string[]; index: number; distance: number } => !!child)
+      .sort((a, b) => a.distance - b.distance || a.index - b.index);
+
+    const primaryGroupTargets = scoredGroups[0]?.targets || [];
+    if (primaryGroupTargets.length === 0) return targetIds;
+
+    const primaryTargetSet = new Set(primaryGroupTargets);
+    return [
+      ...primaryGroupTargets,
+      ...targetIds.filter((targetId) => !primaryTargetSet.has(targetId))
+    ];
+  };
+
   const describeDerivedDatum = (
     identifier: string,
     primaryTarget: string,
@@ -1876,7 +2280,18 @@ export function parseStepFile(fileName: string, text: string): StepParseResult {
         clinicalContext: "Datum is established by a pattern of multiple physical features that act together as one datum feature."
       };
     }
-    const planarDatumKind = getPlanarDatumFeatureKind(featureIds, targetIds);
+    const derivedDatumKind = getDerivedDatumKind(featureIds, targetIds);
+    if (derivedDatumKind === "multiface") {
+      return {
+        ...baseDescription,
+        typeStr: "Multi-face Datum Feature",
+        targetName: `Datum ${identifier} multi-face datum feature (${targetIds.length} faces: ${targetIds.join(", ")})`,
+        clinicalContext: "Datum is established by multiple physical faces declared as one STEP datum feature."
+      };
+    }
+    const planarDatumKind = derivedDatumKind === "twoFaceDimension" || derivedDatumKind === "medianPlane"
+      ? derivedDatumKind
+      : getPlanarDatumFeatureKind(featureIds, targetIds);
     if (planarDatumKind === "medianPlane") {
       return {
         ...baseDescription,
@@ -1888,9 +2303,9 @@ export function parseStepFile(fileName: string, text: string): StepParseResult {
     if (planarDatumKind === "twoFaceDimension") {
       return {
         ...baseDescription,
-        typeStr: "Two-face Datum Feature / Linear Dimension",
-        targetName: `Datum ${identifier} between ${targetIds.length} dimensioned planar faces (${targetIds.join(", ")})`,
-        clinicalContext: "Datum is associated to two physical planar faces connected by a STEP dimensional location."
+        typeStr: "Mid-dimension Datum Feature",
+        targetName: `Datum ${identifier} mid-dimension between ${targetIds.length} planar faces (${targetIds.join(", ")})`,
+        clinicalContext: "Datum is established midway between two physical planar faces connected by a STEP dimensional location."
       };
     }
     return baseDescription;
@@ -1965,6 +2380,7 @@ export function parseStepFile(fileName: string, text: string): StepParseResult {
     targetLine?: ParsedStepDatumTarget["targetLine"];
     targetCircle?: ParsedStepDatumTarget["targetCircle"];
     targetZone?: ParsedStepDatumTarget["targetZone"];
+    sizeLabels?: string[];
   } | null => {
     for (const propertyId of getUsedIn(datumTargetId, /PROPERTY_DEFINITION/i)) {
       for (const representationLinkId of getUsedIn(propertyId, /SHAPE_DEFINITION_REPRESENTATION/i)) {
@@ -1989,6 +2405,14 @@ export function parseStepFile(fileName: string, text: string): StepParseResult {
             }
           : undefined;
 
+        const rawMeasureForLabel = (labelPattern: RegExp): number | null => {
+          for (const ref of getEntityRefs(representationId)) {
+            const statement = entityStatements.get(ref) || "";
+            if (!labelPattern.test(statement)) continue;
+            return getMeasureValue(ref);
+          }
+          return null;
+        };
         const measureForLabel = (labelPattern: RegExp): number | null => {
           for (const ref of getEntityRefs(representationId)) {
             const statement = entityStatements.get(ref) || "";
@@ -2021,6 +2445,11 @@ export function parseStepFile(fileName: string, text: string): StepParseResult {
         const width = measureForLabel(/target\s+width/i);
         const targetLength = measureForLabel(/target\s+length/i);
         const targetDiameter = measureForLabel(/target\s+diameter/i);
+        const rawWidth = rawMeasureForLabel(/target\s+width/i);
+        const rawLength = rawMeasureForLabel(/target\s+length/i);
+        const sizeLabels = [rawWidth, rawLength]
+          .filter((value): value is number => Number.isFinite(value))
+          .map((value) => `[${value.toFixed(3)}]`);
         const normalizedTargetKind = (targetKind || "").toLowerCase();
         const targetLine = targetPoint && placementXDirection && targetLength && /^(line|curve)$/.test(normalizedTargetKind)
           ? {
@@ -2058,7 +2487,8 @@ export function parseStepFile(fileName: string, text: string): StepParseResult {
           targetPoint,
           targetLine,
           targetCircle,
-          targetZone
+          targetZone,
+          sizeLabels
         };
       }
     }
@@ -2075,18 +2505,19 @@ export function parseStepFile(fileName: string, text: string): StepParseResult {
       const identifier = getDatumIdentifier(entityId) || `D${datums.length + 1}`;
 
       const featureIds = getSemanticDatumFeatureIds(entityId);
-      const targetIds = uniqueGeometryTargets(featureIds.flatMap(getShapeAspectGeometryTargets));
+      let targetIds = preferDatumSurfaceTargets(uniqueGeometryTargets(featureIds.flatMap(getShapeAspectGeometryTargets)));
       if (targetIds.length === 0) {
         for (const ref of getEntityRefs(entityId).filter(isGeometryTargetEntity)) {
           if (!targetIds.includes(ref)) targetIds.push(ref);
         }
       }
 
-      const primaryTarget = targetIds[0] || "";
       const presentationTargetPoint = [entityId, ...featureIds]
         .map(getPresentationLandingPointForShapeAspect)
         .find((point): point is { x: number; y: number; z: number } => !!point) ||
         getDatumPresentationLandingPointByIdentifier(identifier);
+      targetIds = preferDatumSurfaceTargets(selectDatumTargetsFromPresentationComposite(featureIds, targetIds, presentationTargetPoint));
+      const primaryTarget = targetIds[0] || "";
       const description = primaryTarget
         ? describeDerivedDatum(identifier, primaryTarget, targetIds, featureIds)
         : {
@@ -2108,7 +2539,7 @@ export function parseStepFile(fileName: string, text: string): StepParseResult {
         semanticTargetIds: targetIds,
         presentationTargetPoint,
         targetSource: "semantic",
-        derivedDatum: getPlanarDatumFeatureKind(featureIds, targetIds),
+        derivedDatum: getDerivedDatumKind(featureIds, targetIds),
         targetName: targetIds.length > 1
           ? description.targetName
           : description.targetName,
@@ -2217,6 +2648,7 @@ export function parseStepFile(fileName: string, text: string): StepParseResult {
         targetCircle: targetCurve ? undefined : representationTarget?.targetCircle,
         targetCurve,
         targetZone: representationTarget?.targetZone,
+        sizeLabels: representationTarget?.sizeLabels,
         clinicalContext: "Datum target resolved from semantic PMI datum_target or placed_datum_target_feature relationships."
       });
     }
@@ -2274,6 +2706,1603 @@ export function parseStepFile(fileName: string, text: string): StepParseResult {
     }
 
     return tolerances;
+  };
+
+  const buildAp242DimensionalTolerances = (): ParsedStepTolerance[] => {
+    const tolerances: ParsedStepTolerance[] = [];
+
+    const getDimensionKind = (dimensionEntityId: string): ParsedStepTolerance["dimensionKind"] => {
+      const typeNames = getEntityTypeNames(dimensionEntityId).join(" ");
+      const textValue = `${typeNames} ${entityStatements.get(dimensionEntityId) || ""}`;
+      if (/ANGULAR_LOCATION|ANGULAR_SIZE/i.test(textValue)) return "angular";
+      if (/DIMENSIONAL_LOCATION/i.test(textValue)) return "linear";
+      if (/diameter/i.test(textValue)) return "diameter";
+      if (/radius/i.test(textValue)) return "radius";
+      if (/DIMENSIONAL_SIZE/i.test(textValue)) return "size";
+      return "linear";
+    };
+
+    const isSphericalDimension = (dimensionEntityId: string): boolean =>
+      /spherical\s+(diameter|radius)/i.test(entityStatements.get(dimensionEntityId) || "");
+
+    const getDimensionShapeAspectRefs = (dimensionEntityId: string): string[] =>
+      getEntityRefs(dimensionEntityId)
+        .filter((ref) => getEntityTypeNames(ref).some((type) => /SHAPE_ASPECT|COMPOSITE_SHAPE_ASPECT|DATUM_FEATURE|CENTRE_OF_SYMMETRY/i.test(type)));
+
+    const getDimensionChildTargetGroups = (dimensionEntityId: string): string[][] => {
+      return getDimensionShapeAspectRefs(dimensionEntityId)
+        .filter((ref) => /multiple\s+elements|pattern|repeated/i.test(getQuotedValues(entityStatements.get(ref) || "").join(" ")))
+        .flatMap((ref) => getImmediateShapeAspectChildren(ref))
+        .map((childId) => uniqueGeometryTargets(getDescendantShapeAspectGeometryTargets(childId)))
+        .filter((targets) => targets.length > 0);
+    };
+
+    const isDatumDimensionTarget = (targetId: string) =>
+      parsedDatums.some((datum) =>
+        datum.targetId === targetId ||
+        (Array.isArray(datum.targetIds) && datum.targetIds.includes(targetId))
+      ) ||
+      getUsedIn(targetId, /GEOMETRIC_ITEM_SPECIFIC_USAGE/i)
+        .some((usageId) => /'DATUM'/i.test(entityStatements.get(usageId) || ""));
+
+    const roundedKeyValue = (value: number): string =>
+      Number.isFinite(value) ? value.toFixed(6) : "nan";
+
+    const vectorKey = (vector: { x: number; y: number; z: number } | null | undefined): string =>
+      vector
+        ? `${roundedKeyValue(vector.x)},${roundedKeyValue(vector.y)},${roundedKeyValue(vector.z)}`
+        : "unknown";
+
+    const getSurfaceNumericParameters = (surfaceId: string): number[] =>
+      getEntityParams(surfaceId)
+        .slice()
+        .reverse()
+        .join(",")
+        .replace(/#\d+/g, "")
+        .match(/[-+]?(?:\d+\.\d+|\d+|\.\d+)(?:[Ee][-+]?\d+)?/g)
+        ?.map(Number)
+        .filter(Number.isFinite) || [];
+
+    const getCylindricalSurfaceRadius = (surfaceId: string): number | null => {
+      const radiusMatch = getEntityParams(surfaceId)
+        .slice()
+        .reverse()
+        .join(",")
+        .replace(/#\d+/g, "")
+        .match(/[-+]?(?:\d+\.\d+|\d+|\.\d+)(?:[Ee][-+]?\d+)?/);
+      const radius = radiusMatch ? Number(radiusMatch[0]) : null;
+      return Number.isFinite(radius) ? radius : null;
+    };
+
+    const getPrimarySurfaceIdForTarget = (targetId: string): string | undefined =>
+      [targetId, ...getEntityRefs(targetId)]
+        .find((ref) => /^(PLANE|CYLINDRICAL_SURFACE|CONICAL_SURFACE|SPHERICAL_SURFACE|TOROIDAL_SURFACE|B_SPLINE_SURFACE)$/i.test(getEntityType(ref)));
+
+    const getCircularCurveFeatureKey = (targetId: string): string | null => {
+      const circleId = [targetId, ...getEntityRefs(targetId)]
+        .find((ref) => getEntityType(ref) === "CIRCLE");
+      if (!circleId) return null;
+      const placementId = getEntityRefs(circleId)
+        .find((ref) => getEntityType(ref) === "AXIS2_PLACEMENT_3D");
+      const placementRefs = placementId ? getEntityRefs(placementId) : [];
+      const point = placementRefs[0] ? getCartesianPoint(placementRefs[0]) : null;
+      const radius = getSurfaceNumericParameters(circleId).slice(-1)[0];
+      return [
+        "circular-curve",
+        vectorKey(point),
+        Number.isFinite(radius) ? roundedKeyValue(radius) : "unknown"
+      ].join("|");
+    };
+
+    const getRepeatedElementFeatureKey = (targetIds: string[]): string => {
+      const targetKeys = targetIds.map((targetId) => {
+        const cylindricalSurfaceId = [targetId, ...getEntityRefs(targetId)]
+          .find((ref) => getEntityType(ref) === "CYLINDRICAL_SURFACE");
+        if (cylindricalSurfaceId) {
+          const placementId = getEntityRefs(cylindricalSurfaceId)
+            .find((ref) => getEntityType(ref) === "AXIS2_PLACEMENT_3D");
+          const placementRefs = placementId ? getEntityRefs(placementId) : [];
+          const point = placementRefs[0] ? getCartesianPoint(placementRefs[0]) : null;
+          const axis = placementRefs[1] ? getDirection(placementRefs[1]) : null;
+          const radius = getCylindricalSurfaceRadius(cylindricalSurfaceId);
+          return [
+            "cylinder",
+            vectorKey(point),
+            vectorKey(axis),
+            radius !== null ? roundedKeyValue(radius) : "unknown"
+          ].join("|");
+        }
+
+        const surfaceId = getPrimarySurfaceIdForTarget(targetId);
+        const surfaceType = surfaceId ? getEntityType(surfaceId) : getTargetSurfaceType(targetId);
+        if (/TOROIDAL_SURFACE/i.test(surfaceType)) {
+          const point = getTargetComparisonPoint(targetId);
+          return [
+            "toroidal-radius-site",
+            vectorKey(point),
+            ...getSurfaceNumericParameters(surfaceId || targetId).map(roundedKeyValue)
+          ].join("|");
+        }
+
+        const circularCurveKey = getCircularCurveFeatureKey(targetId);
+        if (circularCurveKey) return circularCurveKey;
+
+        const point = getTargetComparisonPoint(targetId);
+        return [
+          getTargetSurfaceType(targetId),
+          vectorKey(point),
+          targetId
+        ].join("|");
+      });
+
+      return targetKeys
+        .filter((key, index, all) => all.indexOf(key) === index)
+        .sort()
+        .join(";");
+    };
+
+    const getCompositeRepeatedElementCount = (childTargetGroups: string[][]): number => {
+      const elementKeys = childTargetGroups
+        .map((targets) => getRepeatedElementFeatureKey(targets))
+        .filter(Boolean)
+        .filter((key, index, all) => all.indexOf(key) === index);
+      return elementKeys.length;
+    };
+
+    const isSingleCircularCurveCompositeDimension = (dimensionEntityId: string): boolean => {
+      const childTargetGroups = getDimensionChildTargetGroups(dimensionEntityId);
+      const rawCircularKeys = resolveDimensionRawTargets(dimensionEntityId)
+        .map(getCircularCurveFeatureKey)
+        .filter((key): key is string => !!key);
+      if (
+        rawCircularKeys.length >= 2 &&
+        rawCircularKeys.filter((key, index, all) => all.indexOf(key) === index).length === 1
+      ) {
+        return true;
+      }
+
+      if (childTargetGroups.length < 2) return false;
+      const curveKeys = childTargetGroups
+        .map((targets) => targets.map(getCircularCurveFeatureKey).filter((key): key is string => !!key))
+        .filter((keys) => keys.length > 0)
+        .map((keys) => keys[0]);
+      return curveKeys.length === childTargetGroups.length &&
+        curveKeys.filter((key, index, all) => all.indexOf(key) === index).length === 1;
+    };
+
+    const getSphericalRepeatedElementCount = (targetIds: string[]): number => {
+      const centerKeys = targetIds
+        .map((targetId) => getTargetSurfaceGeometry(targetId))
+        .filter((geometry) => geometry.surfaceType === "curved" && geometry.point)
+        .map((geometry) => `${roundedKeyValue(geometry.point!.x)},${roundedKeyValue(geometry.point!.y)},${roundedKeyValue(geometry.point!.z)}`)
+        .filter((key, index, all) => all.indexOf(key) === index);
+      return centerKeys.length;
+    };
+
+    const reduceCompositeSizeDimensionTargets = (dimensionEntityId: string, targetIds: string[]): string[] => {
+      if (!getEntityTypeNames(dimensionEntityId).some((type) => /DIMENSIONAL_SIZE/i.test(type))) return targetIds;
+      const childTargetGroups = getDimensionChildTargetGroups(dimensionEntityId);
+      if (childTargetGroups.length < 3) return targetIds;
+
+      const datumGroupIndex = childTargetGroups.findIndex((targets) => targets.some(isDatumDimensionTarget));
+      if (datumGroupIndex < 0) return targetIds;
+
+      const datumTarget = childTargetGroups[datumGroupIndex].find(isDatumDimensionTarget) || childTargetGroups[datumGroupIndex][0];
+      const pairedCandidates = childTargetGroups
+        .flat()
+        .filter((targetId) => targetId !== datumTarget && !isDatumDimensionTarget(targetId))
+        .filter((targetId, index, all) => all.indexOf(targetId) === index)
+        .sort((a, b) => {
+          const aNumber = Number(a.replace(/^#/, ""));
+          const bNumber = Number(b.replace(/^#/, ""));
+          return (Number.isFinite(aNumber) ? aNumber : 0) - (Number.isFinite(bNumber) ? bNumber : 0);
+        });
+      const pairedTarget = pairedCandidates[Math.floor(pairedCandidates.length / 2)];
+      return pairedTarget ? uniqueGeometryTargets([datumTarget, pairedTarget]) : targetIds;
+    };
+
+    const preferDistinctOwningFacesForDimensionTargets = (targetIds: string[]): string[] => {
+      const ownerGroups = targetIds
+        .map((targetId) => faceRecords.filter((faceRecord) => faceRecord.referencedIds.includes(targetId)).map((faceRecord) => faceRecord.id))
+        .filter((owners) => owners.length > 0);
+      if (ownerGroups.length < 2) return targetIds;
+
+      const commonOwners = ownerGroups
+        .slice(1)
+        .reduce(
+          (common, owners) => common.filter((owner) => owners.includes(owner)),
+          ownerGroups[0]
+        );
+      const selectedOwners = ownerGroups
+        .map((owners) => owners.find((owner) => !commonOwners.includes(owner)) || owners[0])
+        .filter((owner, index, all) => all.indexOf(owner) === index);
+
+      return selectedOwners.length >= 2 ? selectedOwners : targetIds;
+    };
+
+    const resolveDimensionRawTargets = (dimensionEntityId: string): string[] => {
+      const refs = getEntityRefs(dimensionEntityId);
+      const shapeAspectRefs = getDimensionShapeAspectRefs(dimensionEntityId);
+      const directTargets = refs.filter(isGeometryTargetEntity);
+      return uniqueGeometryTargets([
+        ...directTargets,
+        ...shapeAspectRefs.flatMap((ref) => [
+          ...getShapeAspectGeometryTargets(ref),
+          ...getDescendantShapeAspectGeometryTargets(ref)
+        ])
+      ]);
+    };
+
+    const resolveDimensionTargets = (dimensionEntityId: string): string[] => {
+      const targetIds = resolveDimensionRawTargets(dimensionEntityId);
+      const reducedTargets = reduceCompositeSizeDimensionTargets(dimensionEntityId, preferDatumSurfaceTargets(targetIds));
+      return preferDistinctOwningFacesForDimensionTargets(reducedTargets);
+    };
+
+    const isSingleCircularCurveTargetSet = (targetIds: string[]): boolean => {
+      const circularKeys = targetIds
+        .map(getCircularCurveFeatureKey)
+        .filter((key): key is string => !!key);
+      return circularKeys.length >= 2 &&
+        circularKeys.filter((key, index, all) => all.indexOf(key) === index).length === 1;
+    };
+
+    const getToleranceValueBounds = (toleranceValueId: string): { lower: number | null; upper: number | null } => {
+      const values = getEntityRefs(toleranceValueId)
+        .map(getMeasureValue)
+        .filter((value): value is number => value !== null && Number.isFinite(value));
+      if (values.length === 0) return { lower: null, upper: null };
+      return {
+        lower: Math.min(...values),
+        upper: Math.max(...values)
+      };
+    };
+
+    const getDimensionRepresentationValues = (dimensionEntityId: string): {
+      nominal: number | null;
+      lowerLimit: number | null;
+      upperLimit: number | null;
+      notes: string[];
+    } => {
+      let nominal: number | null = null;
+      let lowerLimit: number | null = null;
+      let upperLimit: number | null = null;
+      const notes: string[] = [];
+      const getRepresentationNotes = (entityId: string, depth = 0, visited = new Set<string>()): string[] => {
+        if (depth > 4 || visited.has(entityId)) return [];
+        visited.add(entityId);
+        const directNotes = getEntityTypeNames(entityId).some((type) => /DESCRIPTIVE_REPRESENTATION_ITEM/i.test(type))
+          ? getQuotedValues(entityStatements.get(entityId) || "")
+              .filter((value) => /theoretical|auxiliary|reference|basic|statistical|controlled\s+radius/i.test(value))
+          : [];
+        return [
+          ...directNotes,
+          ...getEntityRefs(entityId).flatMap((ref) => getRepresentationNotes(ref, depth + 1, new Set(visited)))
+        ].filter((value, index, all) => all.indexOf(value) === index);
+      };
+      for (const relationshipId of getUsedIn(dimensionEntityId, /DIMENSIONAL_CHARACTERISTIC_REPRESENTATION/i)) {
+        const representationIds = getEntityRefs(relationshipId)
+          .filter((ref) => getEntityTypeNames(ref).some((type) => /SHAPE_DIMENSION_REPRESENTATION|REPRESENTATION/i.test(type)));
+        for (const representationId of representationIds) {
+          const representationNotes = getRepresentationNotes(representationId);
+          representationNotes.forEach((note) => {
+            if (!notes.includes(note)) notes.push(note);
+          });
+          const measureRefs = getEntityRefs(representationId)
+            .filter((ref) => getEntityTypeNames(ref).some((type) => /MEASURE_WITH_UNIT|LENGTH_MEASURE_WITH_UNIT|PLANE_ANGLE_MEASURE_WITH_UNIT/i.test(type)));
+          for (const measureRef of measureRefs) {
+            const labels = getQuotedValues(entityStatements.get(measureRef) || "");
+            const value = getMeasureValue(measureRef);
+            if (value === null) continue;
+            if (labels.some((label) => /nominal\s+value/i.test(label))) nominal = value;
+            else if (labels.some((label) => /lower\s+limit|lsl/i.test(label))) lowerLimit = value;
+            else if (labels.some((label) => /upper\s+limit|usl/i.test(label))) upperLimit = value;
+            else if (nominal === null) nominal = value;
+          }
+        }
+      }
+      return { nominal, lowerLimit, upperLimit, notes };
+    };
+
+    const getNominalDimensionValue = (dimensionEntityId: string): number | null => {
+      return getDimensionRepresentationValues(dimensionEntityId).nominal;
+    };
+
+    const normalizePresentationText = (value: string): string =>
+      value
+        .replace(/\\X2\\[0-9A-F]+\\X0\\/gi, " ")
+        .replace(/\\X\\[0-9A-F]+/gi, " ")
+        .replace(/<!SYM=[^>]*>/gi, " ")
+        .replace(/\\[wnxu]/gi, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+
+    const parseDimensionLimitRangeText = (value: string): {
+      lowerLimit: number;
+      upperLimit: number;
+      preModifier?: string;
+    } | undefined => {
+      const normalized = normalizePresentationText(value);
+      const match = normalized.match(/(?:^|[^A-Z0-9])((?:\d{1,3}\s*X|X\s*\d{1,3})\s+)?R\s*([+-]?(?:\d+\.\d+|\d+|\.\d+))\s*-\s*([+-]?(?:\d+\.\d+|\d+|\.\d+))/i);
+      if (!match) return undefined;
+      const lowerLimit = Number(match[2]);
+      const upperLimit = Number(match[3]);
+      if (!Number.isFinite(lowerLimit) || !Number.isFinite(upperLimit)) return undefined;
+      const preModifier = getLiteralDimensionMultiplier(match[1] || "");
+      return {
+        lowerLimit: Math.min(lowerLimit, upperLimit),
+        upperLimit: Math.max(lowerLimit, upperLimit),
+        preModifier
+      };
+    };
+
+    const getDimensionLimitRangeCallout = (
+      texts: string[],
+      dimensionKind: string | undefined
+    ): ReturnType<typeof parseDimensionLimitRangeText> => {
+      if (dimensionKind !== "radius") return undefined;
+      return texts.map(parseDimensionLimitRangeText).find((item): item is NonNullable<typeof item> => !!item);
+    };
+
+    const getDimensionLimitNote = (texts: string[]): string | undefined => {
+      const candidates = texts
+        .map(normalizePresentationText)
+        .map((textValue) => textValue.replace(/\\/g, " ").replace(/\s+/g, " ").trim())
+        .map((textValue) => textValue.replace(/^TXT\s+/i, "").trim())
+        .filter(Boolean)
+        .filter((textValue) => !/^Text(?:\.\d+)?$/i.test(textValue))
+        .filter((textValue) => !/\bDIM\b/i.test(textValue))
+        .filter((textValue) => /\b(?:INNER|OUTER|RADIUS|RADII|GROOVE)\b/i.test(textValue))
+        .filter((textValue, index, all) => all.indexOf(textValue) === index)
+        .sort((a, b) => b.length - a.length);
+      return candidates[0];
+    };
+
+    const getLiteralDimensionMultiplier = (value: string): string | undefined => {
+      const rawMatch = value.match(/DIM\s*\\+w\s*(\d{1,3})\s*X/i);
+      if (rawMatch) {
+        const rawCount = Number(rawMatch[1]);
+        if (Number.isFinite(rawCount) && rawCount > 1) return `${rawCount}X`;
+      }
+      const normalized = normalizePresentationText(value);
+      const match = normalized.match(/(?:^|[^A-Z0-9\\])(?:X\s*(\d{1,3})|(\d{1,3})\s*X)(?=[^A-Z0-9]|$)/i);
+      if (!match) return undefined;
+      const count = Number(match[1] || match[2]);
+      return Number.isFinite(count) && count > 1 ? `${count}X` : undefined;
+    };
+
+    const normalizeThreadDesignation = (value: string): string | undefined => {
+      const normalized = normalizePresentationText(value)
+        .replace(/\s*-\s*/g, "-")
+        .trim();
+      const match = normalized.match(/\bM\s*(\d+(?:\.\d+)?)\s*[xX]\s*(\d+(?:\.\d+)?)\s*-\s*([0-9]+[A-Z])\b/i);
+      if (!match) return undefined;
+      return `M${match[1]}x${match[2]}-${match[3].toUpperCase()}`;
+    };
+
+    const getAnnotationPlaneFrame = (annotationId: string): {
+      point: { x: number; y: number; z: number } | null;
+      normal: { x: number; y: number; z: number } | null;
+    } | null => {
+      const annotationPlaneId = getUsedIn(annotationId, /ANNOTATION_PLANE/i)[0];
+      const planeId = annotationPlaneId
+        ? getEntityRefs(annotationPlaneId).find((ref) => getEntityType(ref) === "PLANE")
+        : undefined;
+      const placementId = planeId
+        ? getEntityRefs(planeId).find((ref) => getEntityType(ref) === "AXIS2_PLACEMENT_3D")
+        : undefined;
+      if (!placementId) return null;
+      const refs = getEntityRefs(placementId);
+      return {
+        point: refs[0] ? getCartesianPoint(refs[0]) : null,
+        normal: refs[1] ? getDirection(refs[1]) : null
+      };
+    };
+
+    const squaredFrameDistance = (
+      a: ReturnType<typeof getAnnotationPlaneFrame>,
+      b: ReturnType<typeof getAnnotationPlaneFrame>
+    ): number => {
+      if (!a?.point || !b?.point) return Number.POSITIVE_INFINITY;
+      const dx = a.point.x - b.point.x;
+      const dy = a.point.y - b.point.y;
+      const dz = a.point.z - b.point.z;
+      const normalPenalty = a.normal && b.normal
+        ? Math.max(0, 1 - Math.abs(a.normal.x * b.normal.x + a.normal.y * b.normal.y + a.normal.z * b.normal.z)) * 1e6
+        : 0;
+      return dx * dx + dy * dy + dz * dz + normalPenalty;
+    };
+
+    const getThreadDesignationForDepthCallout = (
+      linkedAnnotationIds: string[],
+      dimensionPreModifier?: string
+    ): { designation: string; targetIds: string[] } | undefined => {
+      const depthFrames = linkedAnnotationIds
+        .map(getAnnotationPlaneFrame)
+        .filter((frame): frame is NonNullable<typeof frame> => !!frame?.point);
+      if (depthFrames.length === 0) return undefined;
+
+      const candidates = [...entityStatements.entries()]
+        .filter(([, statement]) => /^DRAUGHTING_CALLOUT\s*\(/i.test(statement))
+        .flatMap(([annotationId]) => {
+          const texts = getCalloutValidationPresentationTexts([annotationId]);
+          const designation = texts.map(normalizeThreadDesignation).find((item): item is string => !!item);
+          if (!designation) return [];
+          const modifier = texts.map(getLiteralDimensionMultiplier).find((item): item is string => !!item);
+          if (dimensionPreModifier && modifier && modifier !== dimensionPreModifier) return [];
+          const frame = getAnnotationPlaneFrame(annotationId);
+          if (!frame?.point) return [];
+          const distance = Math.min(...depthFrames.map((depthFrame) => squaredFrameDistance(depthFrame, frame)));
+          const dimensionIds = getUsedIn(annotationId, /DRAUGHTING_MODEL_ITEM_ASSOCIATION/i)
+            .map((associationId) => getEntityRefs(associationId)[0])
+            .filter((ref): ref is string => !!ref)
+            .filter((ref, index, all) => all.indexOf(ref) === index)
+            .filter((ref) => getEntityTypeNames(ref).some((type) => /DIMENSIONAL_SIZE|DIMENSIONAL_LOCATION|ANGULAR_LOCATION/i.test(type)));
+          const targetIds = resolveThreadCylinderFaceTargets(uniqueGeometryTargets(dimensionIds.flatMap(resolveDimensionTargets)));
+          return [{ designation, modifier, distance, targetIds }];
+        })
+        .sort((a, b) => a.distance - b.distance);
+
+      return candidates[0]
+        ? { designation: candidates[0].designation, targetIds: candidates[0].targetIds }
+        : undefined;
+    };
+
+    const getCylinderSurfaceFrame = (targetId: string): { point: { x: number; y: number; z: number }; axis: { x: number; y: number; z: number }; radius: number } | null => {
+      const surfaceId = [targetId, ...getEntityRefs(targetId)]
+        .find((ref) => getEntityType(ref) === "CYLINDRICAL_SURFACE");
+      if (!surfaceId) return null;
+      const surfaceStatement = entityStatements.get(surfaceId) || "";
+      const radiusMatch = getEntityParams(surfaceId)
+        .slice()
+        .reverse()
+        .join(",")
+        .replace(/#\d+/g, "")
+        .match(/[-+]?(?:\d+\.\d+|\d+|\.\d+)(?:[Ee][-+]?\d+)?/);
+      const radius = radiusMatch ? Number(radiusMatch[0]) : null;
+      const placementId = getEntityRefs(surfaceId).find((ref) => getEntityType(ref) === "AXIS2_PLACEMENT_3D");
+      const placementRefs = placementId ? getEntityRefs(placementId) : [];
+      const point = placementRefs[0] ? getCartesianPoint(placementRefs[0]) : null;
+      const axis = placementRefs[1] ? getDirection(placementRefs[1]) : null;
+      if (!point || !axis || radius === null || !Number.isFinite(radius)) return null;
+      if (!/CYLINDRICAL_SURFACE/i.test(surfaceStatement)) return null;
+      return { point, axis, radius };
+    };
+
+    const distancePointToCylinderSurface = (
+      point: { x: number; y: number; z: number },
+      cylinder: { point: { x: number; y: number; z: number }; axis: { x: number; y: number; z: number }; radius: number }
+    ) => {
+      const dx = point.x - cylinder.point.x;
+      const dy = point.y - cylinder.point.y;
+      const dz = point.z - cylinder.point.z;
+      const axisLength = Math.hypot(cylinder.axis.x, cylinder.axis.y, cylinder.axis.z) || 1;
+      const ax = cylinder.axis.x / axisLength;
+      const ay = cylinder.axis.y / axisLength;
+      const az = cylinder.axis.z / axisLength;
+      const axial = dx * ax + dy * ay + dz * az;
+      const radialX = dx - axial * ax;
+      const radialY = dy - axial * ay;
+      const radialZ = dz - axial * az;
+      return Math.abs(Math.hypot(radialX, radialY, radialZ) - cylinder.radius);
+    };
+
+    const resolveThreadCylinderFaceTargets = (targetIds: string[]): string[] => {
+      const threadTargets = targetIds.filter((targetId) => /thread\s+cylinder/i.test(entityStatements.get(targetId) || ""));
+      if (threadTargets.length === 0) return [];
+
+      const cylinderFaces = faceRecords
+        .map((face) => ({ id: face.id, frame: getCylinderSurfaceFrame(face.id) }))
+        .filter((face): face is { id: string; frame: NonNullable<ReturnType<typeof getCylinderSurfaceFrame>> } => !!face.frame);
+
+      return threadTargets
+        .map((targetId) => {
+          const points = getEntityCartesianPoints(targetId, 6);
+          if (points.length === 0 || cylinderFaces.length === 0) return null;
+          return cylinderFaces
+            .map((face) => ({
+              id: face.id,
+              score: points.reduce((sum, point) => sum + distancePointToCylinderSurface(point, face.frame), 0) / points.length
+            }))
+            .sort((a, b) => a.score - b.score)[0]?.id || null;
+        })
+        .filter((targetId): targetId is string => !!targetId)
+        .filter((targetId, index, all) => all.indexOf(targetId) === index);
+    };
+
+    const hasThreadPlaneShapeAspect = (shapeAspectIds: string[]): boolean => {
+      const queue = shapeAspectIds.map((entityId) => ({ entityId, depth: 0 }));
+      const visited = new Set<string>();
+      while (queue.length > 0) {
+        const current = queue.shift()!;
+        if (current.depth > 5 || visited.has(current.entityId)) continue;
+        visited.add(current.entityId);
+        const statement = entityStatements.get(current.entityId) || "";
+        if (/thread/i.test(statement)) return true;
+        const neighbors = [
+          ...getEntityRefs(current.entityId),
+          ...getUsedIn(current.entityId)
+        ].filter((ref) =>
+          getEntityTypeNames(ref).some((type) =>
+            /SHAPE_ASPECT|GEOMETRIC_ITEM_SPECIFIC_USAGE|GEOMETRIC_CURVE_SET|REPRESENTATION|PROPERTY_DEFINITION/i.test(type)
+          )
+        );
+        neighbors.forEach((ref) => {
+          if (!visited.has(ref)) queue.push({ entityId: ref, depth: current.depth + 1 });
+        });
+      }
+      return false;
+    };
+
+    const presentationTextMatchesNominal = (textValue: string, nominal: number) => {
+      const withoutMultiplier = normalizePresentationText(textValue)
+        .replace(/(?:^|[^A-Z0-9\\])(?:X\s*\d{1,3}|\d{1,3}\s*X)(?=[^A-Z0-9]|$)/gi, " ");
+      const values = withoutMultiplier
+        .match(/[-+]?(?:\d+\.\d+|\d+|\.\d+)/g)
+        ?.map(Number)
+        .filter(Number.isFinite) || [];
+      return values.some((value) => Math.abs(value - nominal) <= Math.max(Math.abs(nominal) * 0.002, 0.01));
+    };
+
+    const dimensionPresentationTextCache = new Map<string, string[]>();
+    const getPresentationTextsForEntity = (
+      entityId: string,
+      depth = 8,
+      visited = new Set<string>()
+    ): string[] => {
+      const cacheKey = `${entityId}:${depth}`;
+      const cached = dimensionPresentationTextCache.get(cacheKey);
+      if (cached) return cached;
+      if (depth < 0 || visited.has(entityId)) return [];
+      visited.add(entityId);
+      const statement = entityStatements.get(entityId) || "";
+      const nearbyUsedIn = getUsedIn(entityId).filter((ref) =>
+        getEntityTypeNames(ref).some((type) =>
+          /ANNOTATION_PLANE|CHARACTERIZED_ITEM_WITHIN_REPRESENTATION|PROPERTY_DEFINITION|PROPERTY_DEFINITION_REPRESENTATION|REPRESENTATION|DRAUGHTING_CALLOUT/i.test(type)
+        )
+      );
+      const nearbyRefs = getEntityRefs(entityId).filter((ref) =>
+        !getEntityTypeNames(ref).some((type) =>
+          /DRAUGHTING_MODEL|GEOMETRIC_REPRESENTATION_CONTEXT|GLOBAL_UNIT_ASSIGNED_CONTEXT|PRODUCT_DEFINITION/i.test(type)
+        )
+      );
+      const texts = [
+        ...getQuotedValues(statement),
+        ...nearbyRefs.flatMap((ref) => getPresentationTextsForEntity(ref, depth - 1, new Set(visited))),
+        ...nearbyUsedIn.flatMap((ref) => getPresentationTextsForEntity(ref, depth - 1, new Set(visited)))
+      ];
+      const uniqueTexts = texts
+        .map(normalizePresentationText)
+        .filter(Boolean)
+        .filter((item, index, all) => all.indexOf(item) === index);
+      dimensionPresentationTextCache.set(cacheKey, uniqueTexts);
+      return uniqueTexts;
+    };
+
+    const getBoundedPresentationTexts = (seedIds: string[], maxDepth = 6): string[] => {
+      const queue = seedIds.map((entityId) => ({ entityId, depth: 0 }));
+      const visited = new Set<string>();
+      const texts: string[] = [];
+      const isPresentationNeighborhoodEntity = (entityId: string) => {
+        const statement = entityStatements.get(entityId) || "";
+        return /DESCRIPTIVE_REPRESENTATION_ITEM|REPRESENTATION|PROPERTY_DEFINITION|CHARACTERIZED_ITEM_WITHIN_REPRESENTATION|DRAUGHTING_CALLOUT|ANNOTATION_PLANE|ANNOTATION_PLACEHOLDER_OCCURRENCE|DRAUGHTING_MODEL_ITEM_ASSOCIATION/i.test(statement);
+      };
+
+      while (queue.length > 0) {
+        const current = queue.shift()!;
+        if (current.depth > maxDepth || visited.has(current.entityId)) continue;
+        visited.add(current.entityId);
+        const statement = entityStatements.get(current.entityId) || "";
+        texts.push(...getQuotedValues(statement));
+
+        const neighbors = [
+          ...getEntityRefs(current.entityId),
+          ...getUsedIn(current.entityId)
+        ].filter((ref) => seedIds.includes(ref) || isPresentationNeighborhoodEntity(ref));
+        neighbors.forEach((ref) => {
+          if (!visited.has(ref)) queue.push({ entityId: ref, depth: current.depth + 1 });
+        });
+      }
+
+      return texts
+        .map(normalizePresentationText)
+        .filter(Boolean)
+        .filter((item, index, all) => all.indexOf(item) === index);
+    };
+
+    const getBoundedRawPresentationTexts = (seedIds: string[], maxDepth = 6): string[] => {
+      const queue = seedIds.map((entityId) => ({ entityId, depth: 0 }));
+      const visited = new Set<string>();
+      const texts: string[] = [];
+      const isPresentationNeighborhoodEntity = (entityId: string) => {
+        const statement = entityStatements.get(entityId) || "";
+        return /DESCRIPTIVE_REPRESENTATION_ITEM|REPRESENTATION|PROPERTY_DEFINITION|PROPERTY_DEFINITION_REPRESENTATION|GENERAL_PROPERTY_ASSOCIATION|CHARACTERIZED_ITEM_WITHIN_REPRESENTATION|DRAUGHTING_CALLOUT|ANNOTATION_PLANE|ANNOTATION_PLACEHOLDER_OCCURRENCE|DRAUGHTING_MODEL_ITEM_ASSOCIATION/i.test(statement);
+      };
+
+      while (queue.length > 0) {
+        const current = queue.shift()!;
+        if (current.depth > maxDepth || visited.has(current.entityId)) continue;
+        visited.add(current.entityId);
+        const statement = entityStatements.get(current.entityId) || "";
+        texts.push(...getQuotedValues(statement));
+
+        const neighbors = [
+          ...getEntityRefs(current.entityId),
+          ...getUsedIn(current.entityId)
+        ].filter((ref) => seedIds.includes(ref) || isPresentationNeighborhoodEntity(ref));
+        neighbors.forEach((ref) => {
+          if (!visited.has(ref)) queue.push({ entityId: ref, depth: current.depth + 1 });
+        });
+      }
+
+      return texts
+        .filter(Boolean)
+        .filter((item, index, all) => all.indexOf(item) === index);
+    };
+
+    const hasCounterboreSymbolText = (value: string): boolean =>
+      /\\X2\\2334\\X0\\|⌴|counter\s*bore/i.test(value);
+
+    const hasCountersinkSymbolText = (value: string): boolean =>
+      /\\X2\\2335\\X0\\|⌵|counter\s*sink/i.test(value);
+
+    const getCalloutValidationPresentationTexts = (annotationIds: string[]): string[] => {
+      const texts: string[] = [];
+      for (const annotationId of annotationIds) {
+        const characterizedItems = getUsedIn(annotationId, /CHARACTERIZED_ITEM_WITHIN_REPRESENTATION/i);
+        for (const characterizedItem of characterizedItems) {
+          const propertyDefinitions = getUsedIn(characterizedItem, /PROPERTY_DEFINITION/i);
+          for (const propertyDefinition of propertyDefinitions) {
+            const propertyRepresentations = getUsedIn(propertyDefinition, /PROPERTY_DEFINITION_REPRESENTATION/i);
+            for (const propertyRepresentation of propertyRepresentations) {
+              getEntityRefs(propertyRepresentation)
+                .filter((ref) => getEntityTypeNames(ref).some((type) => /REPRESENTATION/i.test(type)))
+                .forEach((representationId) => {
+                  texts.push(...getQuotedValues(entityStatements.get(representationId) || ""));
+                  getEntityRefs(representationId).forEach((ref) => {
+                    texts.push(...getQuotedValues(entityStatements.get(ref) || ""));
+                  });
+                });
+            }
+          }
+        }
+      }
+      return texts
+        .filter(Boolean)
+        .filter((item, index, all) => all.indexOf(item) === index);
+    };
+
+    const getLinkedAnnotationIdsForDimension = (dimensionEntityId: string, shapeAspectIds: string[]) => {
+      const directAnnotationIds = [...entityStatements.entries()]
+        .filter(([, statement]) => /^DRAUGHTING_MODEL_ITEM_ASSOCIATION(?:_WITH_PLACEHOLDER)?\s*\(/i.test(statement))
+        .flatMap(([entityId, statement]) => {
+          const refs = getEntityRefs(entityId);
+          if (!(refs[0] === dimensionEntityId || shapeAspectIds.includes(refs[0]))) return [];
+          if (/DRAUGHTING_MODEL_ITEM_ASSOCIATION_WITH_PLACEHOLDER/i.test(statement)) {
+            return refs.slice(2).filter((ref) =>
+              getEntityTypeNames(ref).some((type) =>
+                /DRAUGHTING_CALLOUT|ANNOTATION_PLACEHOLDER_OCCURRENCE|ANNOTATION_OCCURRENCE|TESSELLATED_ANNOTATION_OCCURRENCE/i.test(type)
+              )
+            );
+          }
+          return [refs[refs.length - 1]];
+        })
+        .filter((ref): ref is string => !!ref);
+      return [
+        ...draughtingAssociations
+          .filter((assoc) => [dimensionEntityId, ...shapeAspectIds].includes(assoc.shapeAspectId))
+          .map((assoc) => assoc.annotationId),
+        ...directAnnotationIds
+      ].filter((ref, index, all) => all.indexOf(ref) === index);
+    };
+
+    const getDimensionPreModifier = (dimensionEntityId: string): string | undefined => {
+      const dimensionTypeNames = getEntityTypeNames(dimensionEntityId);
+      if (!dimensionTypeNames.some((type) => /DIMENSIONAL_SIZE|DIMENSIONAL_LOCATION|ANGULAR_LOCATION/i.test(type))) return undefined;
+      if (isSingleCircularCurveCompositeDimension(dimensionEntityId)) return undefined;
+      const sphericalTargetCount = isSphericalDimension(dimensionEntityId)
+        ? getSphericalRepeatedElementCount(resolveDimensionTargets(dimensionEntityId))
+        : 0;
+      const shapeAspectIds = getEntityRefs(dimensionEntityId)
+        .filter((ref) => getEntityTypeNames(ref).some((type) => /SHAPE_ASPECT|COMPOSITE_SHAPE_ASPECT/i.test(type)));
+      const linkedAnnotationIds = getLinkedAnnotationIdsForDimension(dimensionEntityId, shapeAspectIds);
+      const nominal = getNominalDimensionValue(dimensionEntityId);
+      const calloutValidationTexts = getCalloutValidationPresentationTexts(linkedAnnotationIds);
+      const calloutCandidateTexts = nominal !== null && calloutValidationTexts.length > 0
+        ? calloutValidationTexts.filter((textValue) => presentationTextMatchesNominal(textValue, nominal))
+        : calloutValidationTexts;
+      const calloutMultipliers = calloutCandidateTexts
+        .map(getLiteralDimensionMultiplier)
+        .filter((modifier): modifier is string => !!modifier)
+        .filter((modifier, index, all) => all.indexOf(modifier) === index);
+      if (calloutMultipliers.length === 1) return sphericalTargetCount === 1 ? undefined : calloutMultipliers[0];
+
+      const directlyLinkedTexts = [dimensionEntityId, ...shapeAspectIds]
+        .flatMap((ref) => [
+          ...getPresentationTextsForEntity(ref),
+          ...draughtingAssociations
+            .filter((assoc) => assoc.shapeAspectId === ref)
+            .flatMap((assoc) => getPresentationTextsForEntity(assoc.annotationId))
+        ])
+        .concat(getBoundedPresentationTexts([dimensionEntityId, ...shapeAspectIds, ...linkedAnnotationIds]));
+      const linkedDimensionTexts = directlyLinkedTexts.filter((textValue) => /\bDIM\b/i.test(textValue));
+      const candidateTexts = nominal !== null && linkedDimensionTexts.length > 0
+        ? linkedDimensionTexts.filter((textValue) => presentationTextMatchesNominal(textValue, nominal))
+        : linkedDimensionTexts;
+      const linkedMultipliers = candidateTexts
+        .map(getLiteralDimensionMultiplier)
+        .filter((modifier): modifier is string => !!modifier)
+        .filter((modifier, index, all) => all.indexOf(modifier) === index);
+      if (linkedMultipliers.length === 1) return sphericalTargetCount === 1 ? undefined : linkedMultipliers[0];
+
+      if (dimensionTypeNames.some((type) => /DIMENSIONAL_SIZE/i.test(type))) {
+        if (isSphericalDimension(dimensionEntityId)) {
+          const sphericalCount = sphericalTargetCount;
+          if (sphericalCount > 1) return `${sphericalCount}X`;
+          return undefined;
+        }
+
+        const childTargetGroups = getDimensionChildTargetGroups(dimensionEntityId);
+        const datumGroupCount = childTargetGroups.filter((targets) => targets.some(isDatumDimensionTarget)).length;
+        const repeatedElementCount = childTargetGroups.length - datumGroupCount;
+        if (datumGroupCount > 0 && repeatedElementCount > 1) return `${repeatedElementCount}X`;
+
+        const nonDatumChildGroups = childTargetGroups.filter((targets) => !targets.some(isDatumDimensionTarget));
+        const explicitCompositeCount = getCompositeRepeatedElementCount(nonDatumChildGroups);
+        if (datumGroupCount === 0 && explicitCompositeCount > 1) return `${explicitCompositeCount}X`;
+      }
+
+      return undefined;
+    };
+
+    const getAssociatedDatumIdentifierForTargets = (targetIds: string[]): string | undefined => {
+      if (targetIds.length < 2) return undefined;
+      return Array.from(entityStatements.keys())
+        .filter((entityId) => getEntityType(entityId) === "DATUM")
+        .map((datumId) => {
+          const identifier = getDatumIdentifier(datumId);
+          if (!identifier) return null;
+          const datumTargets = uniqueGeometryTargets(
+            getSemanticDatumFeatureIds(datumId).flatMap((featureId) => [
+              ...getShapeAspectGeometryTargets(featureId),
+              ...getDescendantShapeAspectGeometryTargets(featureId)
+            ])
+          );
+          return identifier && datumTargets.length > 1
+            ? { identifier, datumTargets }
+            : null;
+        })
+        .filter((datum): datum is { identifier: string; datumTargets: string[] } => !!datum)
+        .find((datum) => targetIds.every((targetId) => datum.datumTargets.includes(targetId)))
+        ?.identifier;
+    };
+
+    const getDimensionSemanticPresentationTexts = (dimensionEntityId: string): string[] => {
+      const shapeAspectIds = getDimensionShapeAspectRefs(dimensionEntityId);
+      const linkedAnnotationIds = getLinkedAnnotationIdsForDimension(dimensionEntityId, shapeAspectIds);
+      const relatedAnnotationIds = linkedAnnotationIds.flatMap((annotationId) =>
+        getUsedIn(annotationId, /DRAUGHTING_CALLOUT_RELATIONSHIP/i)
+          .flatMap(getEntityRefs)
+          .filter((ref) => ref !== annotationId)
+      );
+      const relatedShapeAspectIds = [...linkedAnnotationIds, ...relatedAnnotationIds]
+        .flatMap((annotationId) =>
+          draughtingAssociations
+            .filter((assoc) => assoc.annotationId === annotationId)
+            .map((assoc) => assoc.shapeAspectId)
+        );
+      const semanticTextIds = relatedShapeAspectIds.flatMap((shapeAspectId) =>
+        getUsedIn(shapeAspectId, /PROPERTY_DEFINITION/i)
+          .filter((propertyDefinitionId) => /semantic\s+text/i.test(entityStatements.get(propertyDefinitionId) || ""))
+          .flatMap((propertyDefinitionId) =>
+            getUsedIn(propertyDefinitionId, /PROPERTY_DEFINITION_REPRESENTATION/i)
+              .flatMap(getEntityRefs)
+          )
+      );
+      const semanticTexts = semanticTextIds.flatMap((semanticTextId) => [
+        ...getQuotedValues(entityStatements.get(semanticTextId) || ""),
+        ...getEntityRefs(semanticTextId).flatMap((ref) => getQuotedValues(entityStatements.get(ref) || ""))
+      ]);
+      return [
+        ...getCalloutValidationPresentationTexts([...linkedAnnotationIds, ...relatedAnnotationIds]),
+        ...semanticTexts,
+        ...getBoundedRawPresentationTexts([
+          dimensionEntityId,
+          ...shapeAspectIds,
+          ...linkedAnnotationIds,
+          ...relatedAnnotationIds
+        ], 2)
+      ];
+    };
+
+    const hasCounterboreSymbolForDimension = (dimensionEntityId: string): boolean =>
+      getDimensionSemanticPresentationTexts(dimensionEntityId).some(hasCounterboreSymbolText);
+
+    const getCounterboreEvaluationNoteForDimension = (dimensionEntityId: string): string | undefined => {
+      const noteText = getDimensionSemanticPresentationTexts(dimensionEntityId)
+        .map(normalizePresentationText)
+        .find((textValue) => /\b\d+\s*X\s+INDIVIDUALLY\b/i.test(textValue));
+      const match = noteText?.match(/\b(\d+)\s*X\s+INDIVIDUALLY\b/i);
+      return match ? `${match[1]}X INDIVIDUALLY` : undefined;
+    };
+
+    type PendingCountersinkAngle = {
+      dimensionEntityId: string;
+      dimensionPreModifier?: string;
+      nominalDimension: number;
+      lowerTolerance?: number;
+      upperTolerance?: number;
+      targetIds: string[];
+      annotationFrames: NonNullable<ReturnType<typeof getAnnotationPlaneFrame>>[];
+    };
+
+    const pendingCountersinkAngles: PendingCountersinkAngle[] = [];
+
+    type PendingHoleDepthDimension = {
+      dimensionEntityId: string;
+      nominalDimension: number;
+      lowerTolerance?: number;
+      upperTolerance?: number;
+      dimensionPreModifier?: string;
+      targetIds: string[];
+      linkedAnnotationIds: string[];
+      hasCounterboreSymbol: boolean;
+      allowCounterboreInference?: boolean;
+    };
+
+    const pendingHoleDepthDimensions: PendingHoleDepthDimension[] = [];
+
+    const shareAny = (a: string[], b: string[]) => a.some((item) => b.includes(item));
+
+    const getOwnerFaceIdsForTargets = (targetIds: string[]): string[] =>
+      targetIds
+        .flatMap((targetId) => [
+          targetId,
+          ...getOwningFaceIdsForTarget(targetId)
+        ])
+        .filter((faceId, index, all) =>
+          /^(ADVANCED_FACE|FACE_SURFACE)$/i.test(getEntityType(faceId)) &&
+          all.indexOf(faceId) === index
+        );
+
+    const getCylindricalOwnerFaceIdsForTargets = (targetIds: string[]): string[] =>
+      getOwnerFaceIdsForTargets(targetIds)
+        .filter((faceId) => getTargetSurfaceType(faceId) === "cylinder");
+
+    const hasPlanarOwnerForTargets = (targetIds: string[]): boolean =>
+      getOwnerFaceIdsForTargets(targetIds)
+        .some((faceId) => getTargetSurfaceType(faceId) === "plane");
+
+    const depthMatchesDiameterByTopology = (
+      depth: PendingHoleDepthDimension,
+      diameterTolerance: ParsedStepTolerance
+    ): boolean => {
+      const depthCylinderOwners = getCylindricalOwnerFaceIdsForTargets(depth.targetIds);
+      if (depthCylinderOwners.length === 0 || !hasPlanarOwnerForTargets(depth.targetIds)) return false;
+
+      const diameterCylinderOwners = getCylindricalOwnerFaceIdsForTargets(diameterTolerance.targetIds || []);
+      return shareAny(depthCylinderOwners, diameterCylinderOwners);
+    };
+
+    const mergeDepthIntoHoleDiameter = (
+      diameterTolerance: ParsedStepTolerance,
+      depth: PendingHoleDepthDimension
+    ) => {
+      if (depth.hasCounterboreSymbol || (depth.allowCounterboreInference && hasCounterboreSymbolForDimension(diameterTolerance.dimensionEntityId || ""))) {
+        diameterTolerance.isCounterboreDimension = true;
+        diameterTolerance.type = "Counterbore Dimensional";
+        diameterTolerance.symbol = "CBORE_DIM";
+      }
+      diameterTolerance.counterboreDepthNominal = depth.nominalDimension;
+      diameterTolerance.counterboreDepthLowerTolerance = depth.lowerTolerance;
+      diameterTolerance.counterboreDepthUpperTolerance = depth.upperTolerance;
+      if (!depth.allowCounterboreInference) {
+        diameterTolerance.holeDepthFromBoundaryTopology = true;
+      }
+      diameterTolerance.clinicalContext =
+        `Hole callout ${diameterTolerance.dimensionPreModifier ? `${diameterTolerance.dimensionPreModifier} ` : ""}` +
+        `with diameter ${diameterTolerance.nominalDimension ?? "unknown"} mm and depth ${depth.nominalDimension} mm resolved from shared AP242 hole, diameter, depth, and plus-minus tolerance relationships.`;
+    };
+
+    const findMatchingHoleDiameterForDepth = (depth: PendingHoleDepthDimension): ParsedStepTolerance | undefined =>
+      tolerances.find((existing) =>
+        existing.category === "Dimension" &&
+        existing.dimensionKind === "diameter" &&
+        (!existing.dimensionPreModifier || !depth.dimensionPreModifier || existing.dimensionPreModifier === depth.dimensionPreModifier) &&
+        (
+          shareAny(depth.linkedAnnotationIds, getLinkedAnnotationIdsForDimension(existing.dimensionEntityId || "", getDimensionShapeAspectRefs(existing.dimensionEntityId || ""))) ||
+          shareAny(depth.targetIds, existing.targetIds || []) ||
+          depthMatchesDiameterByTopology(depth, existing)
+        )
+      );
+
+    const findMatchingCountersinkAngle = (
+      dimensionPreModifier: string | undefined,
+      linkedAnnotationIds: string[]
+    ): PendingCountersinkAngle | undefined => {
+      if (pendingCountersinkAngles.length === 0) return undefined;
+      const diameterFrames = linkedAnnotationIds
+        .map(getAnnotationPlaneFrame)
+        .filter((frame): frame is NonNullable<typeof frame> => !!frame?.point);
+      const candidates = pendingCountersinkAngles
+        .filter((candidate) =>
+          !candidate.dimensionPreModifier ||
+          !dimensionPreModifier ||
+          candidate.dimensionPreModifier === dimensionPreModifier
+        )
+        .map((candidate) => ({
+          candidate,
+          score: diameterFrames.length > 0 && candidate.annotationFrames.length > 0
+            ? Math.min(...diameterFrames.flatMap((diameterFrame) =>
+                candidate.annotationFrames.map((angleFrame) => squaredFrameDistance(diameterFrame, angleFrame))
+              ))
+            : candidate.dimensionPreModifier === dimensionPreModifier ? 0 : 1
+        }))
+        .sort((a, b) => a.score - b.score);
+      const match = candidates[0]?.candidate;
+      if (!match) return undefined;
+      const index = pendingCountersinkAngles.indexOf(match);
+      if (index >= 0) pendingCountersinkAngles.splice(index, 1);
+      return match;
+    };
+
+    type CounterboredFeatureSpec = {
+      count?: number;
+      boreDiameter?: number;
+      counterboreDiameter?: number;
+      evaluationNote?: string;
+    };
+
+    const getPropertyDefinitionNumericValue = (propertyDefinitionId: string): number | undefined => {
+      const propertyRepresentations = getUsedIn(propertyDefinitionId, /PROPERTY_DEFINITION_REPRESENTATION/i);
+      for (const propertyRepresentationId of propertyRepresentations) {
+        const representationIds = getEntityRefs(propertyRepresentationId)
+          .filter((ref) => getEntityTypeNames(ref).some((type) => /REPRESENTATION/i.test(type)));
+        for (const representationId of representationIds) {
+          const valueId = getEntityRefs(representationId)
+            .find((ref) => /REAL_REPRESENTATION_ITEM|MEASURE_REPRESENTATION_ITEM/i.test(getEntityType(ref)));
+          const statement = valueId ? entityStatements.get(valueId) || "" : "";
+          const match = statement.match(/(?:REAL_REPRESENTATION_ITEM|LENGTH_MEASURE|MEASURE_REPRESENTATION_ITEM)\s*\([^,]*,\s*([-+]?(?:\d+\.\d+|\d+|\.\d+)(?:[Ee][-+]?\d+)?)/i);
+          const value = match ? Number(match[1]) : undefined;
+          if (Number.isFinite(value)) return value;
+        }
+      }
+      return undefined;
+    };
+
+    const getPropertyDefinitionTextValues = (propertyDefinitionId: string): string[] => {
+      const propertyRepresentations = getUsedIn(propertyDefinitionId, /PROPERTY_DEFINITION_REPRESENTATION/i);
+      return propertyRepresentations.flatMap((propertyRepresentationId) =>
+        getEntityRefs(propertyRepresentationId)
+          .filter((ref) => getEntityTypeNames(ref).some((type) => /REPRESENTATION/i.test(type)))
+          .flatMap((representationId) =>
+            getEntityRefs(representationId).flatMap((ref) =>
+              getQuotedValues(entityStatements.get(ref) || "")
+            )
+          )
+      );
+    };
+
+    const counterboreEvaluationNotes = [...entityStatements.entries()]
+      .filter(([, statement]) => /^PROPERTY_DEFINITION\s*\(/i.test(statement) && /semantic\s+text/i.test(statement))
+      .flatMap(([propertyDefinitionId]) => getPropertyDefinitionTextValues(propertyDefinitionId))
+      .map(normalizePresentationText)
+      .map((textValue) => textValue.match(/\b(\d+)\s*X\s+INDIVIDUALLY\b/i))
+      .filter((match): match is RegExpMatchArray => !!match)
+      .map((match) => ({
+        count: Number(match[1]),
+        text: `${match[1]}X INDIVIDUALLY`
+      }));
+
+    const getCounterboredFeatureSpecs = (): CounterboredFeatureSpec[] =>
+      [...entityStatements.entries()]
+        .filter(([, statement]) => /^SHAPE_ASPECT\s*\(/i.test(statement) && /counter\s*bored\s+hole/i.test(statement))
+        .map(([shapeAspectId, statement]) => {
+          const quotedValues = getQuotedValues(statement);
+          const count = quotedValues
+            .map((value) => value.match(/counter\s*bored\s+hole\.(\d+)/i)?.[1])
+            .map((value) => value ? Number(value) : undefined)
+            .find((value): value is number => Number.isFinite(value) && value > 1);
+          const properties = getUsedIn(shapeAspectId, /PROPERTY_DEFINITION/i)
+            .map((propertyDefinitionId) => ({
+              name: getQuotedValues(entityStatements.get(propertyDefinitionId) || "")[0] || "",
+              value: getPropertyDefinitionNumericValue(propertyDefinitionId)
+            }));
+          return {
+            count,
+            boreDiameter: properties.find((property) => /^DB$/i.test(property.name))?.value,
+            counterboreDiameter: properties.find((property) => /^DFS$/i.test(property.name))?.value,
+            evaluationNote: count
+              ? counterboreEvaluationNotes.find((note) => note.count === count)?.text
+              : undefined
+          };
+        });
+
+    const sameNominal = (a: number | undefined, b: number | undefined, tolerance = 0.001): boolean =>
+      typeof a === "number" &&
+      typeof b === "number" &&
+      Number.isFinite(a) &&
+      Number.isFinite(b) &&
+      Math.abs(a - b) <= tolerance;
+
+    const roundedCoordinate = (value: number): string =>
+      Number.isFinite(value) ? value.toFixed(3) : "nan";
+
+    const getCylindricalCenterPoints = (tolerance: ParsedStepTolerance): Array<{ x: number; y: number; z: number }> => {
+      const points = (tolerance.targetIds || [])
+        .map((targetId) => getTargetSurfaceGeometry(targetId))
+        .filter((geometry) => geometry.surfaceType === "cylinder" && geometry.point)
+        .map((geometry) => geometry.point!);
+      return points.filter((point, index, all) =>
+        all.findIndex((candidate) =>
+          Math.abs(candidate.x - point.x) < 1e-3 &&
+          Math.abs(candidate.y - point.y) < 1e-3 &&
+          Math.abs(candidate.z - point.z) < 1e-3
+        ) === index
+      );
+    };
+
+    const getCylindricalCenterPatternForAxis = (
+      tolerance: ParsedStepTolerance,
+      depthAxis: "x" | "y" | "z"
+    ): string[] => {
+      const uniquePoints = getCylindricalCenterPoints(tolerance);
+      if (uniquePoints.length === 0) return [];
+      return uniquePoints
+        .map((point) => {
+          const values = depthAxis === "x"
+            ? [point.y, point.z]
+            : depthAxis === "y"
+              ? [point.x, point.z]
+              : [point.x, point.y];
+          return `${roundedCoordinate(values[0])},${roundedCoordinate(values[1])}`;
+        })
+        .filter((key, index, all) => all.indexOf(key) === index)
+        .sort();
+    };
+
+    const sameCylindricalCenterPattern = (a: ParsedStepTolerance, b: ParsedStepTolerance): boolean => {
+      return (["x", "y", "z"] as const).some((depthAxis) => {
+        const aPattern = getCylindricalCenterPatternForAxis(a, depthAxis);
+        const bPattern = getCylindricalCenterPatternForAxis(b, depthAxis);
+        return aPattern.length > 0 &&
+          aPattern.length === bPattern.length &&
+          aPattern.every((key, index) => key === bPattern[index]);
+      });
+    };
+
+    const markAsCounterboreDimension = (diameterTolerance: ParsedStepTolerance) => {
+      diameterTolerance.isCounterboreDimension = true;
+      diameterTolerance.type = "Counterbore Dimensional";
+      diameterTolerance.symbol = "CBORE_DIM";
+    };
+
+    const mergeCounterboreDepthCandidate = (
+      diameterTolerance: ParsedStepTolerance,
+      depthTolerance: ParsedStepTolerance
+    ) => {
+      markAsCounterboreDimension(diameterTolerance);
+      diameterTolerance.counterboreDepthNominal = depthTolerance.nominalDimension;
+      diameterTolerance.counterboreDepthLowerTolerance = depthTolerance.lowerTolerance;
+      diameterTolerance.counterboreDepthUpperTolerance = depthTolerance.upperTolerance;
+      diameterTolerance.clinicalContext =
+        `Counterbore callout ${diameterTolerance.dimensionPreModifier ? `${diameterTolerance.dimensionPreModifier} ` : ""}` +
+        `with diameter ${diameterTolerance.nominalDimension ?? "unknown"} mm and depth ${depthTolerance.nominalDimension ?? "unknown"} mm resolved from AP242 counterbore, diameter, depth, and plus-minus tolerance relationships.`;
+    };
+
+    const mergeCounterborePilotHole = (
+      counterboreTolerance: ParsedStepTolerance,
+      holeTolerance: ParsedStepTolerance
+    ) => {
+      counterboreTolerance.counterboreHoleNominal = holeTolerance.nominalDimension;
+      counterboreTolerance.counterboreHoleLowerTolerance = holeTolerance.lowerTolerance;
+      counterboreTolerance.counterboreHoleUpperTolerance = holeTolerance.upperTolerance;
+      if (!counterboreTolerance.dimensionPreModifier && holeTolerance.dimensionPreModifier) {
+        counterboreTolerance.dimensionPreModifier = holeTolerance.dimensionPreModifier;
+      }
+      counterboreTolerance.clinicalContext =
+        `Counterbore callout ${counterboreTolerance.dimensionPreModifier ? `${counterboreTolerance.dimensionPreModifier} ` : ""}` +
+        `with pilot hole diameter ${holeTolerance.nominalDimension ?? "unknown"} mm, counterbore diameter ${counterboreTolerance.nominalDimension ?? "unknown"} mm` +
+        `${counterboreTolerance.counterboreDepthNominal !== undefined ? `, and depth ${counterboreTolerance.counterboreDepthNominal} mm` : ""} resolved from AP242 counterbored-hole feature, diameter, depth, and plus-minus tolerance relationships.`;
+    };
+
+    const applyCounterboreFeatureSemantics = (dimensionTolerances: ParsedStepTolerance[]): ParsedStepTolerance[] => {
+      const consumedDepthIds = new Set<string>();
+      const consumedPilotHoleIds = new Set<string>();
+      const counterboredFeatureSpecs = getCounterboredFeatureSpecs();
+
+      dimensionTolerances.forEach((tolerance) => {
+        if (tolerance.category !== "Dimension" || !tolerance.dimensionEntityId) return;
+        const evaluationNote = getCounterboreEvaluationNoteForDimension(tolerance.dimensionEntityId);
+        if (evaluationNote) {
+          tolerance.counterboreEvaluationNote = evaluationNote;
+        }
+      });
+
+      counterboredFeatureSpecs.forEach((spec) => {
+        const modifier = spec.count && spec.count > 1 ? `${spec.count}X` : undefined;
+        const diameterTolerances = dimensionTolerances
+          .filter((tolerance) => tolerance.category === "Dimension" && tolerance.dimensionKind === "diameter")
+        const pilotHoleTolerance = diameterTolerances.find((tolerance) => sameNominal(tolerance.nominalDimension, spec.boreDiameter));
+        const counterboreTolerance = diameterTolerances.find((tolerance) => sameNominal(tolerance.nominalDimension, spec.counterboreDiameter));
+
+        if (pilotHoleTolerance && modifier && !pilotHoleTolerance.dimensionPreModifier && !pilotHoleTolerance.isReferenceDimension) {
+          pilotHoleTolerance.dimensionPreModifier = modifier;
+        }
+        if (counterboreTolerance && !counterboreTolerance.holeDepthFromBoundaryTopology) {
+          markAsCounterboreDimension(counterboreTolerance);
+          if (spec.evaluationNote) counterboreTolerance.counterboreEvaluationNote = spec.evaluationNote;
+          if (modifier && !counterboreTolerance.dimensionPreModifier) counterboreTolerance.dimensionPreModifier = modifier;
+          if (pilotHoleTolerance && !counterboreTolerance.counterboreEvaluationNote) {
+            mergeCounterborePilotHole(counterboreTolerance, pilotHoleTolerance);
+            consumedPilotHoleIds.add(pilotHoleTolerance.id);
+          }
+        }
+      });
+
+      dimensionTolerances
+        .filter((tolerance) =>
+            tolerance.category === "Dimension" &&
+            tolerance.dimensionKind === "diameter" &&
+            !tolerance.holeDepthFromBoundaryTopology &&
+            (
+              tolerance.isCounterboreDimension ||
+              hasCounterboreSymbolForDimension(tolerance.dimensionEntityId || "")
+          )
+        )
+        .sort((a, b) => (a.nominalDimension || 0) - (b.nominalDimension || 0))
+        .forEach((diameterTolerance) => {
+          markAsCounterboreDimension(diameterTolerance);
+          if (diameterTolerance.counterboreDepthNominal !== undefined) return;
+
+          const depthCandidate = dimensionTolerances
+            .filter((candidate) =>
+              candidate.id !== diameterTolerance.id &&
+              !consumedDepthIds.has(candidate.id) &&
+              candidate.category === "Dimension" &&
+              (candidate.dimensionKind === "linear" || candidate.dimensionKind === "size") &&
+              typeof candidate.nominalDimension === "number" &&
+              typeof diameterTolerance.nominalDimension === "number" &&
+              candidate.nominalDimension > 0 &&
+              candidate.nominalDimension < diameterTolerance.nominalDimension &&
+              (candidate.upperTolerance !== undefined || candidate.lowerTolerance !== undefined)
+            )
+            .sort((a, b) => (b.nominalDimension || 0) - (a.nominalDimension || 0))[0];
+
+          if (!depthCandidate) return;
+          mergeCounterboreDepthCandidate(diameterTolerance, depthCandidate);
+          consumedDepthIds.add(depthCandidate.id);
+        });
+
+      dimensionTolerances
+        .filter((tolerance) =>
+          tolerance.category === "Dimension" &&
+          tolerance.dimensionKind === "diameter" &&
+          tolerance.isCounterboreDimension &&
+          !tolerance.counterboreEvaluationNote &&
+          tolerance.counterboreHoleNominal === undefined &&
+          typeof tolerance.nominalDimension === "number"
+        )
+        .forEach((counterboreTolerance) => {
+          const pilotCandidate = dimensionTolerances
+            .filter((candidate) =>
+              candidate.id !== counterboreTolerance.id &&
+              !consumedPilotHoleIds.has(candidate.id) &&
+              candidate.category === "Dimension" &&
+              candidate.dimensionKind === "diameter" &&
+              !candidate.isCounterboreDimension &&
+              typeof candidate.nominalDimension === "number" &&
+              candidate.nominalDimension < (counterboreTolerance.nominalDimension || 0) &&
+              (!candidate.dimensionPreModifier || !counterboreTolerance.dimensionPreModifier || candidate.dimensionPreModifier === counterboreTolerance.dimensionPreModifier) &&
+              sameCylindricalCenterPattern(candidate, counterboreTolerance)
+            )
+            .sort((a, b) => (b.nominalDimension || 0) - (a.nominalDimension || 0))[0];
+
+          if (!pilotCandidate) return;
+          mergeCounterborePilotHole(counterboreTolerance, pilotCandidate);
+          consumedPilotHoleIds.add(pilotCandidate.id);
+        });
+
+      dimensionTolerances
+        .filter((tolerance) =>
+          tolerance.category === "Dimension" &&
+          (tolerance.dimensionKind === "linear" || tolerance.dimensionKind === "radius" || tolerance.dimensionKind === "size") &&
+          !tolerance.isSphericalDimension &&
+          tolerance.upperTolerance === undefined &&
+          tolerance.lowerTolerance === undefined &&
+          dimensionTolerances.some((counterboreTolerance) =>
+            counterboreTolerance.isCounterboreDimension &&
+            sameNominal(counterboreTolerance.counterboreDepthNominal, tolerance.nominalDimension)
+          )
+        )
+        .forEach((tolerance) => consumedDepthIds.add(tolerance.id));
+
+      dimensionTolerances
+        .filter((tolerance) =>
+          tolerance.category === "Dimension" &&
+          tolerance.isReferenceDimension &&
+          (tolerance.dimensionKind === "diameter" || tolerance.dimensionKind === "radius") &&
+          (tolerance.targetIds || []).some((targetId) => !!getCircularCurveFeatureKey(targetId))
+        )
+        .forEach((tolerance) => {
+          tolerance.dimensionPreModifier = undefined;
+        });
+
+      return dimensionTolerances.filter((tolerance) =>
+        !consumedDepthIds.has(tolerance.id) &&
+        !consumedPilotHoleIds.has(tolerance.id)
+      );
+    };
+
+    const plusMinusDimensionIds = new Set<string>();
+
+    for (const [entityId] of entityStatements.entries()) {
+      if (!getEntityTypeNames(entityId).some((type) => type === "PLUS_MINUS_TOLERANCE")) continue;
+
+      const refs = getEntityRefs(entityId);
+      const toleranceValueId = refs.find((ref) => getEntityTypeNames(ref).some((type) => type === "TOLERANCE_VALUE"));
+      const dimensionEntityId = refs.find((ref) =>
+        ref !== toleranceValueId &&
+        getEntityTypeNames(ref).some((type) => /DIMENSIONAL_LOCATION|ANGULAR_LOCATION|ANGULAR_SIZE|DIMENSIONAL_SIZE/i.test(type))
+      );
+      if (!toleranceValueId || !dimensionEntityId) continue;
+      plusMinusDimensionIds.add(dimensionEntityId);
+
+      const bounds = getToleranceValueBounds(toleranceValueId);
+      const absoluteLimit = Math.max(Math.abs(bounds.lower ?? 0), Math.abs(bounds.upper ?? 0));
+      const targetIds = resolveDimensionTargets(dimensionEntityId);
+      const rawTargetIds = resolveDimensionRawTargets(dimensionEntityId);
+      const topologyTargetIds = uniqueGeometryTargets([...targetIds, ...rawTargetIds]);
+      const targetId = targetIds[0] || "";
+      const dimensionKind = getDimensionKind(dimensionEntityId);
+      const sphericalDimension = isSphericalDimension(dimensionEntityId);
+      const nominalDimension = getNominalDimensionValue(dimensionEntityId);
+      const dimensionValues = getDimensionRepresentationValues(dimensionEntityId);
+      const isStatisticalTolerance = /statistical/i.test(dimensionValues.notes.join(" "));
+      const isControlledRadiusDimension = dimensionKind === "radius" && /controlled\s+radius/i.test(dimensionValues.notes.join(" "));
+      const dimensionPreModifier = isSingleCircularCurveTargetSet(targetIds)
+        ? undefined
+        : getDimensionPreModifier(dimensionEntityId);
+      const dimensionShapeAspectIds = getDimensionShapeAspectRefs(dimensionEntityId);
+      const validationTexts = getCalloutValidationPresentationTexts(
+        getLinkedAnnotationIdsForDimension(dimensionEntityId, dimensionShapeAspectIds)
+      );
+      const linkedAnnotationIds = getLinkedAnnotationIdsForDimension(dimensionEntityId, dimensionShapeAspectIds);
+      const rawPresentationTexts = getBoundedRawPresentationTexts([dimensionEntityId, ...dimensionShapeAspectIds, ...linkedAnnotationIds], 6);
+      const semanticPresentationTexts = getDimensionSemanticPresentationTexts(dimensionEntityId);
+      const dimensionLimitRange = getDimensionLimitRangeCallout(
+        [...validationTexts, ...rawPresentationTexts, ...semanticPresentationTexts],
+        dimensionKind
+      );
+      const dimensionLimitNote = dimensionLimitRange ? getDimensionLimitNote(semanticPresentationTexts) : undefined;
+      const hasCountersinkSymbol = [...validationTexts, ...rawPresentationTexts].some(hasCountersinkSymbolText);
+      if (
+        dimensionKind === "angular" &&
+        hasCountersinkSymbol &&
+        nominalDimension !== null
+      ) {
+        pendingCountersinkAngles.push({
+          dimensionEntityId,
+          dimensionPreModifier,
+          nominalDimension,
+          lowerTolerance: bounds.lower ?? undefined,
+          upperTolerance: bounds.upper ?? undefined,
+          targetIds,
+          annotationFrames: linkedAnnotationIds
+            .map(getAnnotationPlaneFrame)
+            .filter((frame): frame is NonNullable<typeof frame> => !!frame?.point)
+        });
+        continue;
+      }
+      const depthStyleTexts = validationTexts
+        .filter((textValue) => /\\X2\\21A7\\X0\\|depth/i.test(textValue));
+      const isDepthStyleLinearDimension =
+        (dimensionKind === "linear" || dimensionKind === "size") &&
+        nominalDimension !== null &&
+        depthStyleTexts.some((textValue) => presentationTextMatchesNominal(textValue, nominalDimension));
+      const hasTopologicalHoleDepthTargets =
+        dimensionKind === "linear" &&
+        nominalDimension !== null &&
+        (bounds.upper !== undefined || bounds.lower !== undefined) &&
+        getCylindricalOwnerFaceIdsForTargets(topologyTargetIds).length > 0 &&
+        hasPlanarOwnerForTargets(topologyTargetIds);
+      const threadCallout = isDepthStyleLinearDimension
+        && hasThreadPlaneShapeAspect(dimensionShapeAspectIds)
+        ? getThreadDesignationForDepthCallout(
+            getLinkedAnnotationIdsForDimension(dimensionEntityId, dimensionShapeAspectIds),
+            dimensionPreModifier
+          )
+        : undefined;
+      const threadDesignation = threadCallout?.designation;
+      const emittedDimensionKind = threadDesignation ? "threadDepth" : dimensionKind;
+      const holeDepthDimension =
+        (isDepthStyleLinearDimension || hasTopologicalHoleDepthTargets) && !threadDesignation && nominalDimension !== null
+          ? {
+              dimensionEntityId,
+              nominalDimension,
+              lowerTolerance: bounds.lower ?? undefined,
+              upperTolerance: bounds.upper ?? undefined,
+              dimensionPreModifier,
+              targetIds: topologyTargetIds,
+              linkedAnnotationIds,
+              hasCounterboreSymbol: isDepthStyleLinearDimension && [...validationTexts, ...rawPresentationTexts].some(hasCounterboreSymbolText),
+              allowCounterboreInference: isDepthStyleLinearDimension
+            }
+          : undefined;
+      const duplicateHoleDiameter = holeDepthDimension
+        ? findMatchingHoleDiameterForDepth(holeDepthDimension)
+        : undefined;
+      if (duplicateHoleDiameter) {
+        mergeDepthIntoHoleDiameter(duplicateHoleDiameter, holeDepthDimension!);
+        continue;
+      }
+      if (holeDepthDimension && isDepthStyleLinearDimension) {
+        pendingHoleDepthDimensions.push(holeDepthDimension);
+        continue;
+      }
+      if (isLinearDimensionSubEntityOfSingleCurvedFace(dimensionKind, targetIds)) {
+        continue;
+      }
+      const unitLabel = dimensionKind === "angular" ? "deg" : "mm";
+      const countersinkAngle = dimensionKind === "diameter"
+        ? findMatchingCountersinkAngle(dimensionPreModifier, linkedAnnotationIds)
+        : undefined;
+      const associatedDatumIdentifier = dimensionKind === "linear"
+        ? getAssociatedDatumIdentifierForTargets(targetIds)
+        : undefined;
+      const targetPoints = targetIds
+        .flatMap((targetId) => getEntityCartesianPoints(targetId, 10))
+        .filter((point, index, all) =>
+          all.findIndex((candidate) =>
+            Math.abs(candidate.x - point.x) < 1e-6 &&
+            Math.abs(candidate.y - point.y) < 1e-6 &&
+            Math.abs(candidate.z - point.z) < 1e-6
+          ) === index
+        )
+        .slice(0, 24);
+      const type =
+        countersinkAngle ? "Countersink Dimensional" :
+        emittedDimensionKind === "threadDepth" ? "Thread Depth" :
+        dimensionKind === "angular" ? "Angular Dimensional" :
+        dimensionKind === "diameter" && sphericalDimension ? "Spherical Diameter Dimensional" :
+        dimensionKind === "diameter" ? "Diameter Dimensional" :
+        dimensionKind === "radius" ? "Radius Dimensional" :
+        "Linear Dimensional";
+
+      const nextTolerance: ParsedStepTolerance = {
+        id: `PMI-DIMTOL-${tolerances.length + 1}`,
+        entityId,
+        dimensionEntityId,
+        dimensionKind: emittedDimensionKind,
+        type,
+        symbol: countersinkAngle ? "CSINK_DIM" : emittedDimensionKind === "threadDepth" ? "THREAD_DEPTH" : dimensionKind === "angular" ? "ANG_DIM" : dimensionKind === "diameter" ? "DIA_DIM" : "DIM",
+        value: absoluteLimit,
+        nominalDimension: nominalDimension ?? undefined,
+        upperTolerance: bounds.upper ?? undefined,
+        lowerTolerance: bounds.lower ?? undefined,
+        dimensionLowerLimit: dimensionLimitRange?.lowerLimit,
+        dimensionUpperLimit: dimensionLimitRange?.upperLimit,
+        dimensionLimitPreModifier: dimensionLimitRange?.preModifier,
+        dimensionLimitNote,
+        isReferenceDimension: false,
+        isStatisticalTolerance,
+        isSphericalDimension: sphericalDimension,
+        isControlledRadiusDimension,
+        isCountersinkDimension: !!countersinkAngle,
+        countersinkAngleNominal: countersinkAngle?.nominalDimension,
+        countersinkAngleLowerTolerance: countersinkAngle?.lowerTolerance,
+        countersinkAngleUpperTolerance: countersinkAngle?.upperTolerance,
+        dimensionPreModifier,
+        associatedDatumIdentifier,
+        threadDesignation,
+        threadCylinderTargetIds: threadCallout?.targetIds,
+        targetId,
+        targetIds,
+        targetSurfaceTypes: targetIds
+          .map(getTargetSurfaceType)
+          .filter((surfaceType, index, all) => !!surfaceType && all.indexOf(surfaceType) === index),
+        targetPoints: dimensionKind === "linear" || dimensionKind === "angular" ? targetPoints : undefined,
+        targetName: targetId
+          ? `Critical ${dimensionKind || "dimension"} target (${targetIds.join(", ")})`
+          : `Unresolved critical ${dimensionKind || "dimension"} target`,
+        hasToleranceModifiers: false,
+        category: "Dimension",
+        clinicalContext: dimensionLimitRange
+          ? `Critical PMI ${dimensionKind || "dimension"} limit range resolved from AP242 presentation and dimensional characteristic relationships${dimensionLimitNote ? `: ${dimensionLimitNote}.` : "."}`
+          : countersinkAngle
+          ? `Countersink callout ${dimensionPreModifier ? `${dimensionPreModifier} ` : ""}with diameter ${nominalDimension ?? "unknown"} mm and angle ${countersinkAngle.nominalDimension} deg resolved from AP242 countersink, diameter, angular size, and plus-minus tolerance relationships.`
+          : threadDesignation
+          ? `Threaded-hole depth callout ${dimensionPreModifier ? `${dimensionPreModifier} ` : ""}${threadDesignation}, usable thread depth ${nominalDimension ?? "unknown"} ${unitLabel} with AP242 plus-minus limits.`
+          : `Critical PMI ${dimensionKind || "dimension"} tolerance with ${unitLabel} limits resolved from AP242 PLUS_MINUS_TOLERANCE and TOLERANCE_VALUE relationships.`
+      };
+      if (nextTolerance.dimensionKind === "diameter") {
+        const pendingIndex = pendingHoleDepthDimensions.findIndex((pendingDepth) =>
+          (!nextTolerance.dimensionPreModifier || !pendingDepth.dimensionPreModifier || nextTolerance.dimensionPreModifier === pendingDepth.dimensionPreModifier) &&
+          (
+            shareAny(pendingDepth.linkedAnnotationIds, linkedAnnotationIds) ||
+            shareAny(pendingDepth.targetIds, targetIds)
+          )
+        );
+        if (pendingIndex >= 0) {
+          mergeDepthIntoHoleDiameter(nextTolerance, pendingHoleDepthDimensions[pendingIndex]);
+          pendingHoleDepthDimensions.splice(pendingIndex, 1);
+        }
+      }
+      tolerances.push(nextTolerance);
+    }
+
+    for (const [entityId] of entityStatements.entries()) {
+      const typeNames = getEntityTypeNames(entityId);
+      if (!typeNames.some((type) => /DIMENSIONAL_LOCATION|ANGULAR_LOCATION|ANGULAR_SIZE|DIMENSIONAL_SIZE/i.test(type))) continue;
+      if (plusMinusDimensionIds.has(entityId)) continue;
+
+      const targetIds = resolveDimensionTargets(entityId);
+      if (targetIds.length === 0) continue;
+      const dimensionKind = getDimensionKind(entityId);
+      const sphericalDimension = isSphericalDimension(entityId);
+      const dimensionValues = getDimensionRepresentationValues(entityId);
+      const nominalDimension = dimensionValues.nominal;
+      if (nominalDimension === null) continue;
+      const lowerTolerance =
+        dimensionValues.lowerLimit !== null
+          ? dimensionValues.lowerLimit - nominalDimension
+          : undefined;
+      const upperTolerance =
+        dimensionValues.upperLimit !== null
+          ? dimensionValues.upperLimit - nominalDimension
+          : undefined;
+
+      const targetSurfaceTypes = targetIds
+        .map(getTargetSurfaceType)
+        .filter((surfaceType, index, all) => !!surfaceType && all.indexOf(surfaceType) === index);
+      const targetPoints = targetIds
+        .flatMap((targetId) => getEntityCartesianPoints(targetId, 10))
+        .filter((point, index, all) =>
+          all.findIndex((candidate) =>
+            Math.abs(candidate.x - point.x) < 1e-6 &&
+            Math.abs(candidate.y - point.y) < 1e-6 &&
+            Math.abs(candidate.z - point.z) < 1e-6
+          ) === index
+        )
+        .slice(0, 24);
+      const dimensionNoteText = dimensionValues.notes.join(" ");
+      const isBasicDimension = /theoretical|basic/i.test(dimensionNoteText);
+      const isStatisticalTolerance = /statistical/i.test(dimensionNoteText);
+      const isControlledRadiusDimension = dimensionKind === "radius" && /controlled\s+radius/i.test(dimensionNoteText);
+      const semanticPresentationTexts = getDimensionSemanticPresentationTexts(entityId);
+      const dimensionLimitRange = getDimensionLimitRangeCallout(semanticPresentationTexts, dimensionKind);
+      const dimensionLimitNote = dimensionLimitRange ? getDimensionLimitNote(semanticPresentationTexts) : undefined;
+      const datumTargetLengthScale = getDefaultLengthScaleToMillimeters();
+      let datumTargetDimensionPoints: { x: number; y: number; z: number }[] = [];
+      const isDatumTargetDimension = isBasicDimension && [sfaSemanticDatumTargets, parsedDatumTargets]
+        .flat()
+        .some((datumTarget) => {
+          const zone = datumTarget.targetZone;
+          if (!zone || nominalDimension === null) return false;
+          const scaledNominal = nominalDimension * datumTargetLengthScale;
+          const matchesWidth = Number.isFinite(zone.width) &&
+            Math.abs(zone.width - scaledNominal) <= Math.max(Math.abs(zone.width) * 1e-6, 1e-6);
+          const matchesLength = Number.isFinite(zone.length) &&
+            Math.abs(zone.length - scaledNominal) <= Math.max(Math.abs(zone.length) * 1e-6, 1e-6);
+          if (!matchesWidth && !matchesLength) return false;
+
+          const axis = matchesWidth ? zone.xDirection : zone.yDirection;
+          const distance = matchesWidth ? zone.width : zone.length;
+          datumTargetDimensionPoints = [
+            {
+              x: zone.center.x - axis.x * distance / 2,
+              y: zone.center.y - axis.y * distance / 2,
+              z: zone.center.z - axis.z * distance / 2
+            },
+            {
+              x: zone.center.x + axis.x * distance / 2,
+              y: zone.center.y + axis.y * distance / 2,
+              z: zone.center.z + axis.z * distance / 2
+            }
+          ];
+          return true;
+        });
+      const shouldEmitBareDimension =
+        isDatumTargetDimension ||
+        isBasicDimension ||
+        dimensionKind === "angular" ||
+        (dimensionKind === "linear" && targetPoints.length >= 2) ||
+        ((dimensionKind === "diameter" || dimensionKind === "radius") && targetPoints.length >= 2) ||
+        targetSurfaceTypes.some((surfaceType) => /plane|cylinder|curved/i.test(surfaceType));
+      if (!shouldEmitBareDimension) continue;
+      if (isLinearDimensionSubEntityOfSingleCurvedFace(dimensionKind, targetIds, isDatumTargetDimension)) continue;
+      const isReferenceDimension =
+        !isBasicDimension &&
+        (lowerTolerance === undefined && upperTolerance === undefined || /auxiliary|reference/i.test(dimensionNoteText));
+      const dimensionPreModifier = isSingleCircularCurveTargetSet(targetIds)
+        ? undefined
+        : getDimensionPreModifier(entityId);
+      const associatedDatumIdentifier = dimensionKind === "linear"
+        ? getAssociatedDatumIdentifierForTargets(targetIds)
+        : undefined;
+
+      const targetId = targetIds[0] || "";
+      const unitLabel = dimensionKind === "angular" ? "deg" : "mm";
+      const type =
+        dimensionKind === "angular" ? "Angular Dimensional" :
+        dimensionKind === "diameter" && sphericalDimension ? "Spherical Diameter Dimensional" :
+        dimensionKind === "diameter" ? "Diameter Dimensional" :
+        dimensionKind === "radius" ? "Radius Dimensional" :
+        "Linear Dimensional";
+
+      tolerances.push({
+        id: `PMI-DIMTOL-${tolerances.length + 1}`,
+        entityId,
+        dimensionEntityId: entityId,
+        dimensionKind,
+        type,
+        symbol: dimensionKind === "angular" ? "ANG_DIM" : dimensionKind === "diameter" ? "DIA_DIM" : "DIM",
+        value: Math.max(Math.abs(lowerTolerance ?? 0), Math.abs(upperTolerance ?? 0)),
+        nominalDimension,
+        lowerTolerance,
+        upperTolerance,
+        dimensionLowerLimit: dimensionLimitRange?.lowerLimit,
+        dimensionUpperLimit: dimensionLimitRange?.upperLimit,
+        dimensionLimitPreModifier: dimensionLimitRange?.preModifier,
+        dimensionLimitNote,
+        isReferenceDimension,
+        isBasicDimension,
+        isStatisticalTolerance,
+        isDatumTargetDimension,
+        isSphericalDimension: sphericalDimension,
+        isControlledRadiusDimension,
+        associatedDatumIdentifier,
+        dimensionPreModifier,
+        targetId,
+        targetIds,
+        targetSurfaceTypes,
+        targetPoints: isDatumTargetDimension && datumTargetDimensionPoints.length >= 2 ? datumTargetDimensionPoints : targetPoints,
+        targetName: targetId
+          ? `Critical ${dimensionKind || "dimension"} target (${targetIds.join(", ")})`
+          : `Unresolved critical ${dimensionKind || "dimension"} target`,
+        hasToleranceModifiers: false,
+        category: "Dimension",
+        clinicalContext: dimensionLimitRange
+          ? `Critical PMI ${dimensionKind || "dimension"} limit range resolved from AP242 presentation and dimensional characteristic relationships${dimensionLimitNote ? `: ${dimensionLimitNote}.` : "."}`
+          : isBasicDimension
+          ? `Basic PMI ${dimensionKind || "dimension"} annotation with nominal ${unitLabel} value resolved from AP242 theoretical dimensional note.`
+          : lowerTolerance !== undefined || upperTolerance !== undefined
+          ? `Critical PMI ${dimensionKind || "dimension"} tolerance with ${unitLabel} LSL/USL limits resolved from AP242 dimensional characteristic representation.`
+          : `Reference PMI ${dimensionKind || "dimension"} annotation with nominal ${unitLabel} value resolved from AP242 dimensional characteristic representation.`
+      });
+    }
+
+    const circularSizeTolerances = tolerances.filter((tolerance) =>
+      /diameter|radius/i.test(`${tolerance.dimensionKind || ""}`) &&
+      typeof tolerance.nominalDimension === "number" &&
+      Number.isFinite(tolerance.nominalDimension)
+    );
+
+    const filteredTolerances = tolerances.filter((tolerance) => {
+      if (
+        tolerance.dimensionKind !== "linear" ||
+        tolerance.isBasicDimension ||
+        tolerance.isDatumTargetDimension ||
+        tolerance.associatedDatumIdentifier ||
+        typeof tolerance.nominalDimension !== "number" ||
+        !Number.isFinite(tolerance.nominalDimension)
+      ) {
+        return true;
+      }
+
+      return !circularSizeTolerances.some((circularTolerance) => {
+        if (Math.abs((circularTolerance.nominalDimension || 0) - tolerance.nominalDimension!) >= 0.001) return false;
+        const linearTargets = tolerance.targetIds || [];
+        const circularTargets = circularTolerance.targetIds || [];
+        if (shareAny(linearTargets, circularTargets)) return true;
+
+        const linearOwners = linearTargets.flatMap(getOwningFaceIdsForTarget);
+        const circularOwners = circularTargets.flatMap(getOwningFaceIdsForTarget);
+        return linearOwners.length > 0 && circularOwners.length > 0 && shareAny(linearOwners, circularOwners);
+      });
+    });
+
+    return applyCounterboreFeatureSemantics(filteredTolerances);
   };
 
   const buildDatumReferenceFrames = (datums: ParsedStepDatum[]): ParsedStepDatumReferenceFrame[] => {
@@ -2819,21 +4848,22 @@ export function parseStepFile(fileName: string, text: string): StepParseResult {
       const featureId = datumFeatureByOrdinal.get(ordinal);
       const directTargets = resolveTargetsForId(datumEntityId).filter(isGeometryTargetEntity);
       const featureTargets = featureId ? (representationTargetsByFeature.get(featureId) || resolveTargetsForId(featureId)) : [];
-      const targetIds = uniqueGeometryTargets(directTargets.length > 0 ? directTargets : featureTargets);
+      const activeFeatureIds = featureId ? [featureId] : getSemanticDatumFeatureIds(datumEntityId);
+      let targetIds = preferDatumSurfaceTargets(uniqueGeometryTargets(directTargets.length > 0 ? directTargets : featureTargets));
+      const presentationTargetPoint = [datumEntityId, ...activeFeatureIds]
+        .map(getPresentationLandingPointForShapeAspect)
+        .find((point): point is { x: number; y: number; z: number } => !!point) ||
+        getDatumPresentationLandingPointByIdentifier(identifier);
+      targetIds = preferDatumSurfaceTargets(selectDatumTargetsFromPresentationComposite(activeFeatureIds, targetIds, presentationTargetPoint));
 
       if (targetIds.length === 0) {
         return [];
       }
 
       const primaryTarget = targetIds[0];
-      const activeFeatureIds = featureId ? [featureId] : getSemanticDatumFeatureIds(datumEntityId);
       const description = describeDerivedDatum(identifier, primaryTarget, targetIds, activeFeatureIds);
       const additionalCount = targetIds.length - 1;
-      const planarDatumKind = getPlanarDatumFeatureKind(activeFeatureIds, targetIds);
-      const presentationTargetPoint = [datumEntityId, ...activeFeatureIds]
-        .map(getPresentationLandingPointForShapeAspect)
-        .find((point): point is { x: number; y: number; z: number } => !!point) ||
-        getDatumPresentationLandingPointByIdentifier(identifier);
+      const derivedDatumKind = getDerivedDatumKind(activeFeatureIds, targetIds);
 
       return [{
         id: `PMI-DTM-${index + 1}`,
@@ -2848,7 +4878,7 @@ export function parseStepFile(fileName: string, text: string): StepParseResult {
         semanticTargetIds: targetIds,
         presentationTargetPoint,
         targetSource: "semantic",
-        derivedDatum: planarDatumKind,
+        derivedDatum: derivedDatumKind,
         targetName: additionalCount > 0
           ? description.targetName
           : description.targetName,
@@ -2859,14 +4889,16 @@ export function parseStepFile(fileName: string, text: string): StepParseResult {
 
   // 1. Resolve explicitly parsed DATUM / DATUM_FEATURE
   for (const d of parsedDatums) {
-    const resolvedTargets = uniqueGeometryTargets(resolveTargetsForId(d.targetId));
-    const resolved = resolvedTargets[0];
-    if (resolved) {
+    let resolvedTargets = preferDatumSurfaceTargets(uniqueGeometryTargets(resolveTargetsForId(d.targetId)));
+    if (resolvedTargets.length > 0) {
       const semanticFeatureIds = getSemanticDatumFeatureIds(d.entityId);
       const presentationTargetPoint = [d.entityId, ...semanticFeatureIds]
         .map(getPresentationLandingPointForShapeAspect)
         .find((point): point is { x: number; y: number; z: number } => !!point) ||
         getDatumPresentationLandingPointByIdentifier(d.identifier);
+      resolvedTargets = preferDatumSurfaceTargets(selectDatumTargetsFromPresentationComposite(semanticFeatureIds, resolvedTargets, presentationTargetPoint));
+      const resolved = resolvedTargets[0];
+      if (!resolved) continue;
       d.targetId = resolved;
       d.targetIds = resolvedTargets;
       d.semanticTargetIds = resolvedTargets;
@@ -3000,10 +5032,26 @@ export function parseStepFile(fileName: string, text: string): StepParseResult {
   const sfaSemanticDatums = buildSfaSemanticDatums();
   const sfaSemanticDatumTargets = buildSfaSemanticDatumTargets();
   const sfaSemanticTolerances = buildSfaSemanticTolerances();
+  const ap242DimensionalTolerances = buildAp242DimensionalTolerances();
   const ap242SemanticDatums = buildAp242SemanticDatums();
 
   // Fallback to rich inferred tolerances if the STEP file did not contain explicit geometric annotations
   let finalTolerances = sfaSemanticTolerances.length > 0 ? sfaSemanticTolerances : (parsedTolerances.length > 0 ? parsedTolerances : []);
+  finalTolerances = [
+    ...finalTolerances,
+    ...ap242DimensionalTolerances.filter((dimensionTolerance) =>
+      !finalTolerances.some((tolerance) => tolerance.entityId === dimensionTolerance.entityId)
+    )
+  ].filter((tolerance) => {
+    const targetIds = Array.isArray(tolerance.targetIds) && tolerance.targetIds.length > 0
+      ? tolerance.targetIds
+      : (tolerance.targetId ? [tolerance.targetId] : []);
+    return !isLinearDimensionSubEntityOfSingleCurvedFace(
+      tolerance.dimensionKind,
+      targetIds,
+      tolerance.isDatumTargetDimension
+    );
+  });
 
   // Fallback to rich inferred datums if the STEP file did not contain explicit geometric annotations
   let finalDatums = sfaSemanticDatums.length > 0 ? sfaSemanticDatums : (ap242SemanticDatums.length > 0 ? ap242SemanticDatums : (parsedDatums.length > 0 ? parsedDatums : []));
