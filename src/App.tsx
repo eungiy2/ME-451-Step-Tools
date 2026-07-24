@@ -528,7 +528,7 @@ export default function App() {
 
   // Discretization & Geometry Parameter States for medical planning config
   const [linearDeflection, setLinearDeflection] = useState<number>(0.02);
-  const [angularDeflection, setAngularDeflection] = useState<number>(0.45);
+  const [angularDeflection, setAngularDeflection] = useState<number>(0.10);
   const [radialDivisions, setRadialDivisions] = useState<number>(28);
   const [segmentsCount, setSegmentsCount] = useState<number>(5);
   const [plateWidth, setPlateWidth] = useState<number>(3.6);
@@ -537,7 +537,7 @@ export default function App() {
   const [uploadedBytes, setUploadedBytes] = useState<Uint8Array | null>(null);
 
   // Graphical viewport preferences
-  const [viewMode, setViewMode] = useState<"solid" | "xray" | "wire">("solid");
+  const [viewMode, setViewMode] = useState<"solid" | "xray" | "wire" | "hidden">("solid");
   const [cameraProjection, setCameraProjection] = useState<"perspective" | "orthographic">("perspective");
   const [measurementMode, setMeasurementMode] = useState<boolean>(false);
   const [presetResetNonce, setPresetResetNonce] = useState<number>(0);
@@ -705,7 +705,7 @@ export default function App() {
     
     // Restore default geometry parameters
     setLinearDeflection(0.02);
-    setAngularDeflection(0.45);
+    setAngularDeflection(0.10);
     setRadialDivisions(28);
     setSegmentsCount(5);
     setPlateWidth(3.6);
@@ -933,7 +933,8 @@ export default function App() {
                 {([
                   ["solid", "SOLID"],
                   ["xray", "XRAY"],
-                  ["wire", "WIRE"]
+                  ["wire", "WIRE"],
+                  ["hidden", "HIDDEN"]
                 ] as const).map(([mode, label]) => (
                   <button
                     key={mode}

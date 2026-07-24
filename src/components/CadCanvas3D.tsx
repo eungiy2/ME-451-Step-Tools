@@ -14,7 +14,7 @@ import { LineSegmentsGeometry } from "three/examples/jsm/lines/LineSegmentsGeome
 interface CadCanvas3DProps {
   occtResult: any;
   isLoading: boolean;
-  viewMode: "solid" | "xray" | "wire";
+  viewMode: "solid" | "xray" | "wire" | "hidden";
   cameraProjection: "perspective" | "orthographic";
   materialType: "titanium" | "gold" | "chrome" | "carbon";
   autoRotate: boolean;
@@ -360,6 +360,7 @@ export default function CadCanvas3D({
     let cadVertexPickObjects: THREE.Object3D[] = [];
     let renderedObjectByName = new Map<string, THREE.Object3D>();
     let edgeNamesByFaceIndex = new Map<number, string[]>();
+    let faceWireEdgePositionsByName = new Map<string, number[]>();
     let vertexRecordsByName = new Map<string, BRepVertexRecord>();
     let datumCacheMissingElements = 0;
     let datumCacheRetryFrame = 0;
@@ -371,6 +372,21 @@ export default function CadCanvas3D({
     let edgeHighlightGroup: THREE.Group | null = null;
     let faceWireHighlightGroup: THREE.Group | null = null;
     let vertexHighlightGroup: THREE.Group | null = null;
+    let hiddenEdgeDashMaterials: THREE.LineDashedMaterial[] = [];
+    let hiddenSilhouetteGroup: THREE.Group | null = null;
+    let hiddenSilhouetteRecords: {
+      object: THREE.Mesh;
+      line: THREE.LineSegments;
+      dashedLine: THREE.LineSegments;
+      positions: Float32Array;
+      visiblePositions: Float32Array;
+      depthBias: number;
+      boundaryEdges: { a: number; b: number }[];
+      triangles: Uint32Array;
+      vertexNormals: Float32Array;
+      vertexFacing: Float32Array;
+      vertexPositions: THREE.BufferAttribute;
+    }[] = [];
     let measurementLabelPoint: THREE.Vector3 | null = null;
     let prevMeasurementMode = measurementMode;
     let edgeHighlightResolutionWidth = -1;
@@ -385,12 +401,14 @@ export default function CadCanvas3D({
 
       edgeHighlightResolutionWidth = width;
       edgeHighlightResolutionHeight = height;
-      [...(edgeHighlightGroup?.children || []), ...(faceWireHighlightGroup?.children || [])].forEach((item) => {
+      const updateMaterialResolution = (item: THREE.Object3D) => {
         const material = (item as any).material;
         if (material instanceof LineMaterial) {
           material.resolution.set(width, height);
         }
-      });
+      };
+      edgeHighlightGroup?.children.forEach(updateMaterialResolution);
+      faceWireHighlightGroup?.children.forEach(updateMaterialResolution);
     };
 
     const updateVertexMarkerScreenScale = () => {
@@ -408,6 +426,205 @@ export default function CadCanvas3D({
       });
     };
 
+    const updateHiddenLineDashScale = () => {
+      if (hiddenEdgeDashMaterials.length === 0) return;
+      const viewportScale = viewportHeight > 0 ? viewportHeight : renderer.domElement.clientHeight || 1;
+      const targetDistance = Math.max(camera.position.distanceTo(controls.target), 1e-6);
+      const worldPerPixel = camera instanceof THREE.OrthographicCamera
+        ? ((camera.top - camera.bottom) / Math.max(camera.zoom, 1e-6)) / viewportScale
+        : (2 * targetDistance * Math.tan(THREE.MathUtils.degToRad(perspectiveCamera.fov) / 2)) / viewportScale;
+      const dashSize = Math.max(worldPerPixel * 5.0, 1e-5);
+      const gapSize = Math.max(worldPerPixel * 1.8, 1e-5);
+      hiddenEdgeDashMaterials.forEach((material) => {
+        material.dashSize = dashSize;
+        material.gapSize = gapSize;
+      });
+    };
+
+    const silhouetteCameraPoint = new THREE.Vector3();
+    const silhouetteViewVector = new THREE.Vector3();
+    const silhouetteWorldViewDirection = new THREE.Vector3();
+    const silhouetteLocalViewDirection = new THREE.Vector3();
+    const silhouetteObjectWorldQuaternion = new THREE.Quaternion();
+    const writeHiddenSilhouettePoint = (
+      record: (typeof hiddenSilhouetteRecords)[number],
+      cameraLocal: THREE.Vector3,
+      orthographicViewDirection: THREE.Vector3 | null,
+      writeIndex: number,
+      x: number,
+      y: number,
+      z: number,
+    ) => {
+      record.positions[writeIndex] = x;
+      record.positions[writeIndex + 1] = y;
+      record.positions[writeIndex + 2] = z;
+
+      const toCameraX = orthographicViewDirection?.x ?? cameraLocal.x - x;
+      const toCameraY = orthographicViewDirection?.y ?? cameraLocal.y - y;
+      const toCameraZ = orthographicViewDirection?.z ?? cameraLocal.z - z;
+      const toCameraLength = Math.hypot(toCameraX, toCameraY, toCameraZ);
+      const biasScale = toCameraLength > 1e-9 ? record.depthBias / toCameraLength : 0;
+      record.visiblePositions[writeIndex] = x + toCameraX * biasScale;
+      record.visiblePositions[writeIndex + 1] = y + toCameraY * biasScale;
+      record.visiblePositions[writeIndex + 2] = z + toCameraZ * biasScale;
+      return writeIndex + 3;
+    };
+
+    const updateHiddenSilhouetteLines = () => {
+      if (!hiddenSilhouetteGroup) return;
+      const isHiddenMode = propsRef.current.viewMode === "hidden";
+      hiddenSilhouetteGroup.visible = isHiddenMode;
+      if (!isHiddenMode) return;
+
+      const isOrthographicView = camera instanceof THREE.OrthographicCamera;
+      if (isOrthographicView) {
+        camera.getWorldDirection(silhouetteWorldViewDirection).negate().normalize();
+      }
+
+      hiddenSilhouetteRecords.forEach((record) => {
+        const cameraLocal = record.object.worldToLocal(silhouetteCameraPoint.copy(camera.position));
+        const orthographicViewDirection = isOrthographicView
+          ? silhouetteLocalViewDirection
+            .copy(silhouetteWorldViewDirection)
+            .applyQuaternion(record.object.getWorldQuaternion(silhouetteObjectWorldQuaternion).invert())
+            .normalize()
+          : null;
+        for (let vertexIndex = 0; vertexIndex < record.vertexFacing.length; vertexIndex++) {
+          const x = record.vertexPositions.getX(vertexIndex);
+          const y = record.vertexPositions.getY(vertexIndex);
+          const z = record.vertexPositions.getZ(vertexIndex);
+          if (orthographicViewDirection) {
+            silhouetteViewVector.copy(orthographicViewDirection);
+          } else {
+            silhouetteViewVector.set(cameraLocal.x - x, cameraLocal.y - y, cameraLocal.z - z);
+          }
+          const viewLength = silhouetteViewVector.length();
+          record.vertexFacing[vertexIndex] = viewLength > 1e-9
+            ? (
+              record.vertexNormals[vertexIndex * 3] * silhouetteViewVector.x
+              + record.vertexNormals[vertexIndex * 3 + 1] * silhouetteViewVector.y
+              + record.vertexNormals[vertexIndex * 3 + 2] * silhouetteViewVector.z
+            ) / viewLength
+            : 0;
+        }
+        let writeIndex = 0;
+
+        record.boundaryEdges.forEach((edge) => {
+          writeIndex = writeHiddenSilhouettePoint(
+            record,
+            cameraLocal,
+            orthographicViewDirection,
+            writeIndex,
+            record.vertexPositions.getX(edge.a),
+            record.vertexPositions.getY(edge.a),
+            record.vertexPositions.getZ(edge.a),
+          );
+          writeIndex = writeHiddenSilhouettePoint(
+            record,
+            cameraLocal,
+            orthographicViewDirection,
+            writeIndex,
+            record.vertexPositions.getX(edge.b),
+            record.vertexPositions.getY(edge.b),
+            record.vertexPositions.getZ(edge.b),
+          );
+        });
+
+        // Interpolate the contour through each curved triangle. This transfers
+        // the visible outline smoothly from an open rim to the surface tangent
+        // instead of waiting for an entire tessellation facet to flip.
+        const tangentEpsilon = 1e-5;
+        for (let triangleOffset = 0; triangleOffset < record.triangles.length; triangleOffset += 3) {
+          let hitCount = 0;
+          let hit0X = 0;
+          let hit0Y = 0;
+          let hit0Z = 0;
+          let hit1X = 0;
+          let hit1Y = 0;
+          let hit1Z = 0;
+
+          for (let edgeCorner = 0; edgeCorner < 3; edgeCorner++) {
+            const a = record.triangles[triangleOffset + edgeCorner];
+            const b = record.triangles[triangleOffset + ((edgeCorner + 1) % 3)];
+            const facingA = record.vertexFacing[a];
+            const facingB = record.vertexFacing[b];
+            let interpolation = -1;
+
+            if (Math.abs(facingA) <= tangentEpsilon) {
+              interpolation = 0;
+            } else if (Math.abs(facingB) <= tangentEpsilon) {
+              interpolation = 1;
+            } else if ((facingA < 0) !== (facingB < 0)) {
+              interpolation = facingA / (facingA - facingB);
+            }
+            if (interpolation < 0) continue;
+
+            const x = THREE.MathUtils.lerp(
+              record.vertexPositions.getX(a),
+              record.vertexPositions.getX(b),
+              interpolation,
+            );
+            const y = THREE.MathUtils.lerp(
+              record.vertexPositions.getY(a),
+              record.vertexPositions.getY(b),
+              interpolation,
+            );
+            const z = THREE.MathUtils.lerp(
+              record.vertexPositions.getZ(a),
+              record.vertexPositions.getZ(b),
+              interpolation,
+            );
+
+            if (hitCount === 0) {
+              hit0X = x;
+              hit0Y = y;
+              hit0Z = z;
+              hitCount = 1;
+            } else if (
+              hitCount === 1
+              && ((x - hit0X) ** 2 + (y - hit0Y) ** 2 + (z - hit0Z) ** 2) > 1e-16
+            ) {
+              hit1X = x;
+              hit1Y = y;
+              hit1Z = z;
+              hitCount = 2;
+            }
+          }
+
+          if (hitCount === 2) {
+            writeIndex = writeHiddenSilhouettePoint(
+              record,
+              cameraLocal,
+              orthographicViewDirection,
+              writeIndex,
+              hit0X,
+              hit0Y,
+              hit0Z,
+            );
+            writeIndex = writeHiddenSilhouettePoint(
+              record,
+              cameraLocal,
+              orthographicViewDirection,
+              writeIndex,
+              hit1X,
+              hit1Y,
+              hit1Z,
+            );
+          }
+        }
+
+        const geometry = record.line.geometry as THREE.BufferGeometry;
+        const position = geometry.getAttribute("position") as THREE.BufferAttribute;
+        position.needsUpdate = true;
+        geometry.setDrawRange(0, writeIndex / 3);
+        const dashedGeometry = record.dashedLine.geometry as THREE.BufferGeometry;
+        const dashedPosition = dashedGeometry.getAttribute("position") as THREE.BufferAttribute;
+        dashedPosition.needsUpdate = true;
+        dashedGeometry.setDrawRange(0, writeIndex / 3);
+        record.dashedLine.computeLineDistances();
+      });
+    };
+
     const getPartWorldBounds = () => {
       assemblyGroup.updateMatrixWorld(true);
       partBounds.makeEmpty();
@@ -419,18 +636,50 @@ export default function CadCanvas3D({
       return partBounds;
     };
 
+    const applyHiddenLineDepthBias = (material: THREE.LineBasicMaterial) => {
+      // Logarithmic depth overrides the normal polygon offset path. Pull only
+      // the visible line fragment forward by a few depth-buffer steps so rims
+      // shared with planar faces remain solid without revealing real occlusion.
+      material.onBeforeCompile = (shader) => {
+        shader.fragmentShader = shader.fragmentShader.replace(
+          "#include <logdepthbuf_fragment>",
+          [
+            "#include <logdepthbuf_fragment>",
+            "#ifdef USE_LOGARITHMIC_DEPTH_BUFFER",
+            "  gl_FragDepth = max(0.0, gl_FragDepth - 0.000002);",
+            "#endif",
+          ].join("\n"),
+        );
+      };
+      material.customProgramCacheKey = () => "cad-hidden-visible-line-depth-bias-v1";
+      material.needsUpdate = true;
+    };
+
     // Helper: Obtain base face standard material
-    const getFaceMaterial = (type: string, baseColor: THREE.Color, mode: "solid" | "xray" | "wire", isSelected: boolean, isHovered: boolean) => {
+    const getFaceMaterial = (type: string, baseColor: THREE.Color, mode: "solid" | "xray" | "wire" | "hidden", isSelected: boolean, isHovered: boolean) => {
       if (mode === "wire") {
         const material = new THREE.MeshBasicMaterial({
           color: baseColor,
-          transparent: true,
-          opacity: 0,
+          transparent: false,
+          depthTest: true,
           depthWrite: false,
           side: THREE.DoubleSide,
         });
         material.colorWrite = false;
         return material;
+      }
+
+      if (mode === "hidden") {
+        return new THREE.MeshBasicMaterial({
+          color: new THREE.Color("#f8fafc"),
+          transparent: false,
+          depthTest: true,
+          depthWrite: true,
+          polygonOffset: true,
+          polygonOffsetFactor: 1,
+          polygonOffsetUnits: 1,
+          side: THREE.DoubleSide,
+        });
       }
 
       if (mode === "xray") {
@@ -676,6 +925,157 @@ export default function CadCanvas3D({
         .forEach((element) => element.remove());
     };
 
+    const addHiddenSilhouetteRecord = (meshObj: THREE.Mesh) => {
+      const geometry = meshObj.geometry as THREE.BufferGeometry;
+      const position = geometry.getAttribute("position") as THREE.BufferAttribute | undefined;
+      if (!position || position.count < 3) return;
+
+      const index = geometry.getIndex();
+      const sourceNormals = geometry.getAttribute("normal") as THREE.BufferAttribute | undefined;
+      const edgeMap = new Map<string, { a: number; b: number; left: number; right: number }>();
+      const a = new THREE.Vector3();
+      const b = new THREE.Vector3();
+      const c = new THREE.Vector3();
+      const normal = new THREE.Vector3();
+      const referenceNormal = new THREE.Vector3();
+      let hasReferenceNormal = false;
+      let minimumNormalAlignment = 1;
+      const triCount = index ? Math.floor(index.count / 3) : Math.floor(position.count / 3);
+      const triangles = new Uint32Array(triCount * 3);
+      const vertexNormals = new Float32Array(position.count * 3);
+      const getVertexIndex = (triangleIndex: number, corner: number) =>
+        index ? index.getX(triangleIndex * 3 + corner) : triangleIndex * 3 + corner;
+
+      const addEdge = (v0: number, v1: number, triangleIndex: number) => {
+        const key = v0 < v1 ? `${v0}|${v1}` : `${v1}|${v0}`;
+        const existing = edgeMap.get(key);
+        if (existing) {
+          existing.right = triangleIndex;
+          return;
+        }
+        edgeMap.set(key, { a: v0, b: v1, left: triangleIndex, right: -1 });
+      };
+
+      for (let tri = 0; tri < triCount; tri++) {
+        const ia = getVertexIndex(tri, 0);
+        const ib = getVertexIndex(tri, 1);
+        const ic = getVertexIndex(tri, 2);
+        triangles[tri * 3] = ia;
+        triangles[tri * 3 + 1] = ib;
+        triangles[tri * 3 + 2] = ic;
+        a.set(position.getX(ia), position.getY(ia), position.getZ(ia));
+        b.set(position.getX(ib), position.getY(ib), position.getZ(ib));
+        c.set(position.getX(ic), position.getY(ic), position.getZ(ic));
+        normal.subVectors(b, a).cross(c.clone().sub(a));
+        if (normal.lengthSq() > 1e-12) {
+          normal.normalize();
+          if (!hasReferenceNormal) {
+            referenceNormal.copy(normal);
+            hasReferenceNormal = true;
+          } else {
+            minimumNormalAlignment = Math.min(
+              minimumNormalAlignment,
+              Math.abs(referenceNormal.dot(normal)),
+            );
+          }
+        }
+        [ia, ib, ic].forEach((vertexIndex) => {
+          vertexNormals[vertexIndex * 3] += normal.x;
+          vertexNormals[vertexIndex * 3 + 1] += normal.y;
+          vertexNormals[vertexIndex * 3 + 2] += normal.z;
+        });
+        addEdge(ia, ib, tri);
+        addEdge(ib, ic, tri);
+        addEdge(ic, ia, tri);
+      }
+
+      // Interaction placement intentionally accepts broadly coherent normals,
+      // but hidden-line silhouettes need a strict planarity test. Otherwise a
+      // shallow cylindrical dome is mistaken for a plane and loses its tangent
+      // generator in side views.
+      if (!hasReferenceNormal || minimumNormalAlignment > 0.9995) return;
+
+      const edges = Array.from(edgeMap.values());
+      if (edges.length === 0) return;
+      for (let vertexIndex = 0; vertexIndex < position.count; vertexIndex++) {
+        const offset = vertexIndex * 3;
+        const length = Math.hypot(vertexNormals[offset], vertexNormals[offset + 1], vertexNormals[offset + 2]);
+        if (length > 1e-9) {
+          vertexNormals[offset] /= length;
+          vertexNormals[offset + 1] /= length;
+          vertexNormals[offset + 2] /= length;
+        } else if (sourceNormals) {
+          vertexNormals[offset] = sourceNormals.getX(vertexIndex);
+          vertexNormals[offset + 1] = sourceNormals.getY(vertexIndex);
+          vertexNormals[offset + 2] = sourceNormals.getZ(vertexIndex);
+        }
+      }
+
+      const boundaryEdges = edges
+        .filter((edge) => edge.right < 0)
+        .map((edge) => ({ a: edge.a, b: edge.b }));
+      const maxSegmentCount = boundaryEdges.length + triCount;
+      const silhouettePositions = new Float32Array(maxSegmentCount * 6);
+      const visibleSilhouettePositions = new Float32Array(maxSegmentCount * 6);
+      geometry.computeBoundingSphere();
+      const depthBias = Math.max((geometry.boundingSphere?.radius || 1) * 2e-5, 1e-6);
+
+      if (!hiddenSilhouetteGroup) {
+        hiddenSilhouetteGroup = new THREE.Group();
+        hiddenSilhouetteGroup.name = "BRepHiddenSilhouetteEdges";
+        assemblyGroup.add(hiddenSilhouetteGroup);
+      }
+
+      const silhouetteGeometry = new THREE.BufferGeometry();
+      silhouetteGeometry.setAttribute("position", new THREE.BufferAttribute(visibleSilhouettePositions, 3).setUsage(THREE.DynamicDrawUsage));
+      silhouetteGeometry.setDrawRange(0, 0);
+      const dashedSilhouetteGeometry = new THREE.BufferGeometry();
+      dashedSilhouetteGeometry.setAttribute("position", new THREE.BufferAttribute(silhouettePositions, 3).setUsage(THREE.DynamicDrawUsage));
+      dashedSilhouetteGeometry.setDrawRange(0, 0);
+      const dashedSilhouetteMaterial = new THREE.LineDashedMaterial({
+        color: 0xcbd5e1,
+        dashSize: 0.08,
+        gapSize: 0.03,
+        transparent: true,
+        opacity: 0.62,
+        depthTest: false,
+        depthWrite: false,
+      });
+      hiddenEdgeDashMaterials.push(dashedSilhouetteMaterial);
+      const silhouetteMaterial = new THREE.LineBasicMaterial({
+        color: 0x111827,
+        transparent: true,
+        opacity: 0.82,
+        depthTest: true,
+        depthWrite: false,
+      });
+      applyHiddenLineDepthBias(silhouetteMaterial);
+      const dashedSilhouetteLine = new THREE.LineSegments(dashedSilhouetteGeometry, dashedSilhouetteMaterial);
+      dashedSilhouetteLine.name = `${meshObj.name}-HiddenDashedSilhouette`;
+      dashedSilhouetteLine.computeLineDistances();
+      dashedSilhouetteLine.renderOrder = 2;
+      dashedSilhouetteLine.raycast = () => undefined;
+      const silhouetteLine = new THREE.LineSegments(silhouetteGeometry, silhouetteMaterial);
+      silhouetteLine.name = `${meshObj.name}-HiddenSilhouette`;
+      silhouetteLine.renderOrder = 3;
+      silhouetteLine.raycast = () => undefined;
+      hiddenSilhouetteGroup.add(dashedSilhouetteLine);
+      hiddenSilhouetteGroup.add(silhouetteLine);
+      hiddenSilhouetteRecords.push({
+        object: meshObj,
+        line: silhouetteLine,
+        dashedLine: dashedSilhouetteLine,
+        positions: silhouettePositions,
+        visiblePositions: visibleSilhouettePositions,
+        depthBias,
+        boundaryEdges,
+        triangles,
+        vertexNormals,
+        vertexFacing: new Float32Array(position.count),
+        vertexPositions: position,
+      });
+    };
+
     // Rebuild B-Rep objects inside the canvas
     const rebuildSceneTopology = (resetCamera = false) => {
       clearPmiDimensionLabelElements();
@@ -702,7 +1102,11 @@ export default function CadCanvas3D({
       cadVertexPickObjects = [];
       renderedObjectByName = new Map();
       edgeNamesByFaceIndex = new Map();
+      faceWireEdgePositionsByName = new Map();
       vertexRecordsByName = new Map();
+      hiddenEdgeDashMaterials = [];
+      hiddenSilhouetteGroup = null;
+      hiddenSilhouetteRecords = [];
 
       if (!occtResult || !occtResult.success) return;
 
@@ -812,10 +1216,14 @@ export default function CadCanvas3D({
           const mat = getFaceMaterial(activeMat, baseColor, activeMode, isSelected, isHovered);
           const meshObj = new THREE.Mesh(geometry, mat);
           meshObj.name = `BRepFace-${idx}`;
+          meshObj.renderOrder = activeMode === "hidden" ? -4 : 0;
           meshObj.userData = faceUserData;
           assemblyGroup.add(meshObj);
           renderedObjectByName.set(meshObj.name, meshObj);
           cadFallbackFacePickObjects.push(meshObj);
+          if (activeMode === "hidden") {
+            addHiddenSilhouetteRecord(meshObj);
+          }
         });
       }
 
@@ -993,15 +1401,46 @@ export default function CadCanvas3D({
         if (visibleEdgePositions.length > 0) {
           const mergedEdgeGeometry = new THREE.BufferGeometry();
           mergedEdgeGeometry.setAttribute("position", new THREE.Float32BufferAttribute(visibleEdgePositions, 3));
+          if (activeMode === "hidden") {
+            const hiddenEdgeGeometry = mergedEdgeGeometry.clone();
+            const hiddenEdgeMaterial = new THREE.LineDashedMaterial({
+              color: 0xcbd5e1,
+              dashSize: 0.08,
+              gapSize: 0.03,
+              transparent: true,
+              opacity: 0.72,
+              depthTest: false,
+              depthWrite: false,
+            });
+            hiddenEdgeDashMaterials.push(hiddenEdgeMaterial);
+            const hiddenEdgeObject = new THREE.LineSegments(hiddenEdgeGeometry, hiddenEdgeMaterial);
+            hiddenEdgeObject.name = "BRepHiddenDashedEdges";
+            hiddenEdgeObject.computeLineDistances();
+            hiddenEdgeObject.renderOrder = 1;
+            assemblyGroup.add(hiddenEdgeObject);
+          }
+
           const mergedEdgeMaterial = new THREE.LineBasicMaterial({
-            color: activeMode === "wire" ? 0x1f2937 : 0x64748b,
+            color: activeMode === "solid"
+              ? 0x000000
+              : activeMode === "wire" || activeMode === "hidden"
+              ? 0x1f2937
+              : 0x64748b,
             transparent: true,
-            opacity: activeMode === "wire" ? 0.82 : 0.35,
+            opacity: activeMode === "solid"
+              ? 0.82
+              : activeMode === "wire" || activeMode === "hidden"
+              ? 0.88
+              : 0.35,
+            depthTest: activeMode === "solid" || activeMode === "hidden",
             depthWrite: false,
           });
+          if (activeMode === "hidden") {
+            applyHiddenLineDepthBias(mergedEdgeMaterial);
+          }
           const mergedEdgeObject = new THREE.LineSegments(mergedEdgeGeometry, mergedEdgeMaterial);
           mergedEdgeObject.name = "BRepVisibleEdges";
-          mergedEdgeObject.renderOrder = 1;
+          mergedEdgeObject.renderOrder = activeMode === "hidden" ? 2 : 1;
           assemblyGroup.add(mergedEdgeObject);
         }
 
@@ -2872,6 +3311,46 @@ export default function CadCanvas3D({
         ...directSelectedEdgeNames,
         ...directHoveredEdgeNames,
       ])];
+      const getFaceWireEdgePositions = (faceName: string) => {
+        const cached = faceWireEdgePositionsByName.get(faceName);
+        if (cached) return cached;
+
+        const faceIdx = parseInt(faceName.replace("BRepFace-", ""), 10);
+        if (!Number.isFinite(faceIdx)) return null;
+        const loopEdgeNames = edgeNamesByFaceIndex.get(faceIdx) || [];
+        if (loopEdgeNames.length === 0) return null;
+        const positions: number[] = [];
+
+        loopEdgeNames.forEach((edgeName) => {
+          const edgeObject = renderedObjectByName.get(edgeName) as THREE.LineSegments | undefined;
+          const edgeGeometry = edgeObject?.geometry as THREE.BufferGeometry | undefined;
+          const position = edgeGeometry?.getAttribute("position") as THREE.BufferAttribute | undefined;
+          if (!position || position.count < 2) return;
+          const index = edgeGeometry.getIndex();
+          const appendSegment = (aIndex: number, bIndex: number) => {
+            if (aIndex < 0 || bIndex < 0 || aIndex >= position.count || bIndex >= position.count) return;
+            positions.push(
+              position.getX(aIndex), position.getY(aIndex), position.getZ(aIndex),
+              position.getX(bIndex), position.getY(bIndex), position.getZ(bIndex)
+            );
+          };
+          if (index && index.count >= 2) {
+            for (let i = 0; i < index.count - 1; i += 2) {
+              appendSegment(index.getX(i), index.getX(i + 1));
+            }
+          } else {
+            for (let i = 0; i < position.count - 1; i += 2) {
+              appendSegment(i, i + 1);
+            }
+          }
+        });
+
+        if (positions.length < 6) return null;
+
+        faceWireEdgePositionsByName.set(faceName, positions);
+        return positions;
+      };
+
       if (activeEdgeNames.length > 0) {
         edgeHighlightGroup = new THREE.Group();
         edgeHighlightGroup.name = "BRepActiveEdgeWideHighlights";
@@ -2923,33 +3402,15 @@ export default function CadCanvas3D({
           edgeHighlightGroup = null;
         }
       }
-      const activeFaceWireNames = propsRef.current.viewMode === "wire"
+      const activeFaceWireNames = propsRef.current.viewMode === "wire" || propsRef.current.viewMode === "hidden"
         ? [...nextHighlightNames].filter((name) => name.startsWith("BRepFace-"))
         : [];
       if (activeFaceWireNames.length > 0) {
         faceWireHighlightGroup = new THREE.Group();
         faceWireHighlightGroup.name = "BRepActiveFaceWireHighlights";
         activeFaceWireNames.forEach((faceName) => {
-          const faceObject = renderedObjectByName.get(faceName) as THREE.Mesh | undefined;
-          const faceGeometry = faceObject?.geometry as THREE.BufferGeometry | undefined;
-          if (!faceGeometry?.getAttribute("position")) return;
-
-          const edgeGeometry = new THREE.EdgesGeometry(faceGeometry, 1);
-          const position = edgeGeometry.getAttribute("position") as THREE.BufferAttribute | undefined;
-          if (!position || position.count < 2) {
-            edgeGeometry.dispose();
-            return;
-          }
-
-          const positions: number[] = [];
-          for (let i = 0; i < position.count - 1; i += 2) {
-            positions.push(
-              position.getX(i), position.getY(i), position.getZ(i),
-              position.getX(i + 1), position.getY(i + 1), position.getZ(i + 1)
-            );
-          }
-          edgeGeometry.dispose();
-          if (positions.length < 6) return;
+          const positions = getFaceWireEdgePositions(faceName);
+          if (!positions) return;
 
           const geometry = new LineSegmentsGeometry();
           geometry.setPositions(positions);
@@ -3020,14 +3481,26 @@ export default function CadCanvas3D({
       activeNames.forEach((name) => {
         const child = renderedObjectByName.get(name);
         if (!child) return;
-        const isWireMode = propsRef.current.viewMode === "wire";
+        const isWireMode = propsRef.current.viewMode === "wire" || propsRef.current.viewMode === "hidden";
 
         if (child.name.startsWith("BRepFace-")) {
           const isSelected = selectedNames.has(child.name);
           const isHovered = hoverId === child.name;
           const baseColor = new THREE.Color(`#${child.userData.color || "cbd5e1"}`);
+          const activeViewMode = propsRef.current.viewMode;
 
           const material = (child as THREE.Mesh | THREE.Points).material;
+          if (activeViewMode === "hidden" && material instanceof THREE.MeshBasicMaterial) {
+            material.color.set("#f8fafc");
+            material.colorWrite = true;
+            material.depthWrite = true;
+            return;
+          }
+          if (activeViewMode === "wire" && material instanceof THREE.MeshBasicMaterial) {
+            material.colorWrite = false;
+            material.depthWrite = false;
+            return;
+          }
           if (material instanceof THREE.MeshStandardMaterial) {
             if (isSelected) {
               material.color.set("#10b981");
@@ -7612,6 +8085,8 @@ export default function CadCanvas3D({
       assemblyGroup.updateMatrixWorld(true);
       updateEdgeHighlightResolution();
       updateVertexMarkerScreenScale();
+      updateHiddenLineDashScale();
+      updateHiddenSilhouetteLines();
 
       if (orientationCubeRef.current) {
         orientationCubeCameraDirection.copy(camera.position).sub(controls.target).normalize();

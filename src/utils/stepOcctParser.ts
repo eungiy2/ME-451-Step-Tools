@@ -18,7 +18,7 @@ export async function parseStepWithOcct(
   
   // Gather linear and angular deflection bounds
   const linearDeflection = params.linearDeflection ?? 0.1;
-  const angularDeflection = params.angularDeflection ?? 0.5;
+  const angularDeflection = params.angularDeflection ?? 0.10;
   
   const parseConfig = {
     linearDeflection: Number(linearDeflection),
