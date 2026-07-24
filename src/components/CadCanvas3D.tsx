@@ -14,7 +14,7 @@ import { LineSegmentsGeometry } from "three/examples/jsm/lines/LineSegmentsGeome
 interface CadCanvas3DProps {
   occtResult: any;
   isLoading: boolean;
-  viewMode: "solid" | "xray";
+  viewMode: "solid" | "xray" | "wire";
   cameraProjection: "perspective" | "orthographic";
   materialType: "titanium" | "gold" | "chrome" | "carbon";
   autoRotate: boolean;
@@ -369,6 +369,7 @@ export default function CadCanvas3D({
     let measurementGroup: THREE.Group | null = null;
     let previousMeasurementGroup: THREE.Group | null = null;
     let edgeHighlightGroup: THREE.Group | null = null;
+    let faceWireHighlightGroup: THREE.Group | null = null;
     let vertexHighlightGroup: THREE.Group | null = null;
     let measurementLabelPoint: THREE.Vector3 | null = null;
     let prevMeasurementMode = measurementMode;
@@ -377,14 +378,14 @@ export default function CadCanvas3D({
     const vertexMarkerWorldPoint = new THREE.Vector3();
 
     const updateEdgeHighlightResolution = (force = false) => {
-      if (!edgeHighlightGroup) return;
+      if (!edgeHighlightGroup && !faceWireHighlightGroup) return;
       const width = Math.max(viewportWidth, 1);
       const height = Math.max(viewportHeight, 1);
       if (!force && width === edgeHighlightResolutionWidth && height === edgeHighlightResolutionHeight) return;
 
       edgeHighlightResolutionWidth = width;
       edgeHighlightResolutionHeight = height;
-      edgeHighlightGroup.children.forEach((item) => {
+      [...(edgeHighlightGroup?.children || []), ...(faceWireHighlightGroup?.children || [])].forEach((item) => {
         const material = (item as any).material;
         if (material instanceof LineMaterial) {
           material.resolution.set(width, height);
@@ -419,7 +420,19 @@ export default function CadCanvas3D({
     };
 
     // Helper: Obtain base face standard material
-    const getFaceMaterial = (type: string, baseColor: THREE.Color, mode: "solid" | "xray", isSelected: boolean, isHovered: boolean) => {
+    const getFaceMaterial = (type: string, baseColor: THREE.Color, mode: "solid" | "xray" | "wire", isSelected: boolean, isHovered: boolean) => {
+      if (mode === "wire") {
+        const material = new THREE.MeshBasicMaterial({
+          color: baseColor,
+          transparent: true,
+          opacity: 0,
+          depthWrite: false,
+          side: THREE.DoubleSide,
+        });
+        material.colorWrite = false;
+        return material;
+      }
+
       if (mode === "xray") {
         return new THREE.MeshStandardMaterial({
           color: isSelected ? new THREE.Color("#10b981") : (isHovered ? new THREE.Color("#38bdf8") : baseColor.clone().addScalar(0.1)),
@@ -827,7 +840,8 @@ export default function CadCanvas3D({
         pickMesh.name = "CADFacePickSurface";
         pickMesh.userData.pickFaceNamesByTriangle = pickFaceNamesByTriangle;
         pickMesh.userData.pickFaceNamesByVertex = pickFaceNamesByVertex;
-        pickMesh.visible = false;
+        pickMesh.visible = true;
+        pickMesh.renderOrder = -10;
         assemblyGroup.add(pickMesh);
         cadFacePickObjects = [pickMesh];
       }
@@ -947,6 +961,7 @@ export default function CadCanvas3D({
             linewidth: edgeWidth,
             transparent: true,
             opacity: edgeOpacity,
+            depthTest: false,
             depthWrite: false,
           });
 
@@ -954,6 +969,7 @@ export default function CadCanvas3D({
           const lineObj = new THREE.LineSegments(geometry, edgeMaterial);
           lineObj.name = edgeName;
           lineObj.visible = isHighlighted;
+          lineObj.renderOrder = 12;
           lineObj.userData = { 
             index: idx, 
             type: "edge", 
@@ -978,9 +994,9 @@ export default function CadCanvas3D({
           const mergedEdgeGeometry = new THREE.BufferGeometry();
           mergedEdgeGeometry.setAttribute("position", new THREE.Float32BufferAttribute(visibleEdgePositions, 3));
           const mergedEdgeMaterial = new THREE.LineBasicMaterial({
-            color: 0x64748b,
+            color: activeMode === "wire" ? 0x1f2937 : 0x64748b,
             transparent: true,
-            opacity: 0.35,
+            opacity: activeMode === "wire" ? 0.82 : 0.35,
             depthWrite: false,
           });
           const mergedEdgeObject = new THREE.LineSegments(mergedEdgeGeometry, mergedEdgeMaterial);
@@ -2476,7 +2492,14 @@ export default function CadCanvas3D({
             if (blockDetails) onSelectEntity(blockDetails);
             requestRenderRef.current?.(3);
           }
+          return;
         }
+      }
+
+      if (!propsRef.current.measurementMode && propsRef.current.selectionClickEnabled) {
+        clearHoverState();
+        onSelectEntity(null);
+        requestRenderRef.current?.(3);
       }
     };
 
@@ -2817,6 +2840,20 @@ export default function CadCanvas3D({
       ]);
 
       const activeVertexNames = [...nextHighlightNames].filter((name) => name.startsWith("BRepVertex-"));
+      if (faceWireHighlightGroup) {
+        faceWireHighlightGroup.traverse((item) => {
+          if (item instanceof LineSegments2) {
+            item.geometry.dispose();
+            if (Array.isArray(item.material)) {
+              item.material.forEach((material) => material.dispose());
+            } else {
+              item.material.dispose();
+            }
+          }
+        });
+        assemblyGroup.remove(faceWireHighlightGroup);
+        faceWireHighlightGroup = null;
+      }
       if (edgeHighlightGroup) {
         edgeHighlightGroup.traverse((item) => {
           if (item instanceof LineSegments2) {
@@ -2886,6 +2923,59 @@ export default function CadCanvas3D({
           edgeHighlightGroup = null;
         }
       }
+      const activeFaceWireNames = propsRef.current.viewMode === "wire"
+        ? [...nextHighlightNames].filter((name) => name.startsWith("BRepFace-"))
+        : [];
+      if (activeFaceWireNames.length > 0) {
+        faceWireHighlightGroup = new THREE.Group();
+        faceWireHighlightGroup.name = "BRepActiveFaceWireHighlights";
+        activeFaceWireNames.forEach((faceName) => {
+          const faceObject = renderedObjectByName.get(faceName) as THREE.Mesh | undefined;
+          const faceGeometry = faceObject?.geometry as THREE.BufferGeometry | undefined;
+          if (!faceGeometry?.getAttribute("position")) return;
+
+          const edgeGeometry = new THREE.EdgesGeometry(faceGeometry, 1);
+          const position = edgeGeometry.getAttribute("position") as THREE.BufferAttribute | undefined;
+          if (!position || position.count < 2) {
+            edgeGeometry.dispose();
+            return;
+          }
+
+          const positions: number[] = [];
+          for (let i = 0; i < position.count - 1; i += 2) {
+            positions.push(
+              position.getX(i), position.getY(i), position.getZ(i),
+              position.getX(i + 1), position.getY(i + 1), position.getZ(i + 1)
+            );
+          }
+          edgeGeometry.dispose();
+          if (positions.length < 6) return;
+
+          const geometry = new LineSegmentsGeometry();
+          geometry.setPositions(positions);
+          const isSelected = selectedNames.has(faceName);
+          const material = new LineMaterial({
+            color: isSelected ? 0x10b981 : 0xf43f5e,
+            linewidth: isSelected ? 3.0 : 2.8,
+            transparent: true,
+            opacity: 0.96,
+            depthTest: false,
+            depthWrite: false,
+          });
+          material.resolution.set(Math.max(viewportWidth, 1), Math.max(viewportHeight, 1));
+          const faceOutline = new LineSegments2(geometry, material);
+          faceOutline.name = `BRepWireFaceHighlight-${faceName}`;
+          faceOutline.renderOrder = 18;
+          faceOutline.raycast = () => undefined;
+          faceWireHighlightGroup!.add(faceOutline);
+        });
+        if (faceWireHighlightGroup.children.length > 0) {
+          assemblyGroup.add(faceWireHighlightGroup);
+          updateEdgeHighlightResolution(true);
+        } else {
+          faceWireHighlightGroup = null;
+        }
+      }
       if (vertexHighlightGroup) {
         vertexHighlightGroup.traverse((item) => {
           if (item instanceof THREE.Points || item instanceof THREE.Mesh) {
@@ -2930,6 +3020,7 @@ export default function CadCanvas3D({
       activeNames.forEach((name) => {
         const child = renderedObjectByName.get(name);
         if (!child) return;
+        const isWireMode = propsRef.current.viewMode === "wire";
 
         if (child.name.startsWith("BRepFace-")) {
           const isSelected = selectedNames.has(child.name);
@@ -2960,6 +3051,7 @@ export default function CadCanvas3D({
         if (child.name.startsWith("BRepEdge-")) {
           const isHighlighted = selectedEdgeNames.has(child.name) || hoveredEdgeNames.has(child.name);
           child.visible = isHighlighted;
+          child.renderOrder = isHighlighted ? 12 : 0;
 
           const material = (child as THREE.LineSegments).material;
           if (material instanceof THREE.LineBasicMaterial) {
@@ -2971,17 +3063,18 @@ export default function CadCanvas3D({
               material.opacity = 1.0;
             } else if (selectedEdgeNames.has(child.name)) {
               material.color.setHex(0x10b981);
-              material.linewidth = 2.4;
-              material.opacity = 0.66;
+              material.linewidth = isWireMode ? 2.8 : 2.4;
+              material.opacity = isWireMode ? 0.95 : 0.66;
             } else if (hoveredEdgeNames.has(child.name)) {
               material.color.setHex(0xf43f5e);
-              material.linewidth = 2.4;
-              material.opacity = 0.6;
+              material.linewidth = isWireMode ? 2.8 : 2.4;
+              material.opacity = isWireMode ? 0.9 : 0.6;
             } else {
               material.color.setHex(0x64748b);
               material.linewidth = 1.5;
               material.opacity = 0.0;
             }
+            material.depthTest = false;
             material.depthWrite = false;
           }
         }

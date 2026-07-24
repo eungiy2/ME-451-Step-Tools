@@ -537,7 +537,7 @@ export default function App() {
   const [uploadedBytes, setUploadedBytes] = useState<Uint8Array | null>(null);
 
   // Graphical viewport preferences
-  const [viewMode, setViewMode] = useState<"solid" | "xray">("solid");
+  const [viewMode, setViewMode] = useState<"solid" | "xray" | "wire">("solid");
   const [cameraProjection, setCameraProjection] = useState<"perspective" | "orthographic">("perspective");
   const [measurementMode, setMeasurementMode] = useState<boolean>(false);
   const [presetResetNonce, setPresetResetNonce] = useState<number>(0);
@@ -932,7 +932,8 @@ export default function App() {
               <div className="flex flex-wrap bg-slate-100 p-0.5 rounded-lg border border-slate-200 gap-0.5">
                 {([
                   ["solid", "SOLID"],
-                  ["xray", "XRAY"]
+                  ["xray", "XRAY"],
+                  ["wire", "WIRE"]
                 ] as const).map(([mode, label]) => (
                   <button
                     key={mode}
