@@ -69,6 +69,9 @@ type BRepVertexRecord = {
   edgeIds: string[];
   parentFaceIndices: number[];
   parentFaceIds: string[];
+  stepEntityIds: string[];
+  topologySource: "occt" | "step" | "tessellation";
+  topologySignature?: string;
 };
 
 type LinearMeasurementResult = {
@@ -238,6 +241,8 @@ export default function CadCanvas3D({
         viewportHeight = Math.max(height, 1);
         updateActiveCameraProjectionMatrix();
         renderer.setSize(width, height);
+        pmiCollisionLayoutRequested = true;
+        pmiCollisionStableFrames = 0;
         requestRenderRef.current?.(2);
       }
     });
@@ -266,6 +271,8 @@ export default function CadCanvas3D({
       updateActiveCameraProjectionMatrix();
       controls.update();
       camera.updateMatrixWorld(true);
+      pmiCollisionLayoutRequested = true;
+      pmiCollisionStableFrames = 0;
       requestRenderRef.current?.(4);
     };
 
@@ -282,6 +289,30 @@ export default function CadCanvas3D({
     let focusedDatumOrbit = false;
     const modelOrbitTarget = new THREE.Vector3(0, 0, 0);
     let modelSizeMax = 10;
+    type PmiDimensionLabelEntry = {
+      element: HTMLElement;
+      point: THREE.Vector3;
+      resolvePoint?: () => THREE.Vector3 | null;
+      resolveTransform?: () => string;
+      placementPolicy: "fixed" | "datum-attached" | "leader-attached" | "linear-attached";
+      collisionOffsetX: number;
+      collisionOffsetY: number;
+      baseTransform: string;
+      screenX: number;
+      screenY: number;
+      visible: boolean;
+      measuredWidth: number;
+      measuredHeight: number;
+      leaderObjects: THREE.Object3D[];
+      linearDimension?: {
+        start: THREE.Vector3;
+        end: THREE.Vector3;
+        dimStart: THREE.Vector3;
+        dimEnd: THREE.Vector3;
+        axis: THREE.Vector3;
+        line: THREE.LineSegments;
+      };
+    };
     let drfBadgeCache: {
       id: string;
       element: HTMLElement;
@@ -324,6 +355,7 @@ export default function CadCanvas3D({
       targetMarkHalfSize: number;
       annotationKind: "datum" | "datumTarget";
       hasLeader: boolean;
+      useFeatureControlFrameBranch: boolean;
     }[] = [];
     let pmiDimensionLeaderCache: {
       tolerance: any;
@@ -334,25 +366,22 @@ export default function CadCanvas3D({
         surfacePoint: THREE.Vector3;
         radialDirection: THREE.Vector3;
       };
+      resolveGeometry?: () => {
+        linePoints: THREE.Vector3[];
+        arrowPoints: THREE.Vector3[];
+        labelPosition: THREE.Vector3;
+        anchor: {
+          surfacePoint: THREE.Vector3;
+          radialDirection: THREE.Vector3;
+        };
+      } | null;
       line: THREE.LineSegments;
       arrow: THREE.Mesh;
-      labelEntry: {
-        element: HTMLElement;
-        point: THREE.Vector3;
-        screenX: number;
-        screenY: number;
-        visible: boolean;
-      } | null;
+      labelEntry: PmiDimensionLabelEntry | null;
     }[] = [];
-    let pmiDimensionLabelCache: {
-      element: HTMLElement;
-      point: THREE.Vector3;
-      resolvePoint?: () => THREE.Vector3 | null;
-      resolveTransform?: () => string;
-      screenX: number;
-      screenY: number;
-      visible: boolean;
-    }[] = [];
+    let pmiDimensionLabelCache: PmiDimensionLabelEntry[] = [];
+    let pmiCollisionLayoutRequested = true;
+    let pmiCollisionStableFrames = 0;
     let updatePmiDimensionLeaderFacing: () => void = () => undefined;
     let cadFacePickObjects: THREE.Object3D[] = [];
     let cadFallbackFacePickObjects: THREE.Object3D[] = [];
@@ -920,6 +949,8 @@ export default function CadCanvas3D({
     const clearPmiDimensionLabelElements = () => {
       pmiDimensionLeaderCache = [];
       pmiDimensionLabelCache = [];
+      pmiCollisionLayoutRequested = true;
+      pmiCollisionStableFrames = 0;
       containerRef.current
         ?.querySelectorAll("[data-pmi-dimension-label='true']")
         .forEach((element) => element.remove());
@@ -1122,12 +1153,44 @@ export default function CadCanvas3D({
       const edgePickPositions: number[] = [];
       const edgePickNamesBySegment: string[] = [];
       const vertexRecordsByKey = new Map<string, BRepVertexRecord>();
+      const usesExplicitNativeVertices =
+        occtResult.geometryTopologySource === "occt" &&
+        Array.isArray(occtResult.vertices);
+      const nativeVertexRecordsById = new Map<string, BRepVertexRecord>();
+
+      if (usesExplicitNativeVertices) {
+        occtResult.vertices.forEach((vertex: any, order: number) => {
+          const point = vertex?.point;
+          if (
+            typeof vertex?.id !== "string" ||
+            !Number.isFinite(point?.x) ||
+            !Number.isFinite(point?.y) ||
+            !Number.isFinite(point?.z)
+          ) {
+            return;
+          }
+          const parsedIndex = Number(vertex.id.replace(/^BRepVertex-/, ""));
+          nativeVertexRecordsById.set(vertex.id, {
+            id: vertex.id,
+            index: Number.isInteger(parsedIndex) ? parsedIndex : order,
+            point: { x: point.x, y: point.y, z: point.z },
+            edgeIds: [],
+            parentFaceIndices: [],
+            parentFaceIds: [],
+            stepEntityIds: [],
+            topologySource: "occt",
+            topologySignature: vertex.topologySignature
+          });
+        });
+      }
 
       const addVertexCandidate = (
         point: { x: number; y: number; z: number },
         edgeName: string,
         parentFaceIndices: number[] = [],
-        parentFaceIds: string[] = []
+        parentFaceIds: string[] = [],
+        stepEntityIds: string[] = [],
+        topologySource: "occt" | "step" | "tessellation" = "tessellation"
       ) => {
         const key = `${point.x.toFixed(5)}|${point.y.toFixed(5)}|${point.z.toFixed(5)}`;
         let record = vertexRecordsByKey.get(key);
@@ -1139,7 +1202,9 @@ export default function CadCanvas3D({
             point: { x: point.x, y: point.y, z: point.z },
             edgeIds: [],
             parentFaceIndices: [],
-            parentFaceIds: []
+            parentFaceIds: [],
+            stepEntityIds: [],
+            topologySource: "tessellation"
           };
           vertexRecordsByKey.set(key, record);
         }
@@ -1149,6 +1214,35 @@ export default function CadCanvas3D({
         });
         parentFaceIds.forEach((faceId) => {
           if (faceId && !record!.parentFaceIds.includes(faceId)) record!.parentFaceIds.push(faceId);
+        });
+        stepEntityIds.forEach((entityId) => {
+          if (entityId && !record!.stepEntityIds.includes(entityId)) record!.stepEntityIds.push(entityId);
+        });
+        if (topologySource === "occt") {
+          record.topologySource = "occt";
+        } else if (record.topologySource !== "occt" && record.stepEntityIds.length > 0) {
+          record.topologySource = "step";
+        }
+      };
+
+      const addNativeVertexOwnership = (
+        vertexId: string,
+        edgeName: string,
+        parentFaceIndices: number[] = [],
+        parentFaceIds: string[] = [],
+        stepEntityIds: string[] = []
+      ) => {
+        const record = nativeVertexRecordsById.get(vertexId);
+        if (!record) return;
+        if (!record.edgeIds.includes(edgeName)) record.edgeIds.push(edgeName);
+        parentFaceIndices.forEach((faceIndex) => {
+          if (!record.parentFaceIndices.includes(faceIndex)) record.parentFaceIndices.push(faceIndex);
+        });
+        parentFaceIds.forEach((faceId) => {
+          if (faceId && !record.parentFaceIds.includes(faceId)) record.parentFaceIds.push(faceId);
+        });
+        stepEntityIds.forEach((entityId) => {
+          if (entityId && !record.stepEntityIds.includes(entityId)) record.stepEntityIds.push(entityId);
         });
       };
 
@@ -1211,6 +1305,11 @@ export default function CadCanvas3D({
             color: baseColor.getHexString(),
             area: faceArea,
             interactionCache,
+            topologySource: mesh.topologySource || "tessellation",
+            topologySignature: mesh.topologySignature,
+            surfaceType: mesh.surfaceType,
+            nativeLoopIds: mesh.nativeLoopIds || [],
+            nativeEdgeIds: mesh.nativeEdgeIds || [],
           };
 
           const mat = getFaceMaterial(activeMat, baseColor, activeMode, isSelected, isHovered);
@@ -1299,14 +1398,60 @@ export default function CadCanvas3D({
             }
           }
 
-          if (Array.isArray(line.vertexPoints) && line.vertexPoints.length > 0) {
+          if (usesExplicitNativeVertices && Array.isArray(line.vertexIds)) {
+            line.vertexIds
+              .filter((vertexId: unknown): vertexId is string => typeof vertexId === "string")
+              .filter((vertexId: string, vertexIndex: number, allVertexIds: string[]) =>
+                allVertexIds.indexOf(vertexId) === vertexIndex
+              )
+              .forEach((vertexId: string) => {
+                const vertexRecord = nativeVertexRecordsById.get(vertexId);
+                if (!vertexRecord) return;
+                const matchingStepVertexIds = (Array.isArray(line.nativeVertices) ? line.nativeVertices : [])
+                  .filter((vertex: any) => {
+                    const stepPoint = vertex?.point;
+                    if (!stepPoint) return false;
+                    const dx = stepPoint.x - vertexRecord.point.x;
+                    const dy = stepPoint.y - vertexRecord.point.y;
+                    const dz = stepPoint.z - vertexRecord.point.z;
+                    return dx * dx + dy * dy + dz * dz <= 1e-8;
+                  })
+                  .map((vertex: any) => vertex.id)
+                  .filter((entityId: unknown): entityId is string => typeof entityId === "string");
+                addNativeVertexOwnership(
+                  vertexId,
+                  edgeName,
+                  parentFaceIndices,
+                  parentFaceIds,
+                  matchingStepVertexIds
+                );
+              });
+          } else if (Array.isArray(line.vertexPoints) && line.vertexPoints.length > 0) {
             line.vertexPoints.forEach((point: any) => {
               if (
                 Number.isFinite(point?.x) &&
                 Number.isFinite(point?.y) &&
                 Number.isFinite(point?.z)
               ) {
-                addVertexCandidate({ x: point.x, y: point.y, z: point.z }, edgeName, parentFaceIndices, parentFaceIds);
+                const matchingStepVertexIds = (Array.isArray(line.nativeVertices) ? line.nativeVertices : [])
+                  .filter((vertex: any) => {
+                    const nativePoint = vertex?.point;
+                    if (!nativePoint) return false;
+                    const dx = nativePoint.x - point.x;
+                    const dy = nativePoint.y - point.y;
+                    const dz = nativePoint.z - point.z;
+                    return dx * dx + dy * dy + dz * dz <= 1e-8;
+                  })
+                  .map((vertex: any) => vertex.id)
+                  .filter((entityId: unknown): entityId is string => typeof entityId === "string");
+                addVertexCandidate(
+                  { x: point.x, y: point.y, z: point.z },
+                  edgeName,
+                  parentFaceIndices,
+                  parentFaceIds,
+                  matchingStepVertexIds,
+                  line.topologySource || "tessellation"
+                );
               }
             });
           } else if (firstEndpointIndex !== null && lastEndpointIndex !== null) {
@@ -1327,8 +1472,22 @@ export default function CadCanvas3D({
               (firstPoint.y - lastPoint.y) * (firstPoint.y - lastPoint.y) +
               (firstPoint.z - lastPoint.z) * (firstPoint.z - lastPoint.z);
             if (endpointDistanceSq > 1e-10) {
-              addVertexCandidate(firstPoint, edgeName, parentFaceIndices, parentFaceIds);
-              addVertexCandidate(lastPoint, edgeName, parentFaceIndices, parentFaceIds);
+              addVertexCandidate(
+                firstPoint,
+                edgeName,
+                parentFaceIndices,
+                parentFaceIds,
+                [],
+                line.topologySource || "tessellation"
+              );
+              addVertexCandidate(
+                lastPoint,
+                edgeName,
+                parentFaceIndices,
+                parentFaceIds,
+                [],
+                line.topologySource || "tessellation"
+              );
             }
           }
 
@@ -1386,7 +1545,12 @@ export default function CadCanvas3D({
             parentFaceIndex: line.parentFaceIndex,
             parentFaceIds: line.parentFaceIds,
             parentFaceIndices: line.parentFaceIndices,
-            vertexPoints: line.vertexPoints
+            vertexPoints: line.vertexPoints,
+            topologySource: line.topologySource || "tessellation",
+            stepEntityId: line.stepEntityId,
+            topologySignature: line.topologySignature,
+            stepTopologySignature: line.stepTopologySignature,
+            nativeLoopIds: line.nativeLoopIds
           };
           assemblyGroup.add(lineObj);
           renderedObjectByName.set(lineObj.name, lineObj);
@@ -1463,7 +1627,11 @@ export default function CadCanvas3D({
           cadEdgePickObjects = [edgePickObject];
         }
 
-        const vertexRecords = Array.from(vertexRecordsByKey.values())
+        const vertexRecords = Array.from(
+          usesExplicitNativeVertices
+            ? nativeVertexRecordsById.values()
+            : vertexRecordsByKey.values()
+        )
           .filter((record) => record.edgeIds.length >= 2);
         if (vertexRecords.length > 0) {
           const vertexPositions = vertexRecords.flatMap((record) => [record.point.x, record.point.y, record.point.z]);
@@ -1495,7 +1663,10 @@ export default function CadCanvas3D({
               point: record.point,
               edgeIds: record.edgeIds,
               parentFaceIndices: record.parentFaceIndices,
-              parentFaceIds: record.parentFaceIds
+              parentFaceIds: record.parentFaceIds,
+              stepEntityIds: record.stepEntityIds,
+              topologySource: record.topologySource,
+              topologySignature: record.topologySignature
             };
             renderedObjectByName.set(record.id, vertexProxy);
           });
@@ -1578,6 +1749,7 @@ export default function CadCanvas3D({
     let lastHoverPickClientX = -Infinity;
     let lastHoverPickClientY = -Infinity;
     let pointerDownPoint: THREE.Vector2 | null = null;
+    let pointerDownVertexObject: THREE.Object3D | null = null;
     let pointerMovedSinceDown = false;
     let suppressMeasurementUntil = 0;
     let prevHighlightToken = "";
@@ -2364,12 +2536,18 @@ export default function CadCanvas3D({
         hoverRaycastTimeoutId = null;
       }
       pointerDownPoint = null;
+      pointerDownVertexObject = null;
       pointerMovedSinceDown = false;
       clearHoverState();
     };
 
     const handlePointerDown = (e: PointerEvent) => {
       pointerDownPoint = new THREE.Vector2(e.clientX, e.clientY);
+      pointerDownVertexObject =
+        currentHoverObj?.name?.startsWith("BRepVertex-") &&
+        isPointerNearHoveredVertex(e.clientX, e.clientY)
+          ? currentHoverObj
+          : null;
       pointerMovedSinceDown = false;
     };
 
@@ -2875,6 +3053,11 @@ export default function CadCanvas3D({
       if (type === "edge") {
         blockDetails.parentFaceIndices = obj.userData.parentFaceIndices || [];
         blockDetails.parentFaceIds = obj.userData.parentFaceIds || [];
+        blockDetails.topologySource = obj.userData.topologySource || "tessellation";
+        blockDetails.stepEntityId = obj.userData.stepEntityId;
+        blockDetails.topologySignature = obj.userData.topologySignature;
+        blockDetails.stepTopologySignature = obj.userData.stepTopologySignature;
+        blockDetails.nativeLoopIds = obj.userData.nativeLoopIds || [];
         let pathLen = 0;
         const pointsPos = obj.userData.positions;
         if (pointsPos && pointsPos.length >= 6) {
@@ -2890,10 +3073,18 @@ export default function CadCanvas3D({
         blockDetails.edgeIds = obj.userData.edgeIds || [];
         blockDetails.parentFaceIndices = obj.userData.parentFaceIndices || [];
         blockDetails.parentFaceIds = obj.userData.parentFaceIds || [];
+        blockDetails.topologySource = obj.userData.topologySource || "tessellation";
+        blockDetails.stepEntityIds = obj.userData.stepEntityIds || [];
+        blockDetails.topologySignature = obj.userData.topologySignature;
       } else {
         blockDetails.triangles = obj.userData.triangles;
         blockDetails.colorString = obj.userData.color;
         blockDetails.area = obj.userData.area;
+        blockDetails.topologySource = obj.userData.topologySource || "tessellation";
+        blockDetails.topologySignature = obj.userData.topologySignature;
+        blockDetails.surfaceType = obj.userData.surfaceType;
+        blockDetails.nativeLoopIds = obj.userData.nativeLoopIds || [];
+        blockDetails.nativeEdgeIds = obj.userData.nativeEdgeIds || [];
 
         if (match.face && match.face.normal) {
           const normal = match.face.normal.clone().applyMatrix3(new THREE.Matrix3().getNormalMatrix(obj.matrixWorld));
@@ -2911,9 +3102,32 @@ export default function CadCanvas3D({
     // Viewport clicks are reserved for measurements, except explicit binding mode.
     const handleMouseClick = (e: MouseEvent) => {
       const navigationClick = isNavigatingView || pointerMovedSinceDown || performance.now() < suppressMeasurementUntil;
+      const stickyVertexObject = pointerDownVertexObject;
       pointerDownPoint = null;
+      pointerDownVertexObject = null;
       pointerMovedSinceDown = false;
       if (propsRef.current.measurementMode && navigationClick) return;
+
+      if (
+        !propsRef.current.measurementMode &&
+        propsRef.current.selectionClickEnabled &&
+        stickyVertexObject?.name?.startsWith("BRepVertex-") &&
+        !navigationClick
+      ) {
+        const point = stickyVertexObject.userData.point;
+        if (point) {
+          const worldPoint = assemblyGroup.localToWorld(
+            new THREE.Vector3(point.x, point.y, point.z)
+          );
+          const blockDetails = makeSelectionBlock({
+            object: stickyVertexObject,
+            point: worldPoint,
+          } as THREE.Intersection);
+          if (blockDetails) onSelectEntity(blockDetails);
+          requestRenderRef.current?.(3);
+          return;
+        }
+      }
 
       const intersections = checkRaycastIntersections(e.clientX, e.clientY, true);
       if (intersections.length > 0) {
@@ -3714,11 +3928,23 @@ export default function CadCanvas3D({
       camera.up.copy(fixedCameraUp);
       controls.update();
       controls.saveState();
+      pmiCollisionLayoutRequested = true;
+      pmiCollisionStableFrames = 0;
       requestRenderRef.current?.(2);
     };
 
-    const isRegionDatumTarget = (datum: any) =>
-      datum.annotationKind === "datumTarget" && /rectangle|area|zone/i.test(`${datum.type || ""} ${datum.targetName || ""}`);
+    const isRegionDatumTarget = (datum: any) => {
+      if (
+        datum.annotationKind !== "datumTarget" ||
+        datum.targetLine ||
+        datum.targetCircle ||
+        datum.targetCurve
+      ) {
+        return false;
+      }
+      return datum.targetZone?.shape === "rectangle" ||
+        /\b(rectangle|area|zone)\b/i.test(`${datum.type || ""}`);
+    };
 
     const isLineDatumTarget = (datum: any) =>
       datum.annotationKind === "datumTarget" && !!datum.targetLine;
@@ -3833,15 +4059,22 @@ export default function CadCanvas3D({
         return { point, tangent };
       }
       if (anchor.calloutKind !== "cylindrical") return null;
+      const shaftPositions = anchor.arrowShaftObject?.geometry.getAttribute("position");
+      if (shaftPositions instanceof THREE.BufferAttribute && shaftPositions.count >= 2) {
+        const previousPoint = new THREE.Vector3().fromBufferAttribute(shaftPositions, shaftPositions.count - 2);
+        const endPoint = new THREE.Vector3().fromBufferAttribute(shaftPositions, shaftPositions.count - 1);
+        const tangent = endPoint.clone().sub(previousPoint);
+        if (tangent.lengthSq() > 1e-8) return { point: endPoint, tangent: tangent.normalize() };
+      }
       const leaderAxis = anchor.leaderAxisLocal.clone();
       if (leaderAxis.lengthSq() <= 1e-8) return null;
       leaderAxis.normalize();
       const tangent = getBadgeEdgeDirectionLocal(anchor.object, leaderAxis, anchor.leaderTangent);
       if (tangent.lengthSq() <= 1e-8) return null;
       const radialLeadEndLocal = anchor.localPoint.clone().addScaledVector(leaderAxis, anchor.leaderRadialLength);
-      const doglegExtendedEndLocal = radialLeadEndLocal
-        .clone()
-        .addScaledVector(tangent, anchor.leaderDoglegLength + Math.max(anchor.triangleHalfBase * 1.75, modelSizeMax * 0.018));
+       const doglegExtendedEndLocal = radialLeadEndLocal
+         .clone()
+          .addScaledVector(tangent, anchor.leaderDoglegLength + Math.max(anchor.triangleHalfBase * 1.35, modelSizeMax * 0.012));
       return {
         point: doglegExtendedEndLocal,
         tangent
@@ -4624,11 +4857,18 @@ export default function CadCanvas3D({
       if (!propsRef.current.showDimensionalTolerances) return;
       const dimensionTolerances = (propsRef.current.tolerances || [])
         .filter((tolerance: any) => tolerance?.category === "Dimension" && Array.isArray(tolerance.targetIds) && tolerance.targetIds.length > 0);
-      if (dimensionTolerances.length === 0) return;
+      const positionTolerances = (propsRef.current.tolerances || [])
+        .filter((tolerance: any) =>
+          tolerance?.type === "Position" &&
+          Array.isArray(tolerance.targetIds) &&
+          tolerance.targetIds.length > 0
+        );
+      if (dimensionTolerances.length === 0 && positionTolerances.length === 0) return;
 
       const group = new THREE.Group();
       group.name = "PmiDimensionToleranceOverlay";
       const labelOverlay = document.getElementById("pmi-dimensional-labels-overlay");
+      const dimensionLabelEntryByToleranceId = new Map<string, PmiDimensionLabelEntry>();
 
       const getFaceNamesForTolerance = (tolerance: any): string[] => {
         const mappedNames = (tolerance.targetIds || [])
@@ -4638,7 +4878,11 @@ export default function CadCanvas3D({
           )
           .filter((name: string | null): name is string => !!name)
           .filter((name: string, index: number, all: string[]) => all.indexOf(name) === index);
+        const isGeometricTolerance =
+          tolerance.category !== "Dimension" &&
+          !!tolerance.type;
         if (
+          !isGeometricTolerance &&
           tolerance.dimensionKind !== "linear" &&
           tolerance.dimensionKind !== "size" &&
           tolerance.dimensionKind !== "angular" &&
@@ -4674,6 +4918,11 @@ export default function CadCanvas3D({
         const object = renderedObjectByName.get(faceName);
         const cache = object?.userData.interactionCache;
         if (!object || !(cache?.localCenter instanceof THREE.Vector3) || !(cache.cylinderAxis instanceof THREE.Vector3)) return null;
+        const stablePoint = assemblyGroup.worldToLocal(object.localToWorld(getStableSurfacePoint(object)));
+        const circleSnap = getCylinderFaceCircleSnap(object, stablePoint);
+        if (circleSnap && Number.isFinite(circleSnap.radius) && circleSnap.radius > 1e-8) {
+          return circleSnap.radius;
+        }
         const axis = getAssemblyDirection(object, cache.cylinderAxis.clone());
         if (!axis) return null;
         const center = assemblyGroup.worldToLocal(object.localToWorld(cache.localCenter.clone()));
@@ -4746,14 +4995,27 @@ export default function CadCanvas3D({
         const nominal = Number.isFinite(tolerance.nominalDimension) ? Number(tolerance.nominalDimension) : null;
         const upper = Number.isFinite(tolerance.upperTolerance) ? Number(tolerance.upperTolerance) : null;
         const lower = Number.isFinite(tolerance.lowerTolerance) ? Number(tolerance.lowerTolerance) : null;
+        const secondaryNominal = Number.isFinite(tolerance.secondaryNominalDimension)
+          ? Number(tolerance.secondaryNominalDimension)
+          : null;
+        const secondaryUpper = Number.isFinite(tolerance.secondaryUpperTolerance)
+          ? Number(tolerance.secondaryUpperTolerance)
+          : null;
+        const secondaryLower = Number.isFinite(tolerance.secondaryLowerTolerance)
+          ? Number(tolerance.secondaryLowerTolerance)
+          : null;
         const dimensionLowerLimit = Number.isFinite(tolerance.dimensionLowerLimit) ? Number(tolerance.dimensionLowerLimit) : null;
         const dimensionUpperLimit = Number.isFinite(tolerance.dimensionUpperLimit) ? Number(tolerance.dimensionUpperLimit) : null;
         const hasDimensionLimitRange = dimensionLowerLimit !== null && dimensionUpperLimit !== null;
         const pilotNominal = Number.isFinite(tolerance.counterboreHoleNominal) ? Number(tolerance.counterboreHoleNominal) : null;
         const pilotUpper = Number.isFinite(tolerance.counterboreHoleUpperTolerance) ? Number(tolerance.counterboreHoleUpperTolerance) : null;
         const pilotLower = Number.isFinite(tolerance.counterboreHoleLowerTolerance) ? Number(tolerance.counterboreHoleLowerTolerance) : null;
-        const nominalText = nominal !== null ? nominal.toFixed(3) : "DIM";
+        const dimensionDecimalPlaces = Number.isInteger(tolerance.dimensionDecimalPlaces)
+          ? Math.min(6, Math.max(0, Number(tolerance.dimensionDecimalPlaces)))
+          : 3;
+        const nominalText = nominal !== null ? nominal.toFixed(dimensionDecimalPlaces) : "DIM";
         const preModifier = `${tolerance.dimensionPreModifier || ""}`.trim();
+        const slotRadiusPreModifier = `${tolerance.slotRadiusPreModifier || ""}`.trim();
         const dimensionLimitPreModifier = `${tolerance.dimensionLimitPreModifier || ""}`.trim();
         const dimensionLimitNote = `${tolerance.dimensionLimitNote || ""}`.trim();
         const counterboreEvaluationNote = `${tolerance.counterboreEvaluationNote || ""}`.trim();
@@ -4793,6 +5055,8 @@ export default function CadCanvas3D({
           ? `${preModifier ? `${preModifier} ` : ""}${threadDesignation} \u21a7 ${nominalText}`
           : tolerance.dimensionKind === "diameter"
           ? diameterNominalText
+          : tolerance.dimensionKind === "radius" && tolerance.isRadiusCountNote
+          ? `${preModifier ? `${preModifier} ` : ""}R`
           : tolerance.dimensionKind === "radius" && tolerance.isControlledRadiusDimension
           ? `${preModifier ? `${preModifier} ` : ""}CR ${nominalText}`
           : tolerance.dimensionKind === "radius" && tolerance.isSphericalDimension
@@ -4810,6 +5074,10 @@ export default function CadCanvas3D({
 
         const element = document.createElement("div");
         element.dataset.pmiDimensionLabel = "true";
+        element.dataset.pmiToleranceId = `${tolerance.id || ""}`;
+        if (tolerance.associatedDatumIdentifier) {
+          element.dataset.pmiAssociatedDatum = `${tolerance.associatedDatumIdentifier}`;
+        }
         element.className = "absolute left-0 top-0 hidden items-center gap-1 whitespace-nowrap font-mono leading-none text-slate-900";
         element.style.transform = "translate3d(0, 0, 0) translate(0, -50%)";
         element.style.willChange = "transform";
@@ -4912,6 +5180,41 @@ export default function CadCanvas3D({
           return element;
         }
 
+        if (
+          (tolerance.dimensionKind === "chamfer" || tolerance.dimensionKind === "slot") &&
+          nominal !== null &&
+          upper !== null &&
+          lower !== null &&
+          secondaryNominal !== null &&
+          secondaryUpper !== null &&
+          secondaryLower !== null
+        ) {
+          const dimensionRow = tolerance.dimensionKind === "slot"
+            ? document.createElement("div")
+            : element;
+          if (tolerance.dimensionKind === "slot") {
+            element.className = "absolute left-0 top-0 hidden flex-col items-start gap-0.5 whitespace-nowrap font-mono leading-none text-slate-900";
+            dimensionRow.style.display = "inline-flex";
+            dimensionRow.style.alignItems = "center";
+            dimensionRow.style.gap = "4px";
+          }
+          if (tolerance.dimensionKind === "chamfer" && preModifier) {
+            dimensionRow.appendChild(makeNominalSpan(`${preModifier} `));
+          }
+          dimensionRow.appendChild(makeNominalSpan(nominal.toFixed(3)));
+          dimensionRow.appendChild(makeLimitsElement(`+${upper.toFixed(3)}`, lower.toFixed(3)));
+          dimensionRow.appendChild(makeNominalSpan("\u00d7"));
+          dimensionRow.appendChild(makeNominalSpan(secondaryNominal.toFixed(3)));
+          dimensionRow.appendChild(makeLimitsElement(`+${secondaryUpper.toFixed(3)}`, secondaryLower.toFixed(3)));
+          if (tolerance.dimensionKind === "slot") {
+            element.appendChild(dimensionRow);
+            if (slotRadiusPreModifier) {
+              element.appendChild(makeNominalSpan(`${slotRadiusPreModifier} R`));
+            }
+          }
+          return element;
+        }
+
         element.appendChild(nominalElement);
         if (hasDimensionLimitRange && dimensionLimitNote) {
           element.className = "absolute left-0 top-0 hidden flex-col items-start gap-0.5 whitespace-nowrap font-mono leading-none text-slate-900";
@@ -4985,27 +5288,37 @@ export default function CadCanvas3D({
         point: THREE.Vector3,
         datumIdentifiers: string[] = [],
         resolvePoint?: () => THREE.Vector3 | null,
-        resolveTransform?: () => string
+        resolveTransform?: () => string,
+        placementPolicy: PmiDimensionLabelEntry["placementPolicy"] = "fixed"
       ) => {
         if (!labelOverlay) return null;
         const element = makeDimensionTextElement(tolerance, datumIdentifiers);
         labelOverlay.appendChild(element);
-        const entry = {
+        const entry: PmiDimensionLabelEntry = {
           element,
           point: point.clone(),
           resolvePoint,
           resolveTransform,
+          placementPolicy,
+          collisionOffsetX: 0,
+          collisionOffsetY: 0,
+          baseTransform: "translate(0, -50%)",
           screenX: Number.NaN,
           screenY: Number.NaN,
-          visible: false
+          visible: false,
+          measuredWidth: 0,
+          measuredHeight: 0,
+          leaderObjects: []
         };
         pmiDimensionLabelCache.push(entry);
+        if (tolerance?.id) dimensionLabelEntryByToleranceId.set(tolerance.id, entry);
         return entry;
       };
 
       const makeDimensionStackTextElement = (tolerances: any[]) => {
         const element = document.createElement("div");
         element.dataset.pmiDimensionLabel = "true";
+        element.dataset.pmiDimensionStack = "true";
         element.className = "absolute left-0 top-0 hidden flex-col items-start gap-0.5 whitespace-nowrap font-mono leading-none text-slate-900";
         element.style.transform = "translate3d(0, 0, 0) translate(0, -50%)";
         element.style.willChange = "transform";
@@ -5028,21 +5341,317 @@ export default function CadCanvas3D({
         tolerances: any[],
         point: THREE.Vector3,
         resolvePoint?: () => THREE.Vector3 | null,
-        resolveTransform?: () => string
+        resolveTransform?: () => string,
+        placementPolicy: PmiDimensionLabelEntry["placementPolicy"] = "fixed"
       ) => {
         if (!labelOverlay || tolerances.length === 0) return null;
         const element = tolerances.length === 1
           ? makeDimensionTextElement(tolerances[0])
           : makeDimensionStackTextElement(tolerances);
         labelOverlay.appendChild(element);
-        const entry = {
+        const entry: PmiDimensionLabelEntry = {
           element,
           point: point.clone(),
           resolvePoint,
           resolveTransform,
+          placementPolicy,
+          collisionOffsetX: 0,
+          collisionOffsetY: 0,
+          baseTransform: "translate(0, -50%)",
           screenX: Number.NaN,
           screenY: Number.NaN,
-          visible: false
+          visible: false,
+          measuredWidth: 0,
+          measuredHeight: 0,
+          leaderObjects: []
+        };
+        pmiDimensionLabelCache.push(entry);
+        tolerances.forEach((tolerance) => {
+          if (tolerance?.id) dimensionLabelEntryByToleranceId.set(tolerance.id, entry);
+        });
+        return entry;
+      };
+
+      const getFcfModifierSymbol = (modifier: string) => {
+        const normalized = `${modifier || ""}`.toUpperCase();
+        if (/MAXIMUM MATERIAL/.test(normalized)) return "\u24c2";
+        if (/LEAST MATERIAL/.test(normalized)) return "\u24c1";
+        if (/PROJECTED TOLERANCE/.test(normalized)) return "\u24c5";
+        if (/FREE STATE/.test(normalized)) return "\u24bb";
+        return "";
+      };
+
+      const makeFeatureControlFrameElement = (tolerance: any) => {
+        const frame = document.createElement("div");
+        frame.dataset.pmiFeatureControlFrame = tolerance.id || "position";
+        frame.style.display = "inline-flex";
+        frame.style.alignItems = "stretch";
+        frame.style.height = "20px";
+        frame.style.background = "rgba(255,255,255,0.96)";
+        frame.style.color = "#0f172a";
+        frame.style.fontFamily = "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace";
+        frame.style.fontSize = "12px";
+        frame.style.fontWeight = "400";
+        frame.style.lineHeight = "1";
+        frame.style.whiteSpace = "nowrap";
+
+        const addCompartment = (content: string, minWidth: number, symbol = false) => {
+          const compartment = document.createElement("span");
+          compartment.style.display = "inline-flex";
+          compartment.style.alignItems = "center";
+          compartment.style.justifyContent = "center";
+          compartment.style.minWidth = `${minWidth}px`;
+          compartment.style.height = "20px";
+          compartment.style.padding = symbol ? "0 3px" : "0 4px";
+          if (symbol) compartment.style.fontSize = "14px";
+          compartment.style.border = "1px solid #0f172a";
+          compartment.style.marginLeft = frame.childElementCount > 0 ? "-1px" : "0";
+          compartment.textContent = content;
+          frame.appendChild(compartment);
+        };
+
+        addCompartment("\u2316", 23, true);
+        const toleranceModifierText = (tolerance.toleranceModifiers || [])
+          .map(getFcfModifierSymbol)
+          .filter(Boolean)
+          .join("");
+        const toleranceText =
+          `${tolerance.toleranceZoneDiameter ? "\u2300" : ""}` +
+          `${Number(tolerance.value || 0).toFixed(3)}` +
+          toleranceModifierText;
+        addCompartment(toleranceText, 46);
+
+        const references = Array.isArray(tolerance.datumReferenceFrame?.references)
+          ? tolerance.datumReferenceFrame.references
+          : [];
+        const referencesByPrecedence = references.reduce((groups: Map<number, any[]>, reference: any) => {
+          const precedence = Number(reference.precedence) || groups.size + 1;
+          const groupReferences = groups.get(precedence) || [];
+          groupReferences.push(reference);
+          groups.set(precedence, groupReferences);
+          return groups;
+        }, new Map<number, any[]>());
+        [...referencesByPrecedence.entries()]
+          .sort(([first], [second]) => first - second)
+          .slice(0, 3)
+          .forEach(([, groupReferences]) => {
+            const content = groupReferences
+              .map((reference: any) => {
+                const modifiers = (reference.modifiers || [])
+                  .map(getFcfModifierSymbol)
+                  .filter(Boolean)
+                  .join("");
+                return `${reference.datumIdentifier || "?"}${modifiers}`;
+              })
+              .join("-");
+            addCompartment(content, 25);
+          });
+
+        return frame;
+      };
+
+      const appendFeatureControlFrame = (
+        entry: PmiDimensionLabelEntry,
+        tolerance: any,
+        layout: "linear" | "radial"
+      ) => {
+        const element = entry.element;
+        if (element.querySelector(`[data-pmi-feature-control-frame="${tolerance.id}"]`)) return;
+        if (element.dataset.pmiDimensionStack !== "true" && element.dataset.pmiCompositeLabel !== "true") {
+          const dimensionRow = document.createElement("div");
+          dimensionRow.style.display = "inline-flex";
+          dimensionRow.style.alignItems = "center";
+          dimensionRow.style.gap = "4px";
+          while (element.firstChild) dimensionRow.appendChild(element.firstChild);
+          element.appendChild(dimensionRow);
+          element.dataset.pmiCompositeLabel = "true";
+        }
+        element.style.flexDirection = "column";
+        element.style.alignItems = "flex-start";
+        element.style.gap = "0";
+        element.style.contain = "layout style";
+        const featureControlFrame = makeFeatureControlFrameElement(tolerance);
+        element.appendChild(featureControlFrame);
+        if (layout === "linear" && entry.linearDimension) {
+          const linearDimension = entry.linearDimension;
+          const dimensionSpan = linearDimension.dimStart.distanceTo(linearDimension.dimEnd);
+          const preferredBreakLength = Math.max(modelSizeMax * 0.14, dimensionSpan * 0.26);
+          const canBreakDimensionLine = dimensionSpan >= preferredBreakLength * 1.8;
+          const frameAnchor = canBreakDimensionLine
+            ? linearDimension.dimStart.clone().add(linearDimension.dimEnd).multiplyScalar(0.5)
+            : linearDimension.dimEnd.clone().addScaledVector(
+                linearDimension.axis,
+                Math.max(modelSizeMax * 0.045, dimensionSpan * 0.08)
+              );
+
+          const dimensionRow = element.firstElementChild as HTMLElement | null;
+          element.style.display = "block";
+          element.style.width = "0";
+          element.style.height = "0";
+          element.style.overflow = "visible";
+          if (dimensionRow) {
+            dimensionRow.style.position = "absolute";
+            dimensionRow.style.left = "0";
+            dimensionRow.style.top = "0";
+            dimensionRow.style.transform = "translate(-50%, calc(-100% - 4px))";
+          }
+          featureControlFrame.style.position = "absolute";
+          featureControlFrame.style.left = "0";
+          featureControlFrame.style.top = "0";
+          featureControlFrame.style.transform = "translate(-50%, -50%)";
+
+          if (canBreakDimensionLine) {
+            const breakLength = Math.min(dimensionSpan * 0.6, preferredBreakLength);
+            const breakStart = frameAnchor.clone().addScaledVector(linearDimension.axis, -breakLength * 0.5);
+            const breakEnd = frameAnchor.clone().addScaledVector(linearDimension.axis, breakLength * 0.5);
+            linearDimension.line.geometry.setFromPoints([
+              linearDimension.start,
+              linearDimension.dimStart,
+              linearDimension.end,
+              linearDimension.dimEnd,
+              linearDimension.dimStart,
+              breakStart,
+              breakEnd,
+              linearDimension.dimEnd
+            ]);
+          } else {
+            linearDimension.line.geometry.setFromPoints([
+              linearDimension.start,
+              linearDimension.dimStart,
+              linearDimension.end,
+              linearDimension.dimEnd,
+              linearDimension.dimStart,
+              linearDimension.dimEnd,
+              linearDimension.dimEnd,
+              frameAnchor
+            ]);
+          }
+
+          entry.point.copy(frameAnchor);
+          entry.resolvePoint = () => frameAnchor;
+          entry.resolveTransform = () => "translate(0, 0)";
+          entry.placementPolicy = "fixed";
+          entry.collisionOffsetX = 0;
+          entry.collisionOffsetY = 0;
+          element.dataset.pmiLinearFeatureControlFrame = "true";
+        }
+        if (layout === "radial" && element.dataset.pmiRadialStack !== "true") {
+          const datumAnchor = datumAnchorCache.find((anchor) =>
+            (anchor.leaderObject && entry.leaderObjects.includes(anchor.leaderObject)) ||
+            (anchor.arrowShaftObject && entry.leaderObjects.includes(anchor.arrowShaftObject))
+          );
+          if (datumAnchor) {
+            datumAnchor.useFeatureControlFrameBranch = true;
+            const branch = document.createElement("div");
+            branch.dataset.pmiDatumFeatureControlFrameBranch = datumAnchor.id;
+            branch.style.position = "relative";
+            branch.style.alignSelf = "flex-start";
+            branch.style.width = "100%";
+            branch.style.height = "42px";
+            branch.style.pointerEvents = "none";
+
+            const branchCenter = document.createElement("div");
+            branchCenter.style.position = "absolute";
+            branchCenter.style.left = "45px";
+            branchCenter.style.top = "0";
+            branchCenter.style.display = "flex";
+            branchCenter.style.flexDirection = "column";
+            branchCenter.style.alignItems = "center";
+            branchCenter.style.transform = "translateX(-50%)";
+            branchCenter.style.pointerEvents = "auto";
+
+            const triangle = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+            triangle.setAttribute("viewBox", "0 0 14 11");
+            triangle.setAttribute("width", "14");
+            triangle.setAttribute("height", "11");
+            triangle.style.display = "block";
+            triangle.style.overflow = "visible";
+            triangle.innerHTML = '<path d="M 0.8 0.8 L 13.2 0.8 L 7 10.2 Z" fill="white" stroke="#1e293b" stroke-width="1.25" stroke-linejoin="round" />';
+
+            const stem = document.createElement("div");
+            stem.style.width = "1px";
+            stem.style.height = "8px";
+            stem.style.marginTop = "-1px";
+            stem.style.background = "#1e293b";
+
+            const badge = document.createElement("button");
+            badge.type = "button";
+            badge.textContent = datumAnchor.datum?.identifier || "?";
+            badge.title = `${datumAnchor.datum?.name || "Datum"}: ${datumAnchor.datum?.type || ""}`;
+            badge.style.display = "flex";
+            badge.style.minWidth = "28px";
+            badge.style.height = "24px";
+            badge.style.alignItems = "center";
+            badge.style.justifyContent = "center";
+            badge.style.border = "2px solid #1e293b";
+            badge.style.background = "white";
+            badge.style.padding = "0 6px";
+            badge.style.fontFamily = "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace";
+            badge.style.fontSize = "11px";
+            badge.style.fontWeight = "800";
+            badge.style.lineHeight = "1";
+            badge.style.color = "#1e293b";
+            badge.style.cursor = "pointer";
+            badge.addEventListener("click", (event) => {
+              event.stopPropagation();
+              datumClickHandlerRef.current?.(datumAnchor.datum);
+            });
+
+            branchCenter.append(triangle, stem, badge);
+            branch.appendChild(branchCenter);
+            element.appendChild(branch);
+          }
+          const previousResolveTransform = entry.resolveTransform;
+          entry.resolveTransform = () => {
+            const transform = previousResolveTransform?.() || entry.baseTransform || "translate(2px, -50%)";
+            const pointsLeft = transform.includes("-100%");
+            element.style.alignItems = pointsLeft ? "flex-end" : "flex-start";
+            featureControlFrame.style.alignSelf = pointsLeft ? "flex-end" : "flex-start";
+            const branch = element.querySelector<HTMLElement>(`[data-pmi-datum-feature-control-frame-branch]`);
+            if (branch) branch.style.alignSelf = pointsLeft ? "flex-end" : "flex-start";
+            featureControlFrame.style.transform = "";
+            return transform.replace(/-50%\)$/, "-6.5px)");
+          };
+          entry.placementPolicy = "fixed";
+          entry.collisionOffsetX = 0;
+          entry.collisionOffsetY = 0;
+          element.dataset.pmiRadialStack = "true";
+        }
+        entry.measuredWidth = 0;
+        entry.measuredHeight = 0;
+      };
+
+      const addStandaloneFeatureControlFrameLabel = (
+        tolerance: any,
+        point: THREE.Vector3,
+        placementPolicy: PmiDimensionLabelEntry["placementPolicy"],
+        resolveTransform?: () => string
+      ) => {
+        if (!labelOverlay) return null;
+        const element = document.createElement("div");
+        element.dataset.pmiDimensionLabel = "true";
+        element.className = "absolute left-0 top-0 hidden items-center whitespace-nowrap";
+        element.style.transform = "translate3d(0, 0, 0) translate(0, -50%)";
+        element.style.willChange = "transform";
+        element.style.pointerEvents = "none";
+        element.style.contain = "layout style paint";
+        element.style.zIndex = "19";
+        element.appendChild(makeFeatureControlFrameElement(tolerance));
+        labelOverlay.appendChild(element);
+        const entry: PmiDimensionLabelEntry = {
+          element,
+          point: point.clone(),
+          resolveTransform,
+          placementPolicy,
+          collisionOffsetX: 0,
+          collisionOffsetY: 0,
+          baseTransform: "translate(0, -50%)",
+          screenX: Number.NaN,
+          screenY: Number.NaN,
+          visible: false,
+          measuredWidth: 0,
+          measuredHeight: 0,
+          leaderObjects: []
         };
         pmiDimensionLabelCache.push(entry);
         return entry;
@@ -5254,7 +5863,72 @@ export default function CadCanvas3D({
         const object = renderedObjectByName.get(faceName);
         const cache = object?.userData.interactionCache;
         if (!object || !(cache?.localCenter instanceof THREE.Vector3)) return null;
-        return assemblyGroup.worldToLocal(object.localToWorld(cache.localCenter.clone()));
+        const stablePoint = assemblyGroup.worldToLocal(object.localToWorld(getStableSurfacePoint(object)));
+        const circleSnap = getCylinderFaceCircleSnap(object, stablePoint);
+        if (circleSnap) return circleSnap.center.clone();
+        const cachedAxisCenter = object.userData.pmiFittedCylinderAxisCenter;
+        if (cachedAxisCenter instanceof THREE.Vector3) {
+          return assemblyGroup.worldToLocal(object.localToWorld(cachedAxisCenter.clone()));
+        }
+
+        let localAxisCenter = cache.localCenter.clone();
+        if (object instanceof THREE.Mesh && cache.cylinderAxis instanceof THREE.Vector3) {
+          const positions = object.geometry.getAttribute("position");
+          const localAxis = cache.cylinderAxis.clone().normalize();
+          if (positions instanceof THREE.BufferAttribute && positions.count >= 3 && localAxis.lengthSq() > 1e-8) {
+            const uAxis = new THREE.Vector3().crossVectors(localAxis, new THREE.Vector3(1, 0, 0));
+            if (uAxis.lengthSq() <= 1e-8) uAxis.crossVectors(localAxis, new THREE.Vector3(0, 1, 0));
+            const vAxis = new THREE.Vector3().crossVectors(localAxis, uAxis);
+            if (uAxis.lengthSq() > 1e-8 && vAxis.lengthSq() > 1e-8) {
+              uAxis.normalize();
+              vAxis.normalize();
+              let count = 0;
+              let sumU = 0;
+              let sumV = 0;
+              let sumAxis = 0;
+              const radialSamples: { u: number; v: number }[] = [];
+              const vertex = new THREE.Vector3();
+              for (let index = 0; index < positions.count; index++) {
+                vertex.fromBufferAttribute(positions, index);
+                const u = vertex.dot(uAxis);
+                const v = vertex.dot(vAxis);
+                sumU += u;
+                sumV += v;
+                sumAxis += vertex.dot(localAxis);
+                radialSamples.push({ u, v });
+                count++;
+              }
+              const meanU = sumU / count;
+              const meanV = sumV / count;
+              let sumUU = 0;
+              let sumUV = 0;
+              let sumVV = 0;
+              let sumUR2 = 0;
+              let sumVR2 = 0;
+              radialSamples.forEach(({ u, v }) => {
+                const centeredU = u - meanU;
+                const centeredV = v - meanV;
+                const radialSquared = centeredU * centeredU + centeredV * centeredV;
+                sumUU += centeredU * centeredU;
+                sumUV += centeredU * centeredV;
+                sumVV += centeredV * centeredV;
+                sumUR2 += centeredU * radialSquared;
+                sumVR2 += centeredV * radialSquared;
+              });
+              const determinant = sumUU * sumVV - sumUV * sumUV;
+              if (Math.abs(determinant) > 1e-8) {
+                const centerU = meanU + (sumUR2 * sumVV - sumVR2 * sumUV) / (2 * determinant);
+                const centerV = meanV + (sumVR2 * sumUU - sumUR2 * sumUV) / (2 * determinant);
+                localAxisCenter = localAxis.clone()
+                  .multiplyScalar(sumAxis / count)
+                  .addScaledVector(uAxis, centerU)
+                  .addScaledVector(vAxis, centerV);
+              }
+            }
+          }
+        }
+        object.userData.pmiFittedCylinderAxisCenter = localAxisCenter.clone();
+        return assemblyGroup.worldToLocal(object.localToWorld(localAxisCenter));
       };
 
       const getStackedHoleDimensionKey = (tolerance: any): string | null => {
@@ -5279,6 +5953,7 @@ export default function CadCanvas3D({
         groupItems.push(tolerance);
         stackedHoleDimensionGroups.set(key, groupItems);
       });
+      // Compatible calls become one DOM block before screen-space placement.
       const stackedHoleDimensionOwnerById = new Map<string, any[]>();
       stackedHoleDimensionGroups.forEach((groupItems) => {
         if (groupItems.length < 2) return;
@@ -5327,7 +6002,8 @@ export default function CadCanvas3D({
         slotIndex = 0,
         slotCount = 1,
         fixedAnchor?: { surfacePoint: THREE.Vector3; radialDirection: THREE.Vector3 },
-        tolerance?: any
+        tolerance?: any,
+        sharedRadialDirection?: THREE.Vector3
       ) => {
         const object = renderedObjectByName.get(faceName);
         const cache = object?.userData.interactionCache;
@@ -5351,6 +6027,17 @@ export default function CadCanvas3D({
             localPoint.clone().sub(localAxisOrigin).dot(localAxis)
           );
           let localRadialDirection = localPoint.clone().sub(localAxisFoot);
+          if (sharedRadialDirection) {
+            const assemblyOriginWorld = assemblyGroup.localToWorld(new THREE.Vector3());
+            const sharedDirectionWorld = assemblyGroup.localToWorld(sharedRadialDirection.clone());
+            const localAssemblyOrigin = object.worldToLocal(assemblyOriginWorld);
+            const localSharedDirection = object.worldToLocal(sharedDirectionWorld)
+              .sub(localAssemblyOrigin);
+            localSharedDirection.addScaledVector(localAxis, -localSharedDirection.dot(localAxis));
+            if (localSharedDirection.lengthSq() > 1e-8) {
+              localRadialDirection = localSharedDirection;
+            }
+          }
           if (localRadialDirection.lengthSq() <= 1e-8) {
             localRadialDirection.crossVectors(localAxis, new THREE.Vector3(1, 0, 0));
             if (localRadialDirection.lengthSq() <= 1e-8) {
@@ -5359,7 +6046,7 @@ export default function CadCanvas3D({
           }
           localRadialDirection.normalize();
           if (slotCount > 1) {
-            const stepAngle = Math.PI / Math.max(slotCount + 1, 2);
+            const stepAngle = Math.PI / Math.max(slotCount, 2);
             const slotOffset = (slotIndex - (slotCount - 1) / 2) * stepAngle;
             localRadialDirection.applyAxisAngle(localAxis, slotOffset).normalize();
           }
@@ -5384,7 +6071,9 @@ export default function CadCanvas3D({
             localRadialDirection.lerp(signedUp, 0.45).addScaledVector(localAxis, -localRadialDirection.dot(localAxis));
             if (localRadialDirection.lengthSq() > 1e-8) localRadialDirection.normalize();
           };
-          biasRadialAwayFromCameraHorizontal();
+          // Concentric callouts own deliberate angular slots. Applying the
+          // readability bias to each one independently collapses those slots.
+          if (slotCount <= 1) biasRadialAwayFromCameraHorizontal();
 
           if (object instanceof THREE.Mesh) {
             const cachedBounds = object.userData.pmiHoleAxisBounds as { minAxis: number; maxAxis: number } | undefined;
@@ -5742,7 +6431,8 @@ export default function CadCanvas3D({
 
         const normalOffset = Math.max(modelSizeMax * 0.065, 1e-4);
         const radialEnd = surfacePoint.clone().addScaledVector(radialDirection, Math.max(normalOffset * 0.7, modelSizeMax * 0.045));
-        const doglegEnd = radialEnd.clone().addScaledVector(doglegDirection, Math.max(normalOffset * 0.5, modelSizeMax * 0.032));
+        const doglegLength = Math.max(normalOffset * 0.2, modelSizeMax * 0.01);
+        const doglegEnd = radialEnd.clone().addScaledVector(doglegDirection, doglegLength);
         const arrowLength = normalOffset * 0.18;
         const arrowHalfWidth = arrowLength * 0.36;
         const arrowTip = surfacePoint.clone();
@@ -5762,11 +6452,7 @@ export default function CadCanvas3D({
         }
         arrowSide.normalize().multiplyScalar(arrowHalfWidth);
 
-        const cameraUpWorldPoint = cameraWorldPoint.clone().add(new THREE.Vector3(0, 1, 0).transformDirection(camera.matrixWorld));
-        const cameraUpLocal = assemblyGroup.worldToLocal(cameraUpWorldPoint).sub(cameraPointLocal).normalize();
-        const labelPosition = doglegEnd.clone()
-          .addScaledVector(cameraRightLocal, Math.max(modelSizeMax * 0.0075, 0.035))
-          .addScaledVector(cameraUpLocal, Math.max(modelSizeMax * 0.0025, 0.01));
+        const labelPosition = doglegEnd.clone();
 
         return {
           linePoints: [arrowBase, radialEnd, radialEnd, doglegEnd],
@@ -5779,6 +6465,162 @@ export default function CadCanvas3D({
           anchor: {
             surfacePoint: surfacePoint.clone(),
             radialDirection: radialDirection.clone()
+          }
+        };
+      };
+
+      const makeSlotOverallDistanceResult = (faceNames: string[], tolerance: any): LinearMeasurementResult | null => {
+        const cylinders = faceNames
+          .filter(isCylindricalFace)
+          .map((name) => ({
+            name,
+            object: renderedObjectByName.get(name),
+            center: getCylinderAxisCenter(name)
+          }))
+          .filter((item): item is { name: string; object: THREE.Object3D; center: THREE.Vector3 } =>
+            !!item.object && !!item.center
+          );
+        if (cylinders.length < 2) return null;
+
+        const nominalModelLength =
+          Number.isFinite(tolerance.nominalDimension) && Number.isFinite(tolerance.dimensionScaleToModel)
+            ? Number(tolerance.nominalDimension) * Number(tolerance.dimensionScaleToModel)
+            : null;
+        let best:
+          | { start: THREE.Vector3; end: THREE.Vector3; score: number }
+          | null = null;
+        const localVertex = new THREE.Vector3();
+
+        for (let i = 0; i < cylinders.length; i++) {
+          for (let j = i + 1; j < cylinders.length; j++) {
+            const axis = cylinders[j].center.clone().sub(cylinders[i].center);
+            if (axis.lengthSq() <= 1e-10) continue;
+            axis.normalize();
+
+            let minProjection = Number.POSITIVE_INFINITY;
+            let maxProjection = Number.NEGATIVE_INFINITY;
+            [cylinders[i], cylinders[j]].forEach(({ object }) => {
+              const position = (object as THREE.Mesh).geometry?.getAttribute("position");
+              if (!position) return;
+              for (let vertexIndex = 0; vertexIndex < position.count; vertexIndex++) {
+                localVertex.fromBufferAttribute(position, vertexIndex);
+                const point = assemblyGroup.worldToLocal(object.localToWorld(localVertex.clone()));
+                const projection = point.dot(axis);
+                minProjection = Math.min(minProjection, projection);
+                maxProjection = Math.max(maxProjection, projection);
+              }
+            });
+            const overallLength = maxProjection - minProjection;
+            if (!Number.isFinite(overallLength) || overallLength <= 1e-8) continue;
+
+            const centerMidpoint = cylinders[i].center.clone().add(cylinders[j].center).multiplyScalar(0.5);
+            const centerProjection = centerMidpoint.dot(axis);
+            const start = centerMidpoint.clone().addScaledVector(axis, minProjection - centerProjection);
+            const end = centerMidpoint.clone().addScaledVector(axis, maxProjection - centerProjection);
+            const score = nominalModelLength !== null
+              ? Math.abs(overallLength - nominalModelLength)
+              : -overallLength;
+            if (!best || score < best.score) best = { start, end, score };
+          }
+        }
+
+        return best
+          ? {
+              mode: "linear",
+              start: best.start,
+              end: best.end,
+              text: Number(tolerance.nominalDimension).toFixed(3)
+            }
+          : null;
+      };
+
+      const getCircularCurveLeaderAnchor = (tolerance: any) => {
+        const points = (tolerance.targetPoints || [])
+          .map(makeVectorFromParsedPoint)
+          .filter((point: THREE.Vector3 | null): point is THREE.Vector3 => !!point);
+        if (points.length < 2) return null;
+
+        let diameterPair: [THREE.Vector3, THREE.Vector3] | null = null;
+        let diameterDistanceSq = -Infinity;
+        for (let i = 0; i < points.length; i++) {
+          for (let j = i + 1; j < points.length; j++) {
+            const distanceSq = points[i].distanceToSquared(points[j]);
+            if (distanceSq > diameterDistanceSq) {
+              diameterDistanceSq = distanceSq;
+              diameterPair = [points[i], points[j]];
+            }
+          }
+        }
+        if (!diameterPair || diameterDistanceSq <= 1e-10) return null;
+
+        const center = diameterPair[0].clone().add(diameterPair[1]).multiplyScalar(0.5);
+        const surfacePoint =
+          diameterPair[0].distanceToSquared(modelOrbitTarget) >= diameterPair[1].distanceToSquared(modelOrbitTarget)
+            ? diameterPair[0].clone()
+            : diameterPair[1].clone();
+        const radialDirection = surfacePoint.clone().sub(center);
+        if (radialDirection.lengthSq() <= 1e-10) return null;
+        radialDirection.normalize();
+        return { surfacePoint, radialDirection };
+      };
+
+      const computeCircularCurveToleranceLeaderGeometry = (anchor: {
+        surfacePoint: THREE.Vector3;
+        radialDirection: THREE.Vector3;
+      }) => {
+        const surfacePoint = anchor.surfacePoint.clone();
+        const radialDirection = anchor.radialDirection.clone().normalize();
+        const cameraWorldPoint = camera.position.clone();
+        const cameraPointLocal = assemblyGroup.worldToLocal(cameraWorldPoint.clone());
+        const cameraRightWorldPoint = cameraWorldPoint.clone().add(
+          new THREE.Vector3(1, 0, 0).transformDirection(camera.matrixWorld)
+        );
+        const cameraUpWorldPoint = cameraWorldPoint.clone().add(
+          new THREE.Vector3(0, 1, 0).transformDirection(camera.matrixWorld)
+        );
+        const cameraRightLocal = assemblyGroup.worldToLocal(cameraRightWorldPoint)
+          .sub(cameraPointLocal)
+          .normalize();
+        const cameraUpLocal = assemblyGroup.worldToLocal(cameraUpWorldPoint)
+          .sub(cameraPointLocal)
+          .normalize();
+
+        const normalOffset = Math.max(modelSizeMax * 0.065, 1e-4);
+        const radialEnd = surfacePoint.clone().addScaledVector(
+          radialDirection,
+          Math.max(normalOffset * 0.7, modelSizeMax * 0.045)
+        );
+        const doglegEnd = radialEnd.clone().addScaledVector(
+          cameraRightLocal,
+          Math.max(normalOffset * 0.2, modelSizeMax * 0.01)
+        );
+        const arrowLength = normalOffset * 0.18;
+        const arrowHalfWidth = arrowLength * 0.36;
+        const leaderDirection = radialEnd.clone().sub(surfacePoint).normalize();
+        const arrowBase = surfacePoint.clone().addScaledVector(leaderDirection, arrowLength);
+        const arrowSide = cameraUpLocal.clone()
+          .addScaledVector(leaderDirection, -cameraUpLocal.dot(leaderDirection));
+        if (arrowSide.lengthSq() <= 1e-8) {
+          arrowSide.copy(cameraRightLocal)
+            .addScaledVector(leaderDirection, -cameraRightLocal.dot(leaderDirection));
+        }
+        if (arrowSide.lengthSq() <= 1e-8) {
+          arrowSide.crossVectors(leaderDirection, new THREE.Vector3(0, 0, 1));
+        }
+        if (arrowSide.lengthSq() <= 1e-8) return null;
+        arrowSide.normalize().multiplyScalar(arrowHalfWidth);
+
+        return {
+          linePoints: [arrowBase, radialEnd, radialEnd, doglegEnd],
+          arrowPoints: [
+            surfacePoint,
+            arrowBase.clone().add(arrowSide),
+            arrowBase.clone().sub(arrowSide)
+          ],
+          labelPosition: doglegEnd.clone(),
+          anchor: {
+            surfacePoint,
+            radialDirection
           }
         };
       };
@@ -5796,7 +6638,9 @@ export default function CadCanvas3D({
       };
 
       const updatePmiLeaderObjects = (entry: (typeof pmiDimensionLeaderCache)[number]) => {
-        const geometry = computeHoleToleranceLeaderGeometry(entry.faceName, entry.slotIndex, entry.slotCount, entry.anchor, entry.tolerance);
+        const geometry = entry.resolveGeometry
+          ? entry.resolveGeometry()
+          : computeHoleToleranceLeaderGeometry(entry.faceName, entry.slotIndex, entry.slotCount, entry.anchor, entry.tolerance);
         if (!geometry) return false;
         updatePmiGeometryPoints(entry.line.geometry, geometry.linePoints);
         updatePmiGeometryPoints(entry.arrow.geometry, geometry.arrowPoints);
@@ -5805,6 +6649,115 @@ export default function CadCanvas3D({
       };
       updatePmiDimensionLeaderFacing = () => {
         pmiDimensionLeaderCache = pmiDimensionLeaderCache.filter(updatePmiLeaderObjects);
+      };
+
+      const getLeaderTerminalPoint = (line: THREE.Line | THREE.LineSegments): THREE.Vector3 | null => {
+        const positions = line.geometry.getAttribute("position");
+        if (!(positions instanceof THREE.BufferAttribute) || positions.count < 2) return null;
+        const terminal = new THREE.Vector3().fromBufferAttribute(positions, positions.count - 1);
+        return assemblyGroup.worldToLocal(line.localToWorld(terminal));
+      };
+
+      const getLeaderTerminalTransform = (line: THREE.Line | THREE.LineSegments) => {
+        const positions = line.geometry.getAttribute("position");
+        if (!(positions instanceof THREE.BufferAttribute) || positions.count < 2) {
+          return "translate(3px, -50%)";
+        }
+        const previous = new THREE.Vector3().fromBufferAttribute(positions, positions.count - 2);
+        const terminal = new THREE.Vector3().fromBufferAttribute(positions, positions.count - 1);
+        line.localToWorld(previous).project(camera);
+        line.localToWorld(terminal).project(camera);
+        return previous.x > terminal.x
+          ? "translate(calc(-100% - 3px), -50%)"
+          : "translate(3px, -50%)";
+      };
+
+      const usesRadialHoleLeader = (tolerance: any) =>
+        !tolerance.associatedDatumIdentifier &&
+        !tolerance.isCircularCurveDimension &&
+        !tolerance.isSlotOverallDimension &&
+        !tolerance.isSphericalDimension &&
+        (
+          tolerance.dimensionKind === "diameter" ||
+          tolerance.dimensionKind === "radius" ||
+          tolerance.dimensionKind === "threadDepth" ||
+          !!tolerance.threadDesignation ||
+          tolerance.isCounterboreDimension ||
+          tolerance.isCountersinkDimension
+        );
+
+      const getRadialHoleCalloutFaceName = (tolerance: any) =>
+        getBoundarySideHoleCalloutFaceName(getFaceNamesForTolerance(tolerance), tolerance);
+
+      const getCylindricalFaceRadialDirection = (faceName: string): THREE.Vector3 | null => {
+        const object = renderedObjectByName.get(faceName);
+        const cache = object?.userData.interactionCache;
+        if (!object || !(cache?.localCenter instanceof THREE.Vector3) || !(cache.cylinderAxis instanceof THREE.Vector3)) {
+          return null;
+        }
+        const axis = getAssemblyDirection(object, cache.cylinderAxis.clone());
+        const center = getCylinderAxisCenter(faceName);
+        if (!axis || !center) return null;
+        const surfacePoint = assemblyGroup.worldToLocal(object.localToWorld(getStableSurfacePoint(object)));
+        const radialDirection = surfacePoint.sub(center);
+        radialDirection.addScaledVector(axis, -radialDirection.dot(axis));
+        return radialDirection.lengthSq() > 1e-8 ? radialDirection.normalize() : null;
+      };
+
+      const areConcentricCylindricalFaces = (firstFaceName: string, secondFaceName: string) => {
+        if (firstFaceName === secondFaceName) return true;
+        const firstObject = renderedObjectByName.get(firstFaceName);
+        const secondObject = renderedObjectByName.get(secondFaceName);
+        const firstAxis = firstObject?.userData.interactionCache?.cylinderAxis;
+        const secondAxis = secondObject?.userData.interactionCache?.cylinderAxis;
+        if (!firstObject || !secondObject) return false;
+        if (!(firstAxis instanceof THREE.Vector3) || !(secondAxis instanceof THREE.Vector3)) return false;
+
+        const firstAssemblyAxis = getAssemblyDirection(firstObject, firstAxis.clone());
+        const secondAssemblyAxis = getAssemblyDirection(secondObject, secondAxis.clone());
+        const firstCenter = getCylinderAxisCenter(firstFaceName);
+        const secondCenter = getCylinderAxisCenter(secondFaceName);
+        if (!firstAssemblyAxis || !secondAssemblyAxis || !firstCenter || !secondCenter) return false;
+        if (Math.abs(firstAssemblyAxis.dot(secondAssemblyAxis)) < 0.995) return false;
+
+        const centerDelta = secondCenter.clone().sub(firstCenter);
+        const axisOffset = centerDelta
+          .addScaledVector(firstAssemblyAxis, -centerDelta.dot(firstAssemblyAxis))
+          .length();
+        const firstRadius = getCylindricalFaceRadius(firstFaceName) || 0;
+        const secondRadius = getCylindricalFaceRadius(secondFaceName) || 0;
+        const axisTolerance = Math.max(
+          modelSizeMax * 0.002,
+          Math.min(firstRadius, secondRadius) * 0.08,
+          1e-4
+        );
+        return axisOffset <= axisTolerance;
+      };
+
+      const getConcentricRadialCalloutSlots = (tolerance: any, faceName: string) => {
+        const currentSlot = `tolerance:${tolerance.id}`;
+        const callouts = dimensionTolerances
+          .filter((candidate: any) => {
+            const stackedCandidate = stackedHoleDimensionOwnerById.get(candidate.id);
+            if ((stackedCandidate && stackedCandidate.length === 0) || !usesRadialHoleLeader(candidate)) return false;
+            const candidateFaceName = getRadialHoleCalloutFaceName(candidate);
+            return !!candidateFaceName && areConcentricCylindricalFaces(faceName, candidateFaceName);
+          })
+          .map((candidate: any) => ({
+            slot: `tolerance:${candidate.id}`,
+            faceName: getRadialHoleCalloutFaceName(candidate)
+          }))
+          .filter((candidate): candidate is { slot: string; faceName: string } => !!candidate.faceName)
+          .sort((first, second) => first.slot.localeCompare(second.slot));
+        const uniqueSlots = [...new Set([...callouts.map((callout) => callout.slot), currentSlot])].sort();
+        const referenceFaceName = callouts[0]?.faceName || faceName;
+        return {
+          slots: uniqueSlots,
+          currentSlot,
+          sharedRadialDirection: uniqueSlots.length > 1
+            ? getCylindricalFaceRadialDirection(referenceFaceName)
+            : null
+        };
       };
 
       const drawHoleToleranceLeader = (tolerance: any, faceName: string) => {
@@ -5823,10 +6776,27 @@ export default function CadCanvas3D({
           const resolveDatumDimensionTransform = () => getDatumLeaderDimensionLabelTransform(datumAnchorForFace);
           const labelPoint = resolveDatumDimensionPoint();
           if (labelPoint) {
-            if (stackedGroup && stackedGroup.length > 1) {
-              addPmiDimensionStackLabel(stackedGroup, labelPoint, resolveDatumDimensionPoint, resolveDatumDimensionTransform);
-            } else {
-              addPmiDimensionLabel(tolerance, labelPoint, [], resolveDatumDimensionPoint, resolveDatumDimensionTransform);
+            const labelEntry = stackedGroup && stackedGroup.length > 1
+              ? addPmiDimensionStackLabel(
+                stackedGroup,
+                labelPoint,
+                resolveDatumDimensionPoint,
+                resolveDatumDimensionTransform,
+                "fixed"
+              )
+              : addPmiDimensionLabel(
+                tolerance,
+                labelPoint,
+                [],
+                resolveDatumDimensionPoint,
+                resolveDatumDimensionTransform,
+                "fixed"
+              );
+            if (labelEntry) {
+              labelEntry.leaderObjects = [
+                datumAnchorForFace.leaderObject,
+                datumAnchorForFace.arrowShaftObject
+              ].filter((object): object is THREE.Line | THREE.LineSegments => !!object);
             }
             return true;
           }
@@ -5837,15 +6807,27 @@ export default function CadCanvas3D({
           .filter((datum: any) => mapDatumTargetsToWebGLNames(datum).includes(faceName))
           .map((datum: any) => `datum:${datum.id || datum.identifier || datum.entityId}`)
           .sort();
-        const faceToleranceIds = dimensionTolerances
-          .filter((candidate: any) => getFaceNamesForTolerance(candidate).includes(faceName))
-          .map((candidate: any) => `tolerance:${candidate.id}`)
-          .sort();
-        const occupiedSlots = [...faceDatumIds, ...faceToleranceIds];
+        const {
+          slots: faceToleranceIds,
+          currentSlot: currentToleranceSlot,
+          sharedRadialDirection
+        } =
+          getConcentricRadialCalloutSlots(tolerance, faceName);
+        const occupiedSlots = [
+          ...new Set([...faceDatumIds, ...faceToleranceIds, currentToleranceSlot])
+        ];
         const slotCount = Math.max(occupiedSlots.length, 1);
-        const slotIndex = Math.max(occupiedSlots.indexOf(`tolerance:${tolerance.id}`), faceDatumIds.length);
-        const geometry = computeHoleToleranceLeaderGeometry(faceName, slotIndex, slotCount, undefined, tolerance);
+        const slotIndex = occupiedSlots.indexOf(currentToleranceSlot);
+        const geometry = computeHoleToleranceLeaderGeometry(
+          faceName,
+          slotIndex,
+          slotCount,
+          undefined,
+          tolerance,
+          sharedRadialDirection || undefined
+        );
         if (!geometry) return false;
+        const labelPlacementPolicy: PmiDimensionLabelEntry["placementPolicy"] = "fixed";
 
         const lineGeometry = new THREE.BufferGeometry().setFromPoints(geometry.linePoints);
         const lineMaterial = new THREE.LineBasicMaterial({
@@ -5879,14 +6861,89 @@ export default function CadCanvas3D({
         group.add(arrow);
 
         const labelEntry = stackedGroup && stackedGroup.length > 1
-          ? addPmiDimensionStackLabel(stackedGroup, geometry.labelPosition)
-          : addPmiDimensionLabel(tolerance, geometry.labelPosition);
+          ? addPmiDimensionStackLabel(
+              stackedGroup,
+              geometry.labelPosition,
+              () => getLeaderTerminalPoint(line),
+              () => getLeaderTerminalTransform(line),
+              labelPlacementPolicy
+            )
+          : addPmiDimensionLabel(
+              tolerance,
+              geometry.labelPosition,
+              [],
+              () => getLeaderTerminalPoint(line),
+              () => getLeaderTerminalTransform(line),
+              labelPlacementPolicy
+            );
+        if (labelEntry) labelEntry.leaderObjects.push(line);
         pmiDimensionLeaderCache.push({
           tolerance,
           faceName,
           slotIndex,
           slotCount,
           anchor: geometry.anchor,
+          line,
+          arrow,
+          labelEntry
+        });
+        return true;
+      };
+
+      const drawCircularCurveToleranceLeader = (tolerance: any) => {
+        const anchor = getCircularCurveLeaderAnchor(tolerance);
+        if (!anchor) return false;
+        const resolveGeometry = () => computeCircularCurveToleranceLeaderGeometry(anchor);
+        const geometry = resolveGeometry();
+        if (!geometry) return false;
+
+        const lineGeometry = new THREE.BufferGeometry().setFromPoints(geometry.linePoints);
+        const lineMaterial = new THREE.LineBasicMaterial({
+          color: 0x0f172a,
+          depthTest: false,
+          depthWrite: false,
+          transparent: true,
+          opacity: 0.96
+        });
+        const line = new THREE.LineSegments(lineGeometry, lineMaterial);
+        line.name = `PmiDimensionToleranceOverlay-${tolerance.id}-CircularCurveLeader`;
+        line.renderOrder = 43;
+        line.frustumCulled = false;
+        line.raycast = () => undefined;
+        group.add(line);
+
+        const arrowGeometry = new THREE.BufferGeometry().setFromPoints(geometry.arrowPoints);
+        const arrowMaterial = new THREE.MeshBasicMaterial({
+          color: 0x0f172a,
+          depthTest: false,
+          depthWrite: false,
+          transparent: true,
+          opacity: 0.96,
+          side: THREE.DoubleSide
+        });
+        const arrow = new THREE.Mesh(arrowGeometry, arrowMaterial);
+        arrow.name = `PmiDimensionToleranceOverlay-${tolerance.id}-CircularCurveArrow`;
+        arrow.renderOrder = 44;
+        arrow.frustumCulled = false;
+        arrow.raycast = () => undefined;
+        group.add(arrow);
+
+        const labelEntry = addPmiDimensionLabel(
+          tolerance,
+          geometry.labelPosition,
+          [],
+          () => getLeaderTerminalPoint(line),
+          () => getLeaderTerminalTransform(line),
+          "fixed"
+        );
+        if (labelEntry) labelEntry.leaderObjects.push(line);
+        pmiDimensionLeaderCache.push({
+          tolerance,
+          faceName: "",
+          slotIndex: 0,
+          slotCount: 1,
+          anchor,
+          resolveGeometry,
           line,
           arrow,
           labelEntry
@@ -6051,7 +7108,7 @@ export default function CadCanvas3D({
         const offsetDistance = Math.max(modelSizeMax * 0.045, distance * 0.08, 0.15);
         const dimStart = start.clone().addScaledVector(offsetDirection, offsetDistance);
         const dimEnd = end.clone().addScaledVector(offsetDirection, offsetDistance);
-        addMeasurementLineSegments(group, [
+        const dimensionLine = addMeasurementLineSegments(group, [
           start, dimStart,
           end, dimEnd,
           dimStart, dimEnd,
@@ -6059,12 +7116,85 @@ export default function CadCanvas3D({
         addMeasurementArrowHead(group, dimStart, axis, offsetDirection, arrowLength, arrowHalfWidth);
         addMeasurementArrowHead(group, dimEnd, axis.clone().negate(), offsetDirection, arrowLength, arrowHalfWidth);
         if (tolerance) {
-          addPmiDimensionLabel(
+          const labelEntry = addPmiDimensionLabel(
             tolerance,
             dimStart.clone().add(dimEnd).multiplyScalar(0.5).addScaledVector(offsetDirection, Math.max(modelSizeMax * 0.01, 0.04)),
-            datumIdentifiers
+            datumIdentifiers,
+            undefined,
+            undefined,
+            "linear-attached"
           );
+          if (labelEntry) labelEntry.leaderObjects.push(dimensionLine);
+          if (labelEntry) {
+            labelEntry.linearDimension = {
+              start: start.clone(),
+              end: end.clone(),
+              dimStart: dimStart.clone(),
+              dimEnd: dimEnd.clone(),
+              axis: axis.clone(),
+              line: dimensionLine
+            };
+          }
         }
+      };
+
+      const drawLinearFeatureControlFrame = (
+        result: LinearMeasurementResult,
+        tolerance: any,
+        name: string
+      ) => {
+        const start = result.start;
+        const end = result.end;
+        const axis = end.clone().sub(start);
+        const distance = axis.length();
+        if (distance <= 1e-8) return false;
+
+        axis.normalize();
+        const midpoint = start.clone().add(end).multiplyScalar(0.5);
+        const viewDirection = assemblyGroup.worldToLocal(camera.position.clone()).sub(midpoint).normalize();
+        const offsetDirection = getLinearDimensionProjectionDirection(
+          axis,
+          viewDirection,
+          result,
+          getToleranceMeasurementFrameBasis(tolerance)
+        );
+        if (!offsetDirection) return false;
+
+        const offsetDistance = Math.max(modelSizeMax * 0.045, distance * 0.08, 0.15);
+        const dimStart = start.clone().addScaledVector(offsetDirection, offsetDistance);
+        const dimEnd = end.clone().addScaledVector(offsetDirection, offsetDistance);
+        const dimensionSpan = dimStart.distanceTo(dimEnd);
+        const preferredBreakLength = Math.max(modelSizeMax * 0.14, dimensionSpan * 0.26);
+        const canBreakDimensionLine = dimensionSpan >= preferredBreakLength * 1.8;
+        const frameAnchor = canBreakDimensionLine
+          ? dimStart.clone().add(dimEnd).multiplyScalar(0.5)
+          : dimEnd.clone().addScaledVector(axis, Math.max(modelSizeMax * 0.045, dimensionSpan * 0.08));
+        const linePoints = [start, dimStart, end, dimEnd];
+        if (canBreakDimensionLine) {
+          const breakLength = Math.min(dimensionSpan * 0.6, preferredBreakLength);
+          linePoints.push(
+            dimStart,
+            frameAnchor.clone().addScaledVector(axis, -breakLength * 0.5),
+            frameAnchor.clone().addScaledVector(axis, breakLength * 0.5),
+            dimEnd
+          );
+        } else {
+          linePoints.push(dimStart, dimEnd, dimEnd, frameAnchor);
+        }
+        const dimensionLine = addMeasurementLineSegments(group, linePoints, name);
+        const arrowLength = Math.min(Math.max(modelSizeMax * 0.012, 0.04), distance * 0.35);
+        const arrowHalfWidth = arrowLength * 0.36;
+        addMeasurementArrowHead(group, dimStart, axis, offsetDirection, arrowLength, arrowHalfWidth);
+        addMeasurementArrowHead(group, dimEnd, axis.clone().negate(), offsetDirection, arrowLength, arrowHalfWidth);
+
+        const entry = addStandaloneFeatureControlFrameLabel(
+          tolerance,
+          frameAnchor,
+          "fixed",
+          () => "translate(-50%, -50%)"
+        );
+        if (entry) entry.leaderObjects.push(dimensionLine);
+        return true;
       };
 
       const resolveAngularDimensionFromFaces = (faceNames: string[], tolerance: any): AngularMeasurementResult | null => {
@@ -6115,7 +7245,11 @@ export default function CadCanvas3D({
         const faceNames = getFaceNamesForTolerance(tolerance);
         const mergedDatumIdentifiers: string[] = [];
         const isAngularDimension = /angular/i.test(`${tolerance.dimensionKind || ""} ${tolerance.type || ""}`);
-        const isLinearLikeDimension = tolerance.dimensionKind === "linear" || tolerance.dimensionKind === "size";
+        const isLinearLikeDimension =
+          tolerance.dimensionKind === "linear" ||
+          tolerance.dimensionKind === "size" ||
+          tolerance.dimensionKind === "chamfer" ||
+          tolerance.dimensionKind === "slot";
 
         if (tolerance.associatedDatumIdentifier) {
           const datumAnchor = datumAnchorCache.find((anchor) =>
@@ -6127,13 +7261,20 @@ export default function CadCanvas3D({
             const resolveDatumDimensionTransform = () => getDatumLeaderDimensionLabelTransform(datumAnchor);
             const labelPoint = resolveDatumDimensionPoint();
             if (labelPoint) {
-              addPmiDimensionLabel(
+              const labelEntry = addPmiDimensionLabel(
                 tolerance,
                 labelPoint,
                 [],
                 resolveDatumDimensionPoint,
-                resolveDatumDimensionTransform
+                resolveDatumDimensionTransform,
+                "datum-attached"
               );
+              if (labelEntry) {
+                labelEntry.leaderObjects = [
+                  datumAnchor.leaderObject,
+                  datumAnchor.arrowShaftObject
+                ].filter((object): object is THREE.Line | THREE.LineSegments => !!object);
+              }
             }
           }
           continue;
@@ -6155,7 +7296,18 @@ export default function CadCanvas3D({
           continue;
         }
 
+        if (tolerance.isCircularCurveDimension) {
+          if (drawCircularCurveToleranceLeader(tolerance)) continue;
+        }
+
         const cylindricalFaceName = getBoundarySideHoleCalloutFaceName(faceNames, tolerance);
+        if (tolerance.isSlotOverallDimension) {
+          const result = makeSlotOverallDistanceResult(faceNames, tolerance);
+          if (result) {
+            drawLinearDimension(result, `PmiDimensionToleranceOverlay-${tolerance.id}`, tolerance, mergedDatumIdentifiers);
+          }
+          continue;
+        }
         if (tolerance.dimensionKind === "threadDepth") {
           const threadCylinderFaceNames = (tolerance.threadCylinderTargetIds || [])
             .map((targetId: string) =>
@@ -6265,6 +7417,242 @@ export default function CadCanvas3D({
           }
         }
       }
+
+      // Helper function to determine if a tolerance should use radial layout
+      const isRadialDimension = (dimTol: any) =>
+        dimTol.dimensionKind === "diameter" ||
+        dimTol.dimensionKind === "radius" ||
+        dimTol.dimensionKind === "threadDepth";
+
+      // Helper function to determine if a tolerance should use linear layout
+      const isLinearDimension = (dimTol: any) =>
+        dimTol.dimensionKind === "linear" ||
+        dimTol.dimensionKind === "size" ||
+        dimTol.dimensionKind === "chamfer" ||
+        dimTol.dimensionKind === "slot";
+
+      // Helper function to determine if two tolerances should be kept separate
+      // (e.g., radial vs linear should NOT be merged)
+      // Also checks toleranceZoneDiameter for position tolerances to separate
+      // diametral (cylindrical zone) from boxed zone (non-cylindrical) tolerances
+      const shouldKeepSeparate = (tol1: any, tol2: any) => {
+        // Radial and linear tolerances should always be separate
+        const tol1Radial = isRadialDimension(tol1);
+        const tol1Linear = isLinearDimension(tol1);
+        const tol2Radial = isRadialDimension(tol2);
+        const tol2Linear = isLinearDimension(tol2);
+        
+        if ((tol1Radial && tol2Linear) || (tol1Linear && tol2Radial)) {
+          return true;
+        }
+
+        // Special case: position tolerances with different tolerance zone types
+        // should be kept separate. A diametral position tolerance (cylindrical zone,
+        // toleranceZoneDiameter=true) should only merge with radial dimensions,
+        // while a boxed zone position tolerance (toleranceZoneDiameter=false or undefined)
+        // should only merge with linear dimensions.
+        const tol1IsPosition = tol1?.type === "Position" || tol1?.symbol === "POS";
+        const tol2IsPosition = tol2?.type === "Position" || tol2?.symbol === "POS";
+
+        if (tol1IsPosition && tol2IsPosition) {
+          // Two position tolerances should always be kept separate if they have
+          // different tolerance zone types (diametral vs boxed zone)
+          const tol1Diametral = tol1?.toleranceZoneDiameter === true ||
+            /cylindrical|circular/i.test(tol1?.toleranceZoneForm || "");
+          const tol2Diametral = tol2?.toleranceZoneDiameter === true ||
+            /cylindrical|circular/i.test(tol2?.toleranceZoneForm || "");
+          if (tol1Diametral !== tol2Diametral) {
+            return true;
+          }
+        }
+
+        if (tol1IsPosition && !tol2IsPosition) {
+          // tol1 is position tolerance, tol2 is dimension tolerance
+          const positionDiametral = tol1?.toleranceZoneDiameter === true ||
+            /cylindrical|circular/i.test(tol1?.toleranceZoneForm || "");
+          // If position is diametral (cylindrical zone), keep separate from linear dimensions
+          if (positionDiametral && tol2Linear) return true;
+          // If position is boxed zone (non-cylindrical), keep separate from radial dimensions
+          if (!positionDiametral && tol2Radial) return true;
+        }
+
+        if (tol2IsPosition && !tol1IsPosition) {
+          // tol2 is position tolerance, tol1 is dimension tolerance
+          const positionDiametral = tol2?.toleranceZoneDiameter === true ||
+            /cylindrical|circular/i.test(tol2?.toleranceZoneForm || "");
+          // If position is diametral (cylindrical zone), keep separate from linear dimensions
+          if (positionDiametral && tol1Linear) return true;
+          // If position is boxed zone (non-cylindrical), keep separate from radial dimensions
+          if (!positionDiametral && tol1Radial) return true;
+        }
+
+        return false;
+      };
+
+      // Helper function to determine the appropriate layout for a position tolerance
+      // based on its tolerance zone type (diametral=cylindrical=radial, boxed=linear)
+      const getPositionToleranceLayoutType = (positionTolerance: any): "radial" | "linear" => {
+        const isDiametral = positionTolerance?.toleranceZoneDiameter === true ||
+          /cylindrical|circular/i.test(positionTolerance?.toleranceZoneForm || "");
+        return isDiametral ? "radial" : "linear";
+      };
+
+      positionTolerances.forEach((positionTolerance: any) => {
+        const positionTargetIds = new Set(positionTolerance.targetIds || []);
+        const positionFaceNames = new Set(getFaceNamesForTolerance(positionTolerance));
+        
+        // Find all matching dimension tolerances that share semantic targets or rendered faces
+        const matchingDimensions = dimensionTolerances
+          .map((dimensionTolerance: any) => {
+            const entry = dimensionLabelEntryByToleranceId.get(dimensionTolerance.id);
+            if (!entry) return null;
+            const sharedSemanticTargets = (dimensionTolerance.targetIds || [])
+              .filter((targetId: string) => positionTargetIds.has(targetId)).length;
+            const sharedRenderedFaces = getFaceNamesForTolerance(dimensionTolerance)
+              .filter((faceName) => positionFaceNames.has(faceName)).length;
+            if (sharedSemanticTargets === 0 && sharedRenderedFaces === 0) return null;
+            
+            // Check if this dimension tolerance should be kept separate from the position tolerance
+            // (e.g., radial vs linear - they have different control frame requirements)
+            const shouldSeparate = shouldKeepSeparate(dimensionTolerance, positionTolerance);
+            
+            const radialPreference = isRadialDimension(dimensionTolerance) ? 20 : 0;
+            
+            return {
+              tolerance: dimensionTolerance,
+              entry,
+              score: sharedSemanticTargets * 100 + sharedRenderedFaces * 10 + radialPreference,
+              shouldSeparate
+            };
+          })
+          .filter((candidate): candidate is {
+            tolerance: any;
+            entry: PmiDimensionLabelEntry;
+            score: number;
+            shouldSeparate: boolean;
+          } => !!candidate)
+          .sort((first, second) => second.score - first.score);
+
+        // Check if we have any matching dimensions
+        if (matchingDimensions.length > 0) {
+          // Check if the top match should be kept separate (radial vs linear)
+          const bestMatch = matchingDimensions[0];
+          
+          if (bestMatch.shouldSeparate) {
+            // If the best match is a different layout type, don't merge - use the position tolerance's own layout
+            // The position tolerance will get its own display with appropriate layout based on its face names
+          } else {
+            // Original behavior: merge with the best matching dimension tolerance
+            const radialLayout = isRadialDimension(bestMatch.tolerance);
+            appendFeatureControlFrame(
+              bestMatch.entry,
+              positionTolerance,
+              radialLayout ? "radial" : "linear"
+            );
+            return;
+          }
+        }
+        
+        // If no merge occurred, the position tolerance will be handled below with its own layout
+        // Diametral (cylindrical zone) position tolerances use radial layout
+        // Boxed zone (non-cylindrical) position tolerances use linear layout
+
+        const faceNames = getFaceNamesForTolerance(positionTolerance);
+        const positionLayoutType = getPositionToleranceLayoutType(positionTolerance);
+        const cylindricalFaceName = getPrimaryCylindricalFaceName(faceNames);
+        if (cylindricalFaceName && positionLayoutType === "radial") {
+          const geometry = computeHoleToleranceLeaderGeometry(
+            cylindricalFaceName,
+            0,
+            1,
+            undefined,
+            positionTolerance
+          );
+          if (!geometry) return;
+          const line = new THREE.LineSegments(
+            new THREE.BufferGeometry().setFromPoints(geometry.linePoints),
+            new THREE.LineBasicMaterial({
+              color: 0x0f172a,
+              depthTest: false,
+              depthWrite: false,
+              transparent: true,
+              opacity: 0.96
+            })
+          );
+          line.name = `PmiDimensionToleranceOverlay-${positionTolerance.id}-PositionLeader`;
+          line.renderOrder = 43;
+          line.frustumCulled = false;
+          line.raycast = () => undefined;
+          group.add(line);
+
+          const arrow = new THREE.Mesh(
+            new THREE.BufferGeometry().setFromPoints(geometry.arrowPoints),
+            new THREE.MeshBasicMaterial({
+              color: 0x0f172a,
+              depthTest: false,
+              depthWrite: false,
+              transparent: true,
+              opacity: 0.96,
+              side: THREE.DoubleSide
+            })
+          );
+          arrow.name = `PmiDimensionToleranceOverlay-${positionTolerance.id}-PositionArrow`;
+          arrow.renderOrder = 44;
+          arrow.frustumCulled = false;
+          arrow.raycast = () => undefined;
+          group.add(arrow);
+
+          const labelEntry = addStandaloneFeatureControlFrameLabel(
+            positionTolerance,
+            geometry.labelPosition,
+            "fixed",
+            () => getLeaderTerminalTransform(line)
+          );
+          if (labelEntry) labelEntry.resolvePoint = () => getLeaderTerminalPoint(line);
+          if (labelEntry) labelEntry.leaderObjects.push(line);
+          pmiDimensionLeaderCache.push({
+            tolerance: positionTolerance,
+            faceName: cylindricalFaceName,
+            slotIndex: 0,
+            slotCount: 1,
+            anchor: geometry.anchor,
+            line,
+            arrow,
+            labelEntry
+          });
+          return;
+        }
+
+        const linearSamples = faceNames
+          .slice(0, 2)
+          .map(makeFaceSample)
+          .filter((sample): sample is MeasurementSample => !!sample);
+        if (linearSamples.length >= 2) {
+          const linearResult = resolveMeasurement(linearSamples[0], linearSamples[1]);
+          if (
+            linearResult.mode === "linear" &&
+            drawLinearFeatureControlFrame(
+              linearResult,
+              positionTolerance,
+              `PmiDimensionToleranceOverlay-${positionTolerance.id}-LinearPosition`
+            )
+          ) {
+            return;
+          }
+        }
+
+        const targetSample = faceNames
+          .map(makeFaceSample)
+          .find((sample): sample is MeasurementSample => !!sample);
+        if (targetSample) {
+          addStandaloneFeatureControlFrameLabel(
+            positionTolerance,
+            targetSample.point,
+            "fixed",
+            () => "translate(6px, -50%)"
+          );
+        }
+      });
 
       if (group.children.length > 0) {
         assemblyGroup.add(group);
@@ -7092,17 +8480,39 @@ export default function CadCanvas3D({
             unitNormal.negate();
           }
 
-          calloutKind = isRegionDatumTarget(d)
-            ? "targetZone"
-            : isCurveDatumTarget(d)
-              ? "targetCurve"
-              : isLineDatumTarget(d)
+          calloutKind = isCurveDatumTarget(d)
+            ? "targetCurve"
+            : isLineDatumTarget(d)
               ? "targetLine"
               : isCircleDatumTarget(d)
                 ? "targetCircle"
+                : isRegionDatumTarget(d)
+                  ? "targetZone"
                 : "targetPoint";
           const targetPlaneNormal = unitNormal.clone();
           const leaderDirection = unitNormal.clone();
+          let lineTargetDirection: THREE.Vector3 | null = null;
+          if (calloutKind === "targetLine" && d.targetLine?.start && d.targetLine?.end) {
+            lineTargetDirection = d.targetLine.direction
+              ? assemblyDirectionToChildLocal(toVector(d.targetLine.direction))
+              : assemblyPointToChildLocal(toVector(d.targetLine.end))
+                .sub(assemblyPointToChildLocal(toVector(d.targetLine.start)));
+            lineTargetDirection.addScaledVector(
+              targetPlaneNormal,
+              -lineTargetDirection.dot(targetPlaneNormal)
+            );
+            if (lineTargetDirection.lengthSq() > 1e-8) {
+              lineTargetDirection.normalize();
+              leaderDirection.crossVectors(targetPlaneNormal, lineTargetDirection).normalize();
+              const outwardInPlane = localPoint.clone().sub(modelCenterLocal)
+                .addScaledVector(targetPlaneNormal, -localPoint.clone().sub(modelCenterLocal).dot(targetPlaneNormal));
+              if (outwardInPlane.dot(leaderDirection) < 0) {
+                leaderDirection.negate();
+              }
+            } else {
+              lineTargetDirection = null;
+            }
+          }
           if ((calloutKind === "targetCurve" || calloutKind === "targetCircle") && datumTargetCenter) {
             const centerLocal = assemblyPointToChildLocal(toVector(datumTargetCenter));
             let radialDirection = centerLocal.clone().sub(modelCenterLocal);
@@ -7155,7 +8565,9 @@ export default function CadCanvas3D({
             .map((axis) => axis.clone().addScaledVector(leaderDirection, -axis.dot(leaderDirection)))
             .filter((tangent) => tangent.lengthSq() > 1e-8)
             .sort((a, b) => b.lengthSq() - a.lengthSq());
-          if (tangentCandidates[0]) {
+          if (lineTargetDirection) {
+            leaderTangent.copy(lineTargetDirection);
+          } else if (tangentCandidates[0]) {
             leaderTangent.copy(tangentCandidates[0].normalize());
           }
           const tangentSecond = new THREE.Vector3().crossVectors(leaderDirection, leaderTangent).normalize();
@@ -7203,9 +8615,10 @@ export default function CadCanvas3D({
               child.add(arrowHeadObject);
 
             if (calloutKind === "targetLine" && d.targetLine?.start && d.targetLine?.end) {
-              const markerLift = Math.max(modelSizeMax * 0.0012, 1e-5);
-              const startLocal = assemblyPointToChildLocal(toVector(d.targetLine.start)).addScaledVector(unitNormal, markerLift);
-              const endLocal = assemblyPointToChildLocal(toVector(d.targetLine.end)).addScaledVector(unitNormal, markerLift);
+              const projectToTargetPlane = (point: THREE.Vector3) =>
+                point.addScaledVector(unitNormal, -point.clone().sub(localPoint).dot(unitNormal));
+              const startLocal = projectToTargetPlane(assemblyPointToChildLocal(toVector(d.targetLine.start)));
+              const endLocal = projectToTargetPlane(assemblyPointToChildLocal(toVector(d.targetLine.end)));
               const lineGeometry = new THREE.BufferGeometry().setFromPoints([startLocal, endLocal]);
               const lineMaterial = new THREE.LineBasicMaterial({
                 color: 0x047857,
@@ -7662,6 +9075,7 @@ export default function CadCanvas3D({
           targetMarkHalfSize,
           annotationKind: d.annotationKind,
           hasLeader,
+          useFeatureControlFrameBranch: false,
         }];
       });
     };
@@ -7731,7 +9145,6 @@ export default function CadCanvas3D({
           leaderAxis,
           anchor.leaderTangent
         );
-
         const radialLeadEndLocal = anchor.localPoint.clone().addScaledVector(leaderAxis, anchor.leaderRadialLength);
         const triangleBaseCenterLocal = radialLeadEndLocal.clone().addScaledVector(tangent, anchor.leaderDoglegLength);
         const apexLocal = triangleBaseCenterLocal.clone().addScaledVector(stemDirection, anchor.triangleHeight);
@@ -7895,7 +9308,7 @@ export default function CadCanvas3D({
     };
 
     canvas.addEventListener("mousemove", handleMouseMove);
-    canvas.addEventListener("pointerdown", handlePointerDown);
+    canvas.addEventListener("pointerdown", handlePointerDown, true);
     canvas.addEventListener("mouseleave", handleMouseLeave);
     canvas.addEventListener("click", handleMouseClick);
 
@@ -7909,6 +9322,7 @@ export default function CadCanvas3D({
 
     const handleControlsStart = () => {
       isNavigatingView = true;
+      pmiCollisionStableFrames = 0;
       pendingMouseEvent = null;
       clearHoverState();
       if (wheelNavigationPending) {
@@ -7922,6 +9336,8 @@ export default function CadCanvas3D({
 
     const handleControlsEnd = () => {
       isNavigatingView = false;
+      pmiCollisionLayoutRequested = true;
+      pmiCollisionStableFrames = 0;
       if (pointerMovedSinceDown) {
         suppressMeasurementUntil = performance.now() + 180;
       }
@@ -7965,6 +9381,16 @@ export default function CadCanvas3D({
     let prevFocusRequestNonce = -1;
     const projectedDatumPoint = new THREE.Vector3();
     const orientationCubeCameraDirection = new THREE.Vector3();
+    const setAnnotationDepthOrder = (
+      element: HTMLElement,
+      ndcDepth: number,
+      tieBreaker = 0
+    ) => {
+      const normalizedDepth = THREE.MathUtils.clamp((ndcDepth + 1) * 0.5, 0, 1);
+      const zIndex = Math.round((1 - normalizedDepth) * 100000) * 10 + tieBreaker;
+      const nextValue = `${zIndex}`;
+      if (element.style.zIndex !== nextValue) element.style.zIndex = nextValue;
+    };
     let wheelNavigationPending = false;
     let wheelNavigationResetId: number | null = null;
 
@@ -7977,6 +9403,401 @@ export default function CadCanvas3D({
       }
     };
     requestRenderRef.current = requestRender;
+
+    type PmiScreenRect = {
+      left: number;
+      top: number;
+      right: number;
+      bottom: number;
+      width: number;
+      height: number;
+    };
+
+    type PmiScreenPoint = { x: number; y: number };
+    type PmiScreenSegment = {
+      start: PmiScreenPoint;
+      end: PmiScreenPoint;
+      owner: PmiDimensionLabelEntry;
+    };
+
+    const applyPmiDimensionLabelTransform = (entry: PmiDimensionLabelEntry) => {
+      const collisionTransform =
+        entry.collisionOffsetX === 0 && entry.collisionOffsetY === 0
+        ? ""
+        : ` translate(${entry.collisionOffsetX}px, ${entry.collisionOffsetY}px)`;
+      entry.element.style.transform =
+        `translate3d(${entry.screenX}px, ${entry.screenY}px, 0) ${entry.baseTransform}${collisionTransform}`;
+    };
+
+    const readPmiScreenRect = (element: HTMLElement): PmiScreenRect | null => {
+      if (element.style.display === "none") return null;
+      const rect = element.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) return null;
+      return {
+        left: rect.left,
+        top: rect.top,
+        right: rect.right,
+        bottom: rect.bottom,
+        width: rect.width,
+        height: rect.height
+      };
+    };
+
+    const readPmiLabelBaseRect = (entry: PmiDimensionLabelEntry): PmiScreenRect | null => {
+      const renderedRect = readPmiScreenRect(entry.element);
+      if (!renderedRect) return null;
+      if (entry.measuredWidth <= 0 || entry.measuredHeight <= 0) {
+        entry.measuredWidth = renderedRect.width;
+        entry.measuredHeight = renderedRect.height;
+      }
+      return {
+        left: renderedRect.left - entry.collisionOffsetX,
+        top: renderedRect.top - entry.collisionOffsetY,
+        right: renderedRect.left - entry.collisionOffsetX + entry.measuredWidth,
+        bottom: renderedRect.top - entry.collisionOffsetY + entry.measuredHeight,
+        width: entry.measuredWidth,
+        height: entry.measuredHeight
+      };
+    };
+
+    const offsetPmiScreenRect = (
+      rect: PmiScreenRect,
+      offsetX: number,
+      offsetY: number
+    ): PmiScreenRect => ({
+      left: rect.left + offsetX,
+      top: rect.top + offsetY,
+      right: rect.right + offsetX,
+      bottom: rect.bottom + offsetY,
+      width: rect.width,
+      height: rect.height
+    });
+
+    const pmiRectsOverlap = (a: PmiScreenRect, b: PmiScreenRect, spacing = 0) =>
+      a.left < b.right + spacing &&
+      a.right > b.left - spacing &&
+      a.top < b.bottom + spacing &&
+      a.bottom > b.top - spacing;
+
+    class PmiScreenGrid<T> {
+      private readonly cells = new Map<string, Set<T>>();
+
+      constructor(private readonly cellSize = 64) {}
+
+      insert(rect: PmiScreenRect, item: T) {
+        const minX = Math.floor(rect.left / this.cellSize);
+        const maxX = Math.floor(rect.right / this.cellSize);
+        const minY = Math.floor(rect.top / this.cellSize);
+        const maxY = Math.floor(rect.bottom / this.cellSize);
+        for (let x = minX; x <= maxX; x++) {
+          for (let y = minY; y <= maxY; y++) {
+            const key = `${x}:${y}`;
+            const cell = this.cells.get(key) || new Set<T>();
+            cell.add(item);
+            this.cells.set(key, cell);
+          }
+        }
+      }
+
+      query(rect: PmiScreenRect) {
+        const result = new Set<T>();
+        const minX = Math.floor(rect.left / this.cellSize);
+        const maxX = Math.floor(rect.right / this.cellSize);
+        const minY = Math.floor(rect.top / this.cellSize);
+        const maxY = Math.floor(rect.bottom / this.cellSize);
+        for (let x = minX; x <= maxX; x++) {
+          for (let y = minY; y <= maxY; y++) {
+            this.cells.get(`${x}:${y}`)?.forEach((item) => result.add(item));
+          }
+        }
+        return result;
+      }
+    }
+
+    const pmiSegmentIntersectsRect = (segment: PmiScreenSegment, rect: PmiScreenRect) => {
+      if (
+        segment.start.x >= rect.left && segment.start.x <= rect.right &&
+        segment.start.y >= rect.top && segment.start.y <= rect.bottom
+      ) return true;
+      if (
+        segment.end.x >= rect.left && segment.end.x <= rect.right &&
+        segment.end.y >= rect.top && segment.end.y <= rect.bottom
+      ) return true;
+
+      const intersectsEdge = (
+        a: PmiScreenPoint,
+        b: PmiScreenPoint,
+        c: PmiScreenPoint,
+        d: PmiScreenPoint
+      ) => {
+        const cross = (p: PmiScreenPoint, q: PmiScreenPoint, r: PmiScreenPoint) =>
+          (q.x - p.x) * (r.y - p.y) - (q.y - p.y) * (r.x - p.x);
+        const abC = cross(a, b, c);
+        const abD = cross(a, b, d);
+        const cdA = cross(c, d, a);
+        const cdB = cross(c, d, b);
+        return abC * abD <= 0 && cdA * cdB <= 0;
+      };
+      const topLeft = { x: rect.left, y: rect.top };
+      const topRight = { x: rect.right, y: rect.top };
+      const bottomRight = { x: rect.right, y: rect.bottom };
+      const bottomLeft = { x: rect.left, y: rect.bottom };
+      return (
+        intersectsEdge(segment.start, segment.end, topLeft, topRight) ||
+        intersectsEdge(segment.start, segment.end, topRight, bottomRight) ||
+        intersectsEdge(segment.start, segment.end, bottomRight, bottomLeft) ||
+        intersectsEdge(segment.start, segment.end, bottomLeft, topLeft)
+      );
+    };
+
+    const projectPmiLeaderSegments = (viewportRect: DOMRect): PmiScreenSegment[] => {
+      const segments: PmiScreenSegment[] = [];
+      const start = new THREE.Vector3();
+      const end = new THREE.Vector3();
+      pmiDimensionLabelCache.forEach((owner) => {
+        owner.leaderObjects.forEach((object) => {
+          const position = (object as THREE.Line | THREE.LineSegments).geometry
+            ?.getAttribute("position") as THREE.BufferAttribute | undefined;
+          if (!position || position.count < 2) return;
+          const step = object instanceof THREE.LineSegments ? 2 : 1;
+          for (let index = 0; index + 1 < position.count; index += step) {
+            start.fromBufferAttribute(position, index);
+            end.fromBufferAttribute(position, index + 1);
+            object.localToWorld(start);
+            object.localToWorld(end);
+            start.project(camera);
+            end.project(camera);
+            if (
+              !Number.isFinite(start.x) || !Number.isFinite(start.y) ||
+              !Number.isFinite(end.x) || !Number.isFinite(end.y)
+            ) continue;
+            segments.push({
+              start: {
+                x: viewportRect.left + (start.x * 0.5 + 0.5) * viewportRect.width,
+                y: viewportRect.top + (start.y * -0.5 + 0.5) * viewportRect.height
+              },
+              end: {
+                x: viewportRect.left + (end.x * 0.5 + 0.5) * viewportRect.width,
+                y: viewportRect.top + (end.y * -0.5 + 0.5) * viewportRect.height
+              },
+              owner
+            });
+          }
+        });
+      });
+      return segments;
+    };
+
+    const scorePmiLabelRect = (
+      candidate: PmiScreenRect,
+      entry: PmiDimensionLabelEntry,
+      obstacleGrid: PmiScreenGrid<PmiScreenRect>,
+      leaderGrid: PmiScreenGrid<PmiScreenSegment>,
+      viewport: PmiScreenRect,
+      offsetX: number,
+      offsetY: number,
+      modelOcclusionAt: (point: PmiScreenPoint) => boolean
+    ) => {
+      const spacing = 3;
+      let score = Math.hypot(offsetX, offsetY) * 0.42;
+      obstacleGrid.query({
+        ...candidate,
+        left: candidate.left - spacing,
+        top: candidate.top - spacing,
+        right: candidate.right + spacing,
+        bottom: candidate.bottom + spacing
+      }).forEach((obstacle) => {
+        if (!pmiRectsOverlap(candidate, obstacle, spacing)) return;
+        const overlapWidth = Math.max(
+          0,
+          Math.min(candidate.right, obstacle.right + spacing) -
+            Math.max(candidate.left, obstacle.left - spacing)
+        );
+        const overlapHeight = Math.max(
+          0,
+          Math.min(candidate.bottom, obstacle.bottom + spacing) -
+            Math.max(candidate.top, obstacle.top - spacing)
+        );
+        score += overlapWidth * overlapHeight * 20;
+      });
+
+      leaderGrid.query(candidate).forEach((segment) => {
+        if (segment.owner === entry) return;
+        if (pmiSegmentIntersectsRect(segment, candidate)) score += 380;
+      });
+
+      const center = {
+        x: (candidate.left + candidate.right) * 0.5,
+        y: (candidate.top + candidate.bottom) * 0.5
+      };
+      const modelSamples = [
+        center,
+        { x: candidate.left + 3, y: center.y },
+        { x: candidate.right - 3, y: center.y }
+      ];
+      score += modelSamples.filter(modelOcclusionAt).length * 90;
+
+      const clippedWidth =
+        Math.max(0, viewport.left - candidate.left) +
+        Math.max(0, candidate.right - viewport.right);
+      const clippedHeight =
+        Math.max(0, viewport.top - candidate.top) +
+        Math.max(0, candidate.bottom - viewport.bottom);
+      score += (clippedWidth * candidate.height + clippedHeight * candidate.width) * 40;
+      return score;
+    };
+
+    const resolveManagedPmiLabelCollisions = () => {
+      const viewportRect = renderer.domElement.getBoundingClientRect();
+      const viewport: PmiScreenRect = {
+        left: viewportRect.left + 4,
+        top: viewportRect.top + 4,
+        right: viewportRect.right - 4,
+        bottom: viewportRect.bottom - 4,
+        width: Math.max(0, viewportRect.width - 8),
+        height: Math.max(0, viewportRect.height - 8)
+      };
+      const obstacleGrid = new PmiScreenGrid<PmiScreenRect>();
+
+      pmiDimensionLabelCache.forEach((entry) => {
+        if (!entry.visible || entry.placementPolicy !== "fixed") return;
+        const rect = readPmiScreenRect(entry.element);
+        if (rect) obstacleGrid.insert(rect, rect);
+      });
+      [...datumAnchorCache, ...drfBadgeCache].forEach((badge) => {
+        const rect = readPmiScreenRect(badge.element);
+        if (rect) obstacleGrid.insert(rect, rect);
+      });
+
+      const leaderSegments = projectPmiLeaderSegments(viewportRect);
+      const leaderGrid = new PmiScreenGrid<PmiScreenSegment>();
+      leaderSegments.forEach((segment) => {
+        leaderGrid.insert({
+          left: Math.min(segment.start.x, segment.end.x),
+          top: Math.min(segment.start.y, segment.end.y),
+          right: Math.max(segment.start.x, segment.end.x),
+          bottom: Math.max(segment.start.y, segment.end.y),
+          width: Math.abs(segment.end.x - segment.start.x),
+          height: Math.abs(segment.end.y - segment.start.y)
+        }, segment);
+      });
+      const modelRaycaster = new THREE.Raycaster();
+      (modelRaycaster as THREE.Raycaster & { firstHitOnly: boolean }).firstHitOnly = true;
+      const modelOcclusionCache = new Map<string, boolean>();
+      const modelOcclusionAt = (point: PmiScreenPoint) => {
+        const cellX = Math.round(point.x / 12);
+        const cellY = Math.round(point.y / 12);
+        const key = `${cellX}:${cellY}`;
+        const cached = modelOcclusionCache.get(key);
+        if (cached !== undefined) return cached;
+        const ndc = new THREE.Vector2(
+          ((point.x - viewportRect.left) / viewportRect.width) * 2 - 1,
+          -((point.y - viewportRect.top) / viewportRect.height) * 2 + 1
+        );
+        modelRaycaster.setFromCamera(ndc, camera);
+        const occluded = modelRaycaster.intersectObjects(cadFacePickObjects, false).length > 0;
+        modelOcclusionCache.set(key, occluded);
+        return occluded;
+      };
+
+      const placementPriority: Record<PmiDimensionLabelEntry["placementPolicy"], number> = {
+        "datum-attached": 0,
+        "leader-attached": 1,
+        "linear-attached": 2,
+        fixed: 3
+      };
+      const candidateOffsetsByPolicy: Record<
+        Exclude<PmiDimensionLabelEntry["placementPolicy"], "fixed">,
+        [number, number][]
+      > = {
+        "datum-attached": [
+          [0, 0], [0, -10], [0, 10], [-18, 0], [18, 0],
+          [-18, -12], [18, -12], [-18, 12], [18, 12], [0, -28], [0, 28]
+        ],
+        "leader-attached": [
+          [0, 0], [0, -12], [0, 12], [-20, 0], [20, 0],
+          [-22, -14], [22, -14], [-22, 14], [22, 14], [0, -34], [0, 34]
+        ],
+        "linear-attached": [
+          [0, 0], [0, -10], [0, 10], [-18, 0], [18, 0],
+          [-20, -14], [20, -14], [-20, 14], [20, 14], [0, -32], [0, 32]
+        ]
+      };
+      const managedEntries = pmiDimensionLabelCache
+        .map((entry, index) => ({ entry, index }))
+        .filter(({ entry }) => entry.visible && entry.placementPolicy !== "fixed")
+        .sort((a, b) =>
+          placementPriority[a.entry.placementPolicy] - placementPriority[b.entry.placementPolicy] ||
+          a.index - b.index
+        );
+      managedEntries.forEach(({ entry }) => {
+        const baseRect = readPmiLabelBaseRect(entry);
+        if (!baseRect) return;
+        const currentRect = offsetPmiScreenRect(
+          baseRect,
+          entry.collisionOffsetX,
+          entry.collisionOffsetY
+        );
+        const currentScore = scorePmiLabelRect(
+          currentRect,
+          entry,
+          obstacleGrid,
+          leaderGrid,
+          viewport,
+          entry.collisionOffsetX,
+          entry.collisionOffsetY,
+          modelOcclusionAt
+        );
+        let bestOffsetX = entry.collisionOffsetX;
+        let bestOffsetY = entry.collisionOffsetY;
+        let bestScore = currentScore;
+
+        const candidateOffsets =
+          candidateOffsetsByPolicy[entry.placementPolicy as Exclude<
+            PmiDimensionLabelEntry["placementPolicy"],
+            "fixed"
+          >];
+        candidateOffsets.forEach(([offsetX, offsetY]) => {
+          const score = scorePmiLabelRect(
+            offsetPmiScreenRect(baseRect, offsetX, offsetY),
+            entry,
+            obstacleGrid,
+            leaderGrid,
+            viewport,
+            offsetX,
+            offsetY,
+            modelOcclusionAt
+          );
+          if (score < bestScore) {
+            bestScore = score;
+            bestOffsetX = offsetX;
+            bestOffsetY = offsetY;
+          }
+        });
+
+        const changed =
+          bestOffsetX !== entry.collisionOffsetX ||
+          bestOffsetY !== entry.collisionOffsetY;
+        const hysteresisMargin = Math.max(35, currentScore * 0.08);
+        const shouldMove =
+          changed &&
+          (
+            bestScore + hysteresisMargin < currentScore ||
+            (bestOffsetX === 0 && bestOffsetY === 0 && bestScore === 0)
+          );
+        if (shouldMove) {
+          entry.collisionOffsetX = bestOffsetX;
+          entry.collisionOffsetY = bestOffsetY;
+          applyPmiDimensionLabelTransform(entry);
+        }
+        const placedRect = offsetPmiScreenRect(
+          baseRect,
+          entry.collisionOffsetX,
+          entry.collisionOffsetY
+        );
+        obstacleGrid.insert(placedRect, placedRect);
+      });
+    };
 
     const animationLoop = () => {
       animationFrameId = null;
@@ -8016,6 +9837,8 @@ export default function CadCanvas3D({
           }
           controls.update();
           cameraFocusTarget = null;
+          pmiCollisionLayoutRequested = true;
+          pmiCollisionStableFrames = 0;
         }
       }
 
@@ -8125,8 +9948,10 @@ export default function CadCanvas3D({
       if (datumAnchorInputsChanged || pmiDimensionInputsChanged) {
         if (datumAnchorInputsChanged) {
           refreshDatumAnchorCache();
+          pmiCollisionLayoutRequested = true;
+          pmiCollisionStableFrames = 0;
         }
-        if (pmiDimensionInputsChanged) {
+        if (datumAnchorInputsChanged || pmiDimensionInputsChanged) {
           refreshPmiDimensionToleranceOverlay();
         }
         prevDatumDatumsRef = currentDatumsRef;
@@ -8143,6 +9968,8 @@ export default function CadCanvas3D({
       } else if (datumCacheMissingElements > 0 && datumCacheRetryFrame < 12) {
         datumCacheRetryFrame++;
         refreshDatumAnchorCache();
+        pmiCollisionLayoutRequested = true;
+        pmiCollisionStableFrames = 0;
       } else if (controlsChanged || isNavigatingView || !!cameraFocusTarget) {
         updatePmiDimensionLeaderFacing();
       }
@@ -8152,6 +9979,15 @@ export default function CadCanvas3D({
         const height = renderer.domElement.clientHeight;
         datumAnchorCache.forEach((anchor) => {
           updateDatumCalloutFacing(anchor);
+
+          if (anchor.useFeatureControlFrameBranch) {
+            if (anchor.triangleObject) anchor.triangleObject.visible = false;
+            if (anchor.leaderObject) anchor.leaderObject.visible = false;
+            anchor.element.style.display = "none";
+            if (anchor.leaderElement) anchor.leaderElement.style.display = "none";
+            if (anchor.triangleElement) anchor.triangleElement.style.display = "none";
+            return;
+          }
 
           projectedDatumPoint.copy(anchor.localPoint).add(anchor.offset);
           anchor.object.localToWorld(projectedDatumPoint);
@@ -8199,7 +10035,7 @@ export default function CadCanvas3D({
           anchor.element.style.transform = `translate3d(${x}px, ${y}px, 0) ${anchorTransform}`;
           anchor.element.style.display = "flex";
           anchor.element.style.opacity = "1";
-          anchor.element.style.zIndex = "20";
+          setAnnotationDepthOrder(anchor.element, projectedDatumPoint.z, 3);
 
           if (anchor.leaderElement) anchor.leaderElement.style.display = "none";
           if (anchor.triangleElement) anchor.triangleElement.style.display = "none";
@@ -8228,13 +10064,14 @@ export default function CadCanvas3D({
 
           badge.element.style.transform = `translate3d(${rawX}px, ${rawY}px, 0) translate(-50%, -50%)`;
           badge.element.style.display = "flex";
-          badge.element.style.zIndex = "18";
+          setAnnotationDepthOrder(badge.element, projectedDatumPoint.z, 1);
         });
       }
 
       if (pmiDimensionLabelCache.length > 0) {
         const width = renderer.domElement.clientWidth;
         const height = renderer.domElement.clientHeight;
+        let pmiProjectionChanged = false;
         pmiDimensionLabelCache.forEach((entry) => {
           const resolvedPoint = entry.resolvePoint?.();
           if (resolvedPoint) {
@@ -8255,29 +10092,53 @@ export default function CadCanvas3D({
             if (entry.visible) {
               entry.element.style.display = "none";
               entry.visible = false;
+              pmiProjectionChanged = true;
             }
             return;
           }
 
           const screenX = Math.round(rawX * 2) / 2;
           const screenY = Math.round(rawY * 2) / 2;
+          setAnnotationDepthOrder(entry.element, projectedDatumPoint.z, 2);
           const labelTransform = entry.resolveTransform?.() || "translate(0, -50%)";
-          const fullTransform = `translate3d(${screenX}px, ${screenY}px, 0) ${labelTransform}`;
-          if (
+          const positionChanged =
             !entry.visible ||
             Math.abs(screenX - entry.screenX) >= 0.5 ||
             Math.abs(screenY - entry.screenY) >= 0.5 ||
-            entry.element.style.transform !== fullTransform
-          ) {
-            entry.element.style.transform = fullTransform;
+            entry.baseTransform !== labelTransform;
+          if (positionChanged) {
             entry.screenX = screenX;
             entry.screenY = screenY;
+            entry.baseTransform = labelTransform;
+            applyPmiDimensionLabelTransform(entry);
+            pmiProjectionChanged = true;
           }
           if (!entry.visible) {
             entry.element.style.display = "flex";
             entry.visible = true;
+            pmiProjectionChanged = true;
           }
         });
+
+        const canSettlePlacement =
+          !isNavigatingView &&
+          !cameraFocusTarget &&
+          !controlsChanged &&
+          !spinOn;
+        if (pmiCollisionLayoutRequested && canSettlePlacement) {
+          pmiCollisionStableFrames = pmiProjectionChanged
+            ? 0
+            : pmiCollisionStableFrames + 1;
+          if (pmiCollisionStableFrames >= 2) {
+            resolveManagedPmiLabelCollisions();
+            pmiCollisionLayoutRequested = false;
+            pmiCollisionStableFrames = 0;
+          } else {
+            requestRender(1);
+          }
+        } else if (!canSettlePlacement) {
+          pmiCollisionStableFrames = 0;
+        }
       }
 
       if (measurementLabelRef.current && measurementLabelPoint) {
@@ -8297,6 +10158,7 @@ export default function CadCanvas3D({
         ) {
           measurementLabelRef.current.style.display = "block";
           measurementLabelRef.current.style.transform = `translate3d(${rawX}px, ${rawY}px, 0) translate(-50%, -50%)`;
+          setAnnotationDepthOrder(measurementLabelRef.current, projectedDatumPoint.z, 4);
         } else {
           measurementLabelRef.current.style.display = "none";
         }
@@ -8311,6 +10173,7 @@ export default function CadCanvas3D({
         isNavigatingView ||
         !!cameraFocusTarget ||
         controlsChanged ||
+        (pmiCollisionLayoutRequested && pmiDimensionLabelCache.length > 0) ||
         requestedContinuationFrames > 0 ||
         (datumCacheMissingElements > 0 && datumCacheRetryFrame < 12);
 
@@ -8342,7 +10205,7 @@ export default function CadCanvas3D({
       }
       resizeObserver.disconnect();
       canvas.removeEventListener("mousemove", handleMouseMove);
-      canvas.removeEventListener("pointerdown", handlePointerDown);
+      canvas.removeEventListener("pointerdown", handlePointerDown, true);
       canvas.removeEventListener("mouseleave", handleMouseLeave);
       canvas.removeEventListener("click", handleMouseClick);
       canvas.removeEventListener("wheel", handleWheelNavigation);
@@ -8382,25 +10245,29 @@ export default function CadCanvas3D({
         }}
       />
 
-      {/* Datum reference frame labels */}
-      {showDatumReferenceFrames && datumReferenceFrames.length > 0 && (
-        <div
-          className="absolute inset-0 pointer-events-none z-10 overflow-hidden"
-          id="drf-badges-overlay"
-          style={{ width: "100%", height: "100%" }}
-        />
-      )}
-
-      {/* Dimensional PMI labels */}
       <div
         className="absolute inset-0 pointer-events-none z-10 overflow-hidden"
-        id="pmi-dimensional-labels-overlay"
-        style={{ width: "100%", height: "100%" }}
-      />
+        id="annotation-depth-overlay"
+      >
+        {/* Datum reference frame labels */}
+        {showDatumReferenceFrames && datumReferenceFrames.length > 0 && (
+          <div
+            className="absolute inset-0 pointer-events-none overflow-hidden"
+            id="drf-badges-overlay"
+            style={{ width: "100%", height: "100%" }}
+          />
+        )}
 
-      {/* 3D Datums Overlay */}
-      {((showDatumFeatures && datums.length > 0) || (showDatumTargets && datumTargets.length > 0)) && (
-        <div className="absolute inset-0 pointer-events-none z-10 overflow-hidden" id="datum-annotations-overlay" style={{ width: '100%', height: '100%' }}>
+        {/* Dimensional PMI labels */}
+        <div
+          className="absolute inset-0 pointer-events-none overflow-hidden"
+          id="pmi-dimensional-labels-overlay"
+          style={{ width: "100%", height: "100%" }}
+        />
+
+        {/* 3D Datums Overlay */}
+        {((showDatumFeatures && datums.length > 0) || (showDatumTargets && datumTargets.length > 0)) && (
+          <div className="absolute inset-0 pointer-events-none overflow-hidden" id="datum-annotations-overlay" style={{ width: '100%', height: '100%' }}>
           {[
             ...(showDatumFeatures
               ? datums.filter((d) => d.type !== "Datum Target Set").map((d) => ({ ...d, annotationKind: "datum" }))
@@ -8481,8 +10348,18 @@ export default function CadCanvas3D({
               </button>
             </div>
           ))}
-        </div>
-      )}
+          </div>
+        )}
+
+        {measurementLabel && (
+          <div
+            ref={measurementLabelRef}
+            className="absolute left-0 top-0 hidden pointer-events-none rounded border border-emerald-700 bg-white px-2 py-1 text-[10px] font-black font-mono text-emerald-800 shadow-md"
+          >
+            {measurementLabel.text}
+          </div>
+        )}
+      </div>
 
       {/* Triangulating loading screen */}
       {isLoading && (
@@ -8590,15 +10467,6 @@ export default function CadCanvas3D({
           <span className="text-[7.5px] sm:text-[8px] text-blue-600 font-bold tracking-widest uppercase">
             3D RAYCASTING
           </span>
-        </div>
-      )}
-
-      {measurementLabel && (
-        <div
-          ref={measurementLabelRef}
-          className="absolute left-0 top-0 hidden pointer-events-none rounded border border-emerald-700 bg-white px-2 py-1 text-[10px] font-black font-mono text-emerald-800 shadow-md"
-        >
-          {measurementLabel.text}
         </div>
       )}
 

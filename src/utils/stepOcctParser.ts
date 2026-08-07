@@ -1,8 +1,20 @@
-import { loadOcct } from "./occtLoader";
+import {
+  loadOcct,
+  resolveOcctLoadOptions,
+  type OcctTopologyMode,
+} from "./occtLoader";
+import {
+  EMPTY_OCCT_TOPOLOGY_OFFSETS,
+  hasNativeOcctTopology,
+  normalizeOcctMeshTopology,
+} from "./occtTopologyPayload";
+import { attachStepTopologyToLines, extractStepTopology } from "./stepTopology";
 
 export interface OcctTessellationParams {
   linearDeflection?: number;
   angularDeflection?: number;
+  topologyMode?: OcctTopologyMode;
+  nativeWrapperUrl?: string;
 }
 
 /**
@@ -14,7 +26,11 @@ export async function parseStepWithOcct(
   fileBuffer: Uint8Array,
   params: OcctTessellationParams = {}
 ): Promise<any> {
-  const occt = await loadOcct();
+  const loadOptions = resolveOcctLoadOptions({
+    topologyMode: params.topologyMode,
+    nativeWrapperUrl: params.nativeWrapperUrl,
+  });
+  const occt = await loadOcct(loadOptions);
   
   // Gather linear and angular deflection bounds
   const linearDeflection = params.linearDeflection ?? 0.1;
@@ -27,9 +43,21 @@ export async function parseStepWithOcct(
 
   try {
     // Run WebAssembly Open Cascade Tessellator
-    const result = occt.ReadStepFile(fileBuffer, parseConfig);
+    let result;
+    try {
+      result = occt.ReadStepFile(fileBuffer, parseConfig);
+    } catch (nativeError) {
+      if (loadOptions.topologyMode !== "native") throw nativeError;
+      console.warn(
+        "Native OCCT wrapper failed while reading STEP; retrying with the standard wrapper.",
+        nativeError
+      );
+      const fallbackOcct = await loadOcct({ topologyMode: "tessellation" });
+      result = fallbackOcct.ReadStepFile(fileBuffer, parseConfig);
+    }
     
     if (result && result.success && result.meshes) {
+      const stepTopology = extractStepTopology(new TextDecoder("utf-8").decode(fileBuffer));
       const normalizedMeshes: any[] = [];
       const auxiliaryMeshes: any[] = [];
       const globalFaceIndex = { value: 0 };
@@ -143,6 +171,73 @@ export async function parseStepWithOcct(
           });
         });
       });
+
+      const topologySourceMeshes = result.meshes.filter(
+        (mesh: any) => !isAuxiliarySourceMesh(mesh)
+      );
+      const hasCompleteNativeTopology =
+        topologySourceMeshes.length > 0 &&
+        topologySourceMeshes.every(hasNativeOcctTopology);
+
+      if (hasCompleteNativeTopology) {
+        try {
+          let offsets = { ...EMPTY_OCCT_TOPOLOGY_OFFSETS };
+          const nativeTopologyParts = topologySourceMeshes.map((mesh: any) => {
+            const topology = normalizeOcctMeshTopology(mesh, offsets);
+            offsets = topology.nextOffsets;
+            return topology;
+          });
+
+          if (offsets.face !== normalizedMeshes.length) {
+            throw new Error(
+              `Native OCCT face count ${offsets.face} does not match rendered face count ${normalizedMeshes.length}`
+            );
+          }
+
+          const nativeFaces = nativeTopologyParts.flatMap((topology) => topology.faces);
+          nativeFaces.forEach((face, faceIndex) => {
+            Object.assign(normalizedMeshes[faceIndex], {
+              topologySource: "occt",
+              topologySignature: face.topologySignature,
+              nativeIndex: face.nativeIndex,
+              surfaceType: face.surfaceType,
+              nativeArea: face.area,
+              nativeCentroid: face.centroid,
+              nativeBounds: face.bounds,
+              nativeLoopIds: face.loopIds,
+              nativeEdgeIds: face.edgeIds,
+            });
+          });
+
+          const nativeLines = nativeTopologyParts.flatMap((topology) =>
+            topology.edges.map((edge) => ({
+              ...edge,
+              parentFaceIndex: edge.parentFaceIndices[0],
+              parentFaceId: edge.parentFaceIds[0],
+            }))
+          );
+          const topologyLines = attachStepTopologyToLines(nativeLines, stepTopology);
+
+          return {
+            success: true,
+            meshes: normalizedMeshes,
+            lines: topologyLines,
+            edges: topologyLines,
+            faces: nativeFaces,
+            vertices: nativeTopologyParts.flatMap((topology) => topology.vertices),
+            loops: nativeTopologyParts.flatMap((topology) => topology.loops),
+            nativeTopology: stepTopology,
+            geometryTopologySource: "occt",
+            auxiliaryMeshes,
+            auxiliaryMeshCount: auxiliaryMeshes.length,
+          };
+        } catch (error) {
+          console.warn(
+            "Native OCCT topology payload failed validation; reconstructing topology from tessellation.",
+            error
+          );
+        }
+      }
 
       // 2. Extract face-to-face intersection edge segments globally. A viewer
       // B-Rep edge is selectable only when the same boundary segment is shared
@@ -412,13 +507,16 @@ export async function parseStepWithOcct(
           edgeIndices,
         };
       });
+      const topologyLines = attachStepTopologyToLines(lines, stepTopology);
 
       return {
         success: true,
         meshes: normalizedMeshes,
-        lines,
-        edges: lines,
+        lines: topologyLines,
+        edges: topologyLines,
         loops,
+        nativeTopology: stepTopology,
+        geometryTopologySource: "tessellation",
         auxiliaryMeshes,
         auxiliaryMeshCount: auxiliaryMeshes.length,
       };

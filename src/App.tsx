@@ -19,6 +19,7 @@ import { parseStepFile, generateSampleStepText, StepParseResult } from "./utils/
 import { parseStepWithOcct } from "./utils/stepOcctParser";
 import { loadOcct } from "./utils/occtLoader";
 import { autoGenerateFaceMapping } from "./utils/geometryClassifier";
+import { enrichPmiTopologyReferences } from "./utils/pmiTopologyReferences";
 import CadCanvas3D from "./components/CadCanvas3D";
 import * as THREE from "three";
 
@@ -680,7 +681,33 @@ export default function App() {
     } else {
       setCustomFaceMapping({});
     }
-  }, [occtParsedResult, parsedMetadata]);
+  }, [occtParsedResult, parsedMetadata?.fileName, parsedMetadata?.rawText]);
+
+  useEffect(() => {
+    if (!occtParsedResult || !parsedMetadata?.rawText) return;
+    const expectedFileName = parsedMetadata.fileName;
+    const expectedRawText = parsedMetadata.rawText;
+
+    setParsedMetadata((current) => {
+      if (
+        !current
+        || current.fileName !== expectedFileName
+        || current.rawText !== expectedRawText
+      ) {
+        return current;
+      }
+      return enrichPmiTopologyReferences(
+        current,
+        occtParsedResult,
+        customFaceMapping
+      );
+    });
+  }, [
+    occtParsedResult,
+    customFaceMapping,
+    parsedMetadata?.fileName,
+    parsedMetadata?.rawText,
+  ]);
 
   useEffect(() => {
     if (!parsedMetadata?.rawText) return;
@@ -726,6 +753,8 @@ export default function App() {
     setErrorMsg("");
     setSelectedEntity(null);
     setHoveredEntity(null);
+    setOcctParsedResult(null);
+    setCustomFaceMapping({});
     setFileName(file.name);
     setRawFileSize(file.size);
 
@@ -1744,6 +1773,9 @@ export default function App() {
                       const fcfLabel = t.datumReferenceFrame?.label || t.category;
                       const lowerTolerance = Number.isFinite(t.lowerTolerance) ? Number(t.lowerTolerance) : null;
                       const upperTolerance = Number.isFinite(t.upperTolerance) ? Number(t.upperTolerance) : null;
+                      const secondaryNominalDimension = Number.isFinite(t.secondaryNominalDimension) ? Number(t.secondaryNominalDimension) : null;
+                      const secondaryLowerTolerance = Number.isFinite(t.secondaryLowerTolerance) ? Number(t.secondaryLowerTolerance) : null;
+                      const secondaryUpperTolerance = Number.isFinite(t.secondaryUpperTolerance) ? Number(t.secondaryUpperTolerance) : null;
                       const toleranceUnitLabel = t.dimensionKind === "angular" ? "deg" : "mm";
                       const nominalDimension = Number.isFinite(t.nominalDimension) ? Number(t.nominalDimension) : null;
                       const dimensionLowerLimit = Number.isFinite(t.dimensionLowerLimit) ? Number(t.dimensionLowerLimit) : null;
@@ -1758,6 +1790,7 @@ export default function App() {
                       const countersinkAngleNominal = Number.isFinite(t.countersinkAngleNominal) ? Number(t.countersinkAngleNominal) : null;
                       const countersinkAngleUpperTolerance = Number.isFinite(t.countersinkAngleUpperTolerance) ? Number(t.countersinkAngleUpperTolerance) : null;
                       const dimensionPreModifier = `${t.dimensionPreModifier || ""}`.trim();
+                      const slotRadiusPreModifier = `${t.slotRadiusPreModifier || ""}`.trim();
                       const threadDesignation = `${t.threadDesignation || ""}`.trim();
                       const counterboreEvaluationNote = `${t.counterboreEvaluationNote || ""}`.trim();
                       const dimensionLimitNote = `${t.dimensionLimitNote || ""}`.trim();
@@ -1765,7 +1798,12 @@ export default function App() {
                       const dimensionPrefix = dimensionPreModifier ? `${dimensionPreModifier} ` : "";
                       const dimensionLimitPrefix = dimensionLimitPreModifier ? `${dimensionLimitPreModifier} ` : "";
                       const counterborePrefix = counterboreEvaluationNote ? "" : dimensionPrefix;
-                      const nominalValueLabel = nominalDimension !== null ? nominalDimension.toFixed(3) : "";
+                      const dimensionDecimalPlaces = Number.isInteger(t.dimensionDecimalPlaces)
+                        ? Math.min(6, Math.max(0, Number(t.dimensionDecimalPlaces)))
+                        : 3;
+                      const nominalValueLabel = nominalDimension !== null
+                        ? nominalDimension.toFixed(dimensionDecimalPlaces)
+                        : "";
                       const dimensionLimitRangeLabel = hasDimensionLimitRange
                         ? `${dimensionLimitPrefix}${t.dimensionKind === "radius" ? "R" : ""}${dimensionLowerLimit.toFixed(3)} - ${dimensionUpperLimit.toFixed(3)}`
                         : "";
@@ -1782,6 +1820,8 @@ export default function App() {
                           ? `${dimensionPrefix}${threadDesignation} depth ${nominalValueLabel}`
                           : t.dimensionKind === "diameter"
                           ? diameterNominalLabel
+                          : t.dimensionKind === "radius" && t.isRadiusCountNote
+                          ? `${dimensionPrefix}R`
                           : t.dimensionKind === "radius" && t.isControlledRadiusDimension
                           ? `${dimensionPrefix}CR ${nominalValueLabel}`
                           : t.dimensionKind === "radius" && t.isSphericalDimension
@@ -1792,6 +1832,18 @@ export default function App() {
                         : "";
                       const toleranceValueLabel = t.category === "Dimension" && hasDimensionLimitRange
                         ? [dimensionLimitRangeLabel, dimensionLimitNote].filter(Boolean).join(" || ")
+                        : t.category === "Dimension" &&
+                          (t.dimensionKind === "chamfer" || t.dimensionKind === "slot") &&
+                          nominalDimension !== null &&
+                          lowerTolerance !== null &&
+                          upperTolerance !== null &&
+                          secondaryNominalDimension !== null &&
+                          secondaryLowerTolerance !== null &&
+                          secondaryUpperTolerance !== null
+                        ? [
+                            `${t.dimensionKind === "chamfer" ? dimensionPrefix : ""}${nominalDimension.toFixed(3)} +/- ${Math.abs(upperTolerance).toFixed(3)} \u00d7 ${secondaryNominalDimension.toFixed(3)} +/- ${Math.abs(secondaryUpperTolerance).toFixed(3)} ${toleranceUnitLabel}`,
+                            t.dimensionKind === "slot" && slotRadiusPreModifier ? `${slotRadiusPreModifier} R` : ""
+                          ].filter(Boolean).join(" || ")
                         : t.category === "Dimension" && t.isReferenceDimension && nominalDimension !== null
                         ? `(${nominalLabel})`
                         : t.category === "Dimension" && t.isBasicDimension && nominalDimension !== null
@@ -1815,6 +1867,8 @@ export default function App() {
                           : Math.abs(lowerTolerance + upperTolerance) < 1e-9
                           ? `${nominalLabel ? `${nominalLabel} ` : ""}+/- ${Math.abs(upperTolerance).toFixed(3)} ${toleranceUnitLabel}`
                           : `${nominalLabel ? `${nominalLabel} ` : ""}${lowerTolerance.toFixed(3)} / +${upperTolerance.toFixed(3)} ${toleranceUnitLabel}`
+                        : t.category === "Dimension" && nominalDimension !== null
+                          ? nominalLabel
                         : hasSemanticToleranceValue
                           ? `${t.value.toFixed(3)} mm`
                           : "Graphic PMI";
@@ -1824,6 +1878,8 @@ export default function App() {
                         ? "BASIC DIM"
                         : t.category === "Dimension" && t.isReferenceDimension
                         ? "REFERENCE DIM"
+                        : t.category === "Dimension" && t.dimensionKind === "chamfer" ? "CHAMFER DIM"
+                        : t.category === "Dimension" && t.dimensionKind === "slot" ? "SLOT DIM"
                         : t.category === "Dimension" && t.dimensionKind === "threadDepth" ? "THREAD DEPTH"
                         : t.category === "Dimension" && t.isCounterboreDimension ? "CBORE DIM"
                         : t.category === "Dimension" && t.isCountersinkDimension ? "CSINK DIM"
@@ -2011,6 +2067,20 @@ export default function App() {
                       ) : selectedEntity.type === 'face' ? (
                         <>
                           <div className="flex justify-between gap-2 pb-1 border-b border-slate-200/50 min-w-0">
+                            <span className="text-slate-500 shrink-0">Topology:</span>
+                            <span className="text-slate-900 font-bold min-w-0 max-w-[65%] truncate text-right">
+                              {selectedEntity.topologySource === "occt" ? "Native OCCT" : "Tessellation fallback"}
+                            </span>
+                          </div>
+                          {selectedEntity.surfaceType ? (
+                            <div className="flex justify-between gap-2 pb-1 border-b border-slate-200/50 min-w-0">
+                              <span className="text-slate-500 shrink-0">Surface:</span>
+                              <span className="text-slate-900 font-bold min-w-0 max-w-[65%] truncate text-right uppercase">
+                                {selectedEntity.surfaceType}
+                              </span>
+                            </div>
+                          ) : null}
+                          <div className="flex justify-between gap-2 pb-1 border-b border-slate-200/50 min-w-0">
                             <span className="text-slate-500 shrink-0">Triangles:</span>
                             <span className="text-slate-900 font-bold min-w-0 max-w-[65%] truncate text-right">{selectedEntity.triangles}</span>
                           </div>
@@ -2025,6 +2095,35 @@ export default function App() {
                             <span className="text-slate-550 shrink-0">Type:</span>
                             <span className="text-slate-900 font-bold min-w-0 max-w-[65%] truncate text-right">VERTEX_POINT</span>
                           </div>
+                          <div className="flex justify-between gap-2 pb-1 border-b border-slate-200/50 min-w-0">
+                            <span className="text-slate-550 shrink-0">Topology:</span>
+                            <span className="text-slate-900 font-bold min-w-0 max-w-[65%] truncate text-right">
+                              {selectedEntity.topologySource === "occt"
+                                ? "Native OCCT"
+                                : selectedEntity.topologySource === "step"
+                                  ? "Native STEP"
+                                  : "Tessellation fallback"}
+                            </span>
+                          </div>
+                          {selectedEntity.stepEntityIds?.length ? (
+                            <div className="flex justify-between gap-2 pb-1 border-b border-slate-200/50 min-w-0">
+                              <span className="text-slate-550 shrink-0">STEP Entity:</span>
+                              <span className="text-blue-600 font-bold min-w-0 max-w-[65%] text-right break-words">
+                                {selectedEntity.stepEntityIds.join(", ")}
+                              </span>
+                            </div>
+                          ) : null}
+                          {selectedEntity.topologySignature ? (
+                            <div className="flex justify-between gap-2 pb-1 border-b border-slate-200/50 min-w-0">
+                              <span className="text-slate-550 shrink-0">Stable ID:</span>
+                              <span
+                                className="text-blue-600 font-bold min-w-0 max-w-[65%] truncate text-right"
+                                title={selectedEntity.topologySignature}
+                              >
+                                {selectedEntity.topologySignature}
+                              </span>
+                            </div>
+                          ) : null}
                           <div className="flex justify-between gap-2 pb-1 border-b border-slate-200/50 min-w-0">
                             <span className="text-slate-550 shrink-0">Connected Edges:</span>
                             <span className="text-slate-900 font-bold min-w-0 max-w-[65%] text-right break-words">{selectedEntity.edgeIds?.length || 0}</span>
@@ -2045,6 +2144,35 @@ export default function App() {
                             <span className="text-slate-900 font-bold min-w-0 max-w-[65%] truncate text-right">EDGE_CURVE</span>
                           </div>
                           <div className="flex justify-between gap-2 pb-1 border-b border-slate-200/50 min-w-0">
+                            <span className="text-slate-550 shrink-0">Topology:</span>
+                            <span className="text-slate-900 font-bold min-w-0 max-w-[65%] truncate text-right">
+                              {selectedEntity.topologySource === "occt"
+                                ? "Native OCCT"
+                                : selectedEntity.topologySource === "step"
+                                  ? "Native STEP"
+                                  : "Tessellation fallback"}
+                            </span>
+                          </div>
+                          {selectedEntity.stepEntityId ? (
+                            <div className="flex justify-between gap-2 pb-1 border-b border-slate-200/50 min-w-0">
+                              <span className="text-slate-550 shrink-0">STEP Entity:</span>
+                              <span className="text-blue-600 font-bold min-w-0 max-w-[65%] truncate text-right">
+                                {selectedEntity.stepEntityId}
+                              </span>
+                            </div>
+                          ) : null}
+                          {selectedEntity.topologySignature ? (
+                            <div className="flex justify-between gap-2 pb-1 border-b border-slate-200/50 min-w-0">
+                              <span className="text-slate-550 shrink-0">Stable ID:</span>
+                              <span
+                                className="text-blue-600 font-bold min-w-0 max-w-[65%] truncate text-right"
+                                title={selectedEntity.topologySignature}
+                              >
+                                {selectedEntity.topologySignature}
+                              </span>
+                            </div>
+                          ) : null}
+                          <div className="flex justify-between gap-2 pb-1 border-b border-slate-200/50 min-w-0">
                             <span className="text-slate-550 shrink-0">Adjacent Faces:</span>
                             <span className="text-slate-900 font-bold min-w-0 max-w-[65%] text-right break-words">
                               {selectedEntity.parentFaceIndices?.length
@@ -2059,6 +2187,20 @@ export default function App() {
                         </>
                       )}
                     </div>
+
+                    {selectedEntity.type === "face" && selectedEntity.topologySignature ? (
+                      <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-150 text-[10px] font-mono min-w-0 overflow-hidden">
+                        <div className="flex justify-between gap-2 min-w-0">
+                          <span className="text-slate-500 shrink-0">Stable ID:</span>
+                          <span
+                            className="text-blue-600 font-bold min-w-0 max-w-[65%] truncate text-right"
+                            title={selectedEntity.topologySignature}
+                          >
+                            {selectedEntity.topologySignature}
+                          </span>
+                        </div>
+                      </div>
+                    ) : null}
 
                     {selectedEntity.point ? (
                       <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-150 space-y-1.5 text-[10px] font-mono min-w-0 overflow-hidden">
@@ -2144,6 +2286,33 @@ export default function App() {
           <div className="hidden md:block">Unit: MILLIMETER (mm)</div>
         </div>
         <div className="flex items-center gap-3">
+          <span
+            className={`flex items-center gap-1.5 font-bold ${
+              occtParsedResult?.geometryTopologySource === "tessellation"
+                ? "text-amber-300"
+                : "text-emerald-300"
+            }`}
+            title={
+              occtParsedResult?.geometryTopologySource === "occt"
+                ? "The current model uses native OCCT edge, loop, and vertex topology."
+                : occtParsedResult?.geometryTopologySource === "tessellation"
+                  ? "The current model is using tessellation topology fallback."
+                  : "Native OCCT topology is the default for imported STEP models."
+            }
+          >
+            <span
+              className={`h-1.5 w-1.5 rounded-full ${
+                occtParsedResult?.geometryTopologySource === "tessellation"
+                  ? "bg-amber-400"
+                  : "bg-emerald-400"
+              }`}
+            />
+            {occtParsedResult?.geometryTopologySource === "occt"
+              ? "Native topology active"
+              : occtParsedResult?.geometryTopologySource === "tessellation"
+                ? "Topology fallback active"
+                : "Native topology ready"}
+          </span>
           <span className="hidden sm:inline text-slate-500">OpenCascade WASM v0.0.23</span>
           <span className="font-bold text-blue-400 uppercase font-mono">B-Rep Solver</span>
         </div>
