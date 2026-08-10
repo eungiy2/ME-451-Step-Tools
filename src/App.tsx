@@ -6,7 +6,6 @@ import {
   Layers,
   HelpCircle,
   Copy,
-  Cpu,
   Compass,
   Eye,
   EyeOff,
@@ -23,7 +22,33 @@ import { enrichPmiTopologyReferences } from "./utils/pmiTopologyReferences";
 import CadCanvas3D from "./components/CadCanvas3D";
 import * as THREE from "three";
 
-const DATUM_PARSE_REVISION = "multiface-datum-feature-v30";
+const DATUM_PARSE_REVISION = "multiface-datum-feature-v31";
+
+const NIST_AP242_SAMPLES = [
+  "nist_ctc_01_asme1_ap242-e1.stp",
+  "nist_ctc_02_asme1_ap242-e2.stp",
+  "nist_ctc_03_asme1_ap242-e2.stp",
+  "nist_ctc_04_asme1_ap242-e1.stp",
+  "nist_ctc_05_asme1_ap242-e1.stp",
+  "nist_ftc_06_asme1_ap242-e2.stp",
+  "nist_ftc_07_asme1_ap242-e2.stp",
+  "nist_ftc_08_asme1_ap242-e1-tg.stp",
+  "nist_ftc_08_asme1_ap242-e2.stp",
+  "nist_ftc_09_asme1_ap242-e1.stp",
+  "nist_ftc_10_asme1_ap242-e2.stp",
+  "nist_ftc_11_asme1_ap242-e2.stp",
+  "nist_stc_06_asme1_ap242-e3.stp",
+  "nist_stc_07_asme1_ap242-e3.stp",
+  "nist_stc_08_asme1_ap242-e3.stp",
+  "nist_stc_09_asme1_ap242-e3.stp",
+  "nist_stc_10_asme1_ap242-e2.stp",
+] as const;
+
+const formatNistAp242SampleName = (fileName: string) => fileName
+  .replace(/^nist_/, "")
+  .replace(/_asme1_ap242.*\.stp$/i, "")
+  .replace(/_/g, " ")
+  .toUpperCase();
 
 type DatumFeatureClass = "midDimensional" | "cylindricalMultiFace" | "cylindrical" | "singlePlane" | "multiFace" | "surface";
 
@@ -521,10 +546,13 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<"brep" | "tolerances">("brep");
   const [toleranceSearch, setToleranceSearch] = useState<string>("");
   const [toleranceCategory, setToleranceCategory] = useState<string>("All");
+  const [selectedToleranceId, setSelectedToleranceId] = useState<string | null>(null);
   const [showDatumFeatures, setShowDatumFeatures] = useState<boolean>(true);
   const [showDatumTargets, setShowDatumTargets] = useState<boolean>(true);
   const [showDatumReferenceFrames, setShowDatumReferenceFrames] = useState<boolean>(true);
   const [showDimensionalTolerances, setShowDimensionalTolerances] = useState<boolean>(true);
+  const [pmiPresentationMode, setPmiPresentationMode] = useState<"full" | "compact">("full");
+  const [expandedPmiAnnotationIds, setExpandedPmiAnnotationIds] = useState<Set<string>>(() => new Set());
   const [inspectorWidth, setInspectorWidth] = useState<number>(384);
 
   // Discretization & Geometry Parameter States for medical planning config
@@ -536,12 +564,28 @@ export default function App() {
   const [plateThickness, setPlateThickness] = useState<number>(1.3);
   const [screwHoleRadius, setScrewHoleRadius] = useState<number>(0.95);
   const [uploadedBytes, setUploadedBytes] = useState<Uint8Array | null>(null);
+  const [selectedNistSample, setSelectedNistSample] = useState<string>("");
 
   // Graphical viewport preferences
   const [viewMode, setViewMode] = useState<"solid" | "xray" | "wire" | "hidden">("solid");
   const [cameraProjection, setCameraProjection] = useState<"perspective" | "orthographic">("perspective");
   const [measurementMode, setMeasurementMode] = useState<boolean>(false);
   const [presetResetNonce, setPresetResetNonce] = useState<number>(0);
+
+  useEffect(() => {
+    setExpandedPmiAnnotationIds(new Set());
+    setSelectedToleranceId(null);
+  }, [parsedMetadata?.fileName]);
+
+  useEffect(() => {
+    if (!selectedToleranceId || activeTab !== "tolerances") return;
+    const frame = window.requestAnimationFrame(() => {
+      const card = Array.from(document.querySelectorAll<HTMLElement>("[data-tolerance-id]"))
+        .find((element) => element.dataset.toleranceId === selectedToleranceId);
+      card?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [activeTab, selectedToleranceId]);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const parsedRevisionRef = useRef<string>("");
@@ -728,6 +772,7 @@ export default function App() {
     setSelectedEntity(null);
     setHoveredEntity(null);
     setUploadedBytes(null);
+    setSelectedNistSample("");
     setFileName("surgical_mandible_plate_5x.stp");
     
     // Restore default geometry parameters
@@ -744,46 +789,57 @@ export default function App() {
     setPresetResetNonce((nonce) => nonce + 1);
   };
 
-  // Upload custom .STP/.STEP CAD file
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
+  const loadStepBytes = async (sourceName: string, bytes: Uint8Array) => {
     setIsTessellating(true);
     setErrorMsg("");
     setSelectedEntity(null);
     setHoveredEntity(null);
     setOcctParsedResult(null);
     setCustomFaceMapping({});
-    setFileName(file.name);
-    setRawFileSize(file.size);
+    setFileName(sourceName);
+    setRawFileSize(bytes.byteLength);
 
     try {
-      const reader = new FileReader();
-      reader.onload = async (event) => {
-        try {
-          const buffer = event.target?.result as ArrayBuffer;
-          const u8Array = new Uint8Array(buffer);
-
-          // Decode text block for summary stats
-          const decoder = new TextDecoder("utf-8");
-          const decodedText = decoder.decode(u8Array);
-          // Store bytes in state to trigger reactive parsing
-          setUploadedBytes(u8Array);
-
-          const meta = parseStepFile(file.name, decodedText);
-          setParsedMetadata(meta);
-
-        } catch (err: any) {
-          console.error("Open Cascade read failure:", err);
-          setErrorMsg(err.message || "Failed to load STEP byte structure.");
-        } finally {
-          setIsTessellating(false);
-        }
-      };
-      reader.readAsArrayBuffer(file);
+      const decodedText = new TextDecoder("utf-8").decode(bytes);
+      setUploadedBytes(bytes);
+      setParsedMetadata(parseStepFile(sourceName, decodedText));
     } catch (err: any) {
-      setErrorMsg("File array buffer reading aborted.");
+      console.error("STEP load failure:", err);
+      setErrorMsg(err.message || "Failed to load STEP byte structure.");
+    } finally {
+      setIsTessellating(false);
+    }
+  };
+
+  // Upload custom .STP/.STEP CAD file
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setSelectedNistSample("");
+
+    try {
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      await loadStepBytes(file.name, bytes);
+    } catch (err: any) {
+      setErrorMsg(err.message || "File array buffer reading aborted.");
+    } finally {
+      e.target.value = "";
+    }
+  };
+
+  const handleNistSampleSelection = async (sampleName: string) => {
+    setSelectedNistSample(sampleName);
+    if (!sampleName) return;
+    setIsTessellating(true);
+    setErrorMsg("");
+
+    try {
+      const response = await fetch(`/nist-ap242/${encodeURIComponent(sampleName)}`);
+      if (!response.ok) throw new Error(`Unable to load ${sampleName}.`);
+      await loadStepBytes(sampleName, new Uint8Array(await response.arrayBuffer()));
+    } catch (err: any) {
+      console.error("NIST AP242 sample load failure:", err);
+      setErrorMsg(err.message || "Unable to load the selected NIST AP242 sample.");
       setIsTessellating(false);
     }
   };
@@ -836,10 +892,22 @@ export default function App() {
                 accept=".stp,.step" 
                 className="hidden" 
               />
-              <div className="flex items-center gap-1.5 sm:gap-2 bg-emerald-50 px-2.5 py-1.5 rounded-lg border border-emerald-100 text-emerald-700">
-                <Cpu className="w-3.5 h-3.5 text-emerald-600 animate-pulse" />
-                <span className="font-bold text-[10px] sm:text-[11px]">CAD Online</span>
-              </div>
+              <label className="flex min-w-0 items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 text-slate-600">
+                <span className="hidden lg:inline text-[9px] font-black uppercase tracking-wider text-slate-400">NIST AP242</span>
+                <select
+                  value={selectedNistSample}
+                  onChange={(event) => void handleNistSampleSelection(event.target.value)}
+                  className="min-w-0 max-w-44 bg-transparent text-[10px] font-bold text-slate-700 outline-none cursor-pointer sm:max-w-56"
+                  title="Load a bundled NIST AP242 STEP sample"
+                >
+                  <option value="">Choose sample</option>
+                  {NIST_AP242_SAMPLES.map((sampleName) => (
+                    <option key={sampleName} value={sampleName}>
+                      {formatNistAp242SampleName(sampleName)}
+                    </option>
+                  ))}
+                </select>
+              </label>
             </div>
           )}
         </div>
@@ -951,6 +1019,23 @@ export default function App() {
             showDatumTargets={showDatumTargets}
             showDatumReferenceFrames={showDatumReferenceFrames}
             showDimensionalTolerances={showDimensionalTolerances}
+            pmiPresentationMode={pmiPresentationMode}
+            expandedPmiAnnotationIds={expandedPmiAnnotationIds}
+            onTogglePmiAnnotation={(annotationId) => {
+              setExpandedPmiAnnotationIds((current) => {
+                const next = new Set(current);
+                if (next.has(annotationId)) next.delete(annotationId);
+                else next.add(annotationId);
+                return next;
+              });
+            }}
+            onSelectPmiAnnotation={(annotationId) => {
+              setSelectedToleranceId(annotationId);
+              setToleranceSearch("");
+              setToleranceCategory("All");
+              setActiveTab("tolerances");
+              setMobileView("inspector");
+            }}
           />
 
           {/* FLOATING VIEWPORT UTILITY DECK */}
@@ -993,6 +1078,30 @@ export default function App() {
                     onClick={() => setCameraProjection(mode)}
                     className={`px-1.5 sm:px-2 py-0.5 rounded-md text-[9.5px] font-bold font-mono transition cursor-pointer ${
                       cameraProjection === mode
+                        ? "bg-white text-blue-600 shadow-xs"
+                        : "text-slate-500 hover:text-slate-800"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50/80 px-1.5 py-1 min-w-0">
+              <span className="hidden md:inline text-[9px] font-black text-slate-400 font-mono tracking-wider uppercase">PMI</span>
+              <div className="flex bg-slate-100 p-0.5 rounded-lg border border-slate-200 gap-0.5">
+                {([
+                  ["full", "FULL"],
+                  ["compact", "COMPACT"]
+                ] as const).map(([mode, label]) => (
+                  <button
+                    key={mode}
+                    onClick={() => setPmiPresentationMode(mode)}
+                    title={`${label === "FULL" ? "Show full" : "Show collapsed"} PMI annotations`}
+                    aria-pressed={pmiPresentationMode === mode}
+                    className={`px-1.5 sm:px-2 py-0.5 rounded-md text-[9.5px] font-bold font-mono transition cursor-pointer ${
+                      pmiPresentationMode === mode
                         ? "bg-white text-blue-600 shadow-xs"
                         : "text-slate-500 hover:text-slate-800"
                     }`}
@@ -1890,9 +1999,14 @@ export default function App() {
                       return (
                         <div
                           key={t.id}
+                          data-tolerance-id={t.id}
                           title={t.clinicalContext}
                           data-tolerance-explanation={t.clinicalContext}
-                          className="min-w-0 overflow-hidden p-2.5 hover:bg-slate-50/85 border border-slate-150 rounded-lg bg-white shadow-3xs flex flex-col gap-2 transition group relative"
+                          className={`min-w-0 overflow-hidden p-2.5 hover:bg-slate-50/85 border rounded-lg bg-white shadow-3xs flex flex-col gap-2 transition group relative ${
+                            selectedToleranceId === t.id
+                              ? "border-blue-500 bg-blue-50/50 ring-1 ring-blue-400/70"
+                              : "border-slate-150"
+                          }`}
                         >
                           {/* Header Line */}
                           <div className="flex flex-col gap-1 min-w-0">

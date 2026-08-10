@@ -38,6 +38,10 @@ interface CadCanvas3DProps {
   showDatumTargets?: boolean;
   showDatumReferenceFrames?: boolean;
   showDimensionalTolerances?: boolean;
+  pmiPresentationMode?: "full" | "compact";
+  expandedPmiAnnotationIds?: Set<string>;
+  onTogglePmiAnnotation?: (annotationId: string) => void;
+  onSelectPmiAnnotation?: (annotationId: string) => void;
 }
 
 type MeasurementLabelState = {
@@ -131,6 +135,10 @@ export default function CadCanvas3D({
   showDatumTargets = true,
   showDatumReferenceFrames = true,
   showDimensionalTolerances = true,
+  pmiPresentationMode = "full",
+  expandedPmiAnnotationIds = new Set<string>(),
+  onTogglePmiAnnotation,
+  onSelectPmiAnnotation,
 }: CadCanvas3DProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -141,6 +149,7 @@ export default function CadCanvas3D({
   const partRollHandlerRef = useRef<((angle: number) => void) | null>(null);
   const requestRenderRef = useRef<((frames?: number) => void) | null>(null);
   const dimensionOverlayVisibilityRefreshRef = useRef<(() => void) | null>(null);
+  const pmiPresentationRefreshRef = useRef<(() => void) | null>(null);
   const prevShowDimensionalTolerancesPropRef = useRef(showDimensionalTolerances);
 
   // Tracker for dynamic coordinates info
@@ -149,16 +158,22 @@ export default function CadCanvas3D({
   const [measurementLabel, setMeasurementLabel] = useState<MeasurementLabelState | null>(null);
 
   // Capture fast-updating props in a ref for animation loops
-  const propsRef = useRef({ viewMode, cameraProjection, materialType, autoRotate, selectedEntityId, selectedRelatedEntityIds, hoveredEntityId, focusEntityRequest, measurementMode, selectionClickEnabled, datums, datumTargets, datumReferenceFrames, tolerances, faceRecords, cylinderIds, customFaceMapping, showDatumFeatures, showDatumTargets, showDatumReferenceFrames, showDimensionalTolerances });
+  const propsRef = useRef({ viewMode, cameraProjection, materialType, autoRotate, selectedEntityId, selectedRelatedEntityIds, hoveredEntityId, focusEntityRequest, measurementMode, selectionClickEnabled, datums, datumTargets, datumReferenceFrames, tolerances, faceRecords, cylinderIds, customFaceMapping, showDatumFeatures, showDatumTargets, showDatumReferenceFrames, showDimensionalTolerances, pmiPresentationMode, expandedPmiAnnotationIds, onTogglePmiAnnotation, onSelectPmiAnnotation });
   useEffect(() => {
     const dimensionVisibilityChanged = prevShowDimensionalTolerancesPropRef.current !== showDimensionalTolerances;
+    const pmiPresentationChanged =
+      propsRef.current.pmiPresentationMode !== pmiPresentationMode ||
+      propsRef.current.expandedPmiAnnotationIds !== expandedPmiAnnotationIds;
     prevShowDimensionalTolerancesPropRef.current = showDimensionalTolerances;
-    propsRef.current = { viewMode, cameraProjection, materialType, autoRotate, selectedEntityId, selectedRelatedEntityIds, hoveredEntityId, focusEntityRequest, measurementMode, selectionClickEnabled, datums, datumTargets, datumReferenceFrames, tolerances, faceRecords, cylinderIds, customFaceMapping, showDatumFeatures, showDatumTargets, showDatumReferenceFrames, showDimensionalTolerances };
+    propsRef.current = { viewMode, cameraProjection, materialType, autoRotate, selectedEntityId, selectedRelatedEntityIds, hoveredEntityId, focusEntityRequest, measurementMode, selectionClickEnabled, datums, datumTargets, datumReferenceFrames, tolerances, faceRecords, cylinderIds, customFaceMapping, showDatumFeatures, showDatumTargets, showDatumReferenceFrames, showDimensionalTolerances, pmiPresentationMode, expandedPmiAnnotationIds, onTogglePmiAnnotation, onSelectPmiAnnotation };
     if (dimensionVisibilityChanged) {
       dimensionOverlayVisibilityRefreshRef.current?.();
     }
+    if (pmiPresentationChanged) {
+      pmiPresentationRefreshRef.current?.();
+    }
     requestRenderRef.current?.(4);
-  }, [viewMode, cameraProjection, materialType, autoRotate, selectedEntityId, selectedRelatedEntityIds, hoveredEntityId, focusEntityRequest, measurementMode, selectionClickEnabled, datums, datumTargets, datumReferenceFrames, tolerances, faceRecords, cylinderIds, customFaceMapping, showDatumFeatures, showDatumTargets, showDatumReferenceFrames, showDimensionalTolerances]);
+  }, [viewMode, cameraProjection, materialType, autoRotate, selectedEntityId, selectedRelatedEntityIds, hoveredEntityId, focusEntityRequest, measurementMode, selectionClickEnabled, datums, datumTargets, datumReferenceFrames, tolerances, faceRecords, cylinderIds, customFaceMapping, showDatumFeatures, showDatumTargets, showDatumReferenceFrames, showDimensionalTolerances, pmiPresentationMode, expandedPmiAnnotationIds, onTogglePmiAnnotation, onSelectPmiAnnotation]);
 
   useEffect(() => {
     if (!containerRef.current || !canvasRef.current) return;
@@ -291,10 +306,12 @@ export default function CadCanvas3D({
     let modelSizeMax = 10;
     type PmiDimensionLabelEntry = {
       element: HTMLElement;
+      compactElement: HTMLButtonElement;
+      annotationId: string;
       point: THREE.Vector3;
       resolvePoint?: () => THREE.Vector3 | null;
       resolveTransform?: () => string;
-      placementPolicy: "fixed" | "datum-attached" | "leader-attached" | "linear-attached";
+      placementPolicy: "fixed" | "datum-attached" | "leader-attached" | "linear-attached" | "fcf-attached";
       collisionOffsetX: number;
       collisionOffsetY: number;
       baseTransform: string;
@@ -304,14 +321,15 @@ export default function CadCanvas3D({
       measuredWidth: number;
       measuredHeight: number;
       leaderObjects: THREE.Object3D[];
-      linearDimension?: {
-        start: THREE.Vector3;
-        end: THREE.Vector3;
-        dimStart: THREE.Vector3;
-        dimEnd: THREE.Vector3;
-        axis: THREE.Vector3;
-        line: THREE.LineSegments;
-      };
+      dimensionRows?: Map<string, HTMLElement>;
+        linearDimension?: {
+          start: THREE.Vector3;
+          end: THREE.Vector3;
+          dimStart: THREE.Vector3;
+          dimEnd: THREE.Vector3;
+          axis: THREE.Vector3;
+          line: THREE.LineSegments;
+        };
     };
     let drfBadgeCache: {
       id: string;
@@ -952,7 +970,7 @@ export default function CadCanvas3D({
       pmiCollisionLayoutRequested = true;
       pmiCollisionStableFrames = 0;
       containerRef.current
-        ?.querySelectorAll("[data-pmi-dimension-label='true']")
+        ?.querySelectorAll("[data-pmi-dimension-label='true'], [data-pmi-compact-marker='true']")
         .forEach((element) => element.remove());
     };
 
@@ -2758,7 +2776,7 @@ export default function CadCanvas3D({
       arrowLength: number,
       arrowHalfWidth: number
     ) => {
-      if (backDirection.lengthSq() <= 1e-8 || sideDirection.lengthSq() <= 1e-8 || arrowLength <= 1e-8) return;
+      if (backDirection.lengthSq() <= 1e-8 || sideDirection.lengthSq() <= 1e-8 || arrowLength <= 1e-8) return undefined;
       const back = backDirection.clone().normalize().multiplyScalar(arrowLength);
       const side = sideDirection.clone().normalize().multiplyScalar(arrowHalfWidth);
       const arrowGeometry = new THREE.BufferGeometry().setFromPoints([
@@ -2779,6 +2797,7 @@ export default function CadCanvas3D({
       arrow.renderOrder = 42;
       arrow.raycast = () => undefined;
       group.add(arrow);
+      return arrow;
     };
 
     const addMeasurementLineSegments = (group: THREE.Group, points: THREE.Vector3[], name: string) => {
@@ -5138,6 +5157,9 @@ export default function CadCanvas3D({
         if (tolerance.isCounterboreDimension && (pilotNominal !== null || counterboreEvaluationNote) && nominal !== null) {
           element.className = "absolute left-0 top-0 hidden flex-col items-start gap-0.5 whitespace-nowrap font-mono leading-none text-slate-900";
           element.style.transform = "translate3d(0, 0, 0) translate(0, -50%)";
+          element.dataset.pmiCompoundCallout = "true";
+          element.dataset.pmiCounterboreHoleTargetIds = JSON.stringify(tolerance.counterboreHoleTargetIds || []);
+          element.dataset.pmiCounterboreHoleFcfIds = JSON.stringify(tolerance.counterboreHoleFeatureControlFrameIds || []);
 
           const makeRow = (main: string, top: string, bottom: string) => {
             const row = document.createElement("div");
@@ -5150,11 +5172,14 @@ export default function CadCanvas3D({
           };
 
           if (pilotNominal !== null) {
-            element.appendChild(makeRow(
+            const pilotRow = makeRow(
               `${preModifier ? `${preModifier} ` : ""}\u2300${pilotNominal.toFixed(3)}`,
               pilotUpper !== null ? `+${pilotUpper.toFixed(3)}` : "",
               pilotLower !== null ? `${pilotLower.toFixed(3)}` : ""
-            ));
+            );
+            pilotRow.dataset.pmiToleranceId = `${tolerance.id || ""}::hole`;
+            pilotRow.dataset.pmiCompoundRow = "hole";
+            element.appendChild(pilotRow);
           }
           const counterboreRow = makeRow(
             `${counterborePreModifier ? `${counterborePreModifier} ` : ""}\u2334 \u2300${nominalText}`,
@@ -5168,6 +5193,8 @@ export default function CadCanvas3D({
               depthLower !== null ? `${depthLower.toFixed(3)}` : ""
             ));
           }
+          counterboreRow.dataset.pmiToleranceId = `${tolerance.id || ""}`;
+          counterboreRow.dataset.pmiCompoundRow = "counterbore";
           element.appendChild(counterboreRow);
           if (counterboreEvaluationNote) {
             const noteElement = document.createElement("div");
@@ -5283,6 +5310,122 @@ export default function CadCanvas3D({
         return element;
       };
 
+      const getCompactPmiMarker = (tolerance: any) => {
+        const description = [
+          tolerance?.type,
+          tolerance?.toleranceType,
+          tolerance?.geometricCharacteristic,
+          tolerance?.name,
+        ].filter(Boolean).join(" ").toUpperCase();
+        const prefix = `${tolerance?.dimensionPreModifier || ""}`.toUpperCase();
+
+        if (/POSITION|TRUE POSITION|\bPOS\b/.test(description)) {
+          return { symbol: "\u2316", label: "position tolerance" };
+        }
+        if (/COUNTERBORE/.test(description)) {
+          return { symbol: "\u2334", label: "counterbore dimension" };
+        }
+        if (/COUNTERSINK/.test(description)) {
+          return { symbol: "\u2335", label: "countersink dimension" };
+        }
+        if (/THREAD/.test(description) || /^M\d/.test(prefix)) {
+          return { symbol: "M", label: "thread dimension" };
+        }
+        if (/ANGLE|ANGULAR/.test(description)) {
+          return { symbol: "\u2220", label: "angular dimension" };
+        }
+        if (/DEPTH/.test(description)) {
+          return { symbol: "\u21a7", label: "depth dimension" };
+        }
+        if (tolerance?.isSphericalDimension && /RADIUS/.test(description)) {
+          return { symbol: "SR", label: "spherical radius dimension" };
+        }
+        if (tolerance?.isSphericalDimension || /SPHERICAL.*DIAMETER/.test(description)) {
+          return { symbol: "S\u2300", label: "spherical diameter dimension" };
+        }
+        if (/RADIUS/.test(description)) {
+          return { symbol: "R", label: "radius dimension" };
+        }
+        if (tolerance?.toleranceZoneDiameter || /DIAMETER|HOLE/.test(description)) {
+          return { symbol: "\u2300", label: "diameter dimension" };
+        }
+        return { symbol: "\u2194", label: "linear dimension" };
+      };
+
+      const makeCompactPmiMarker = (tolerance: any, annotationId: string) => {
+        const marker = document.createElement("button");
+        const { symbol, label } = getCompactPmiMarker(tolerance);
+        marker.type = "button";
+        marker.dataset.pmiCompactMarker = "true";
+        marker.dataset.pmiAnnotationId = annotationId;
+        marker.title = `Expand ${label}`;
+        marker.setAttribute("aria-label", `Expand ${label}`);
+        marker.textContent = symbol;
+        marker.style.position = "absolute";
+        marker.style.left = "0";
+        marker.style.top = "0";
+        marker.style.display = "none";
+        marker.style.alignItems = "center";
+        marker.style.justifyContent = "center";
+        marker.style.boxSizing = "border-box";
+        marker.style.minWidth = "24px";
+        marker.style.height = "24px";
+        marker.style.padding = "0 4px";
+        marker.style.border = "1px solid #0f172a";
+        marker.style.borderRadius = "2px";
+        marker.style.background = "rgba(255,255,255,0.96)";
+        marker.style.color = "#0f172a";
+        marker.style.fontFamily = "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace";
+        marker.style.fontSize = symbol.length > 1 ? "11px" : "15px";
+        marker.style.fontWeight = "500";
+        marker.style.lineHeight = "1";
+        marker.style.whiteSpace = "nowrap";
+        marker.style.cursor = "pointer";
+        marker.style.pointerEvents = "auto";
+        marker.style.willChange = "transform";
+        marker.style.zIndex = "20";
+        marker.addEventListener("pointerdown", (event) => {
+          event.stopPropagation();
+        });
+        marker.addEventListener("click", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          propsRef.current.onSelectPmiAnnotation?.(annotationId);
+          propsRef.current.onTogglePmiAnnotation?.(annotationId);
+        });
+        labelOverlay?.appendChild(marker);
+        return marker;
+      };
+
+      const makeExpandedPmiLabelCollapsible = (
+        element: HTMLElement,
+        annotationId: string,
+        collapseInCompact = true
+      ) => {
+        element.dataset.pmiAnnotationId = annotationId;
+        element.setAttribute("role", "button");
+        element.tabIndex = -1;
+        if (!collapseInCompact) {
+          element.style.pointerEvents = "auto";
+          element.style.cursor = "pointer";
+          element.title = "Select PMI annotation";
+        }
+        const selectOrCollapse = (event: Event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          propsRef.current.onSelectPmiAnnotation?.(annotationId);
+          if (
+            collapseInCompact &&
+            propsRef.current.pmiPresentationMode === "compact" &&
+            propsRef.current.expandedPmiAnnotationIds.has(annotationId)
+          ) {
+            propsRef.current.onTogglePmiAnnotation?.(annotationId);
+          }
+        };
+        element.addEventListener("pointerdown", (event) => event.stopPropagation());
+        element.addEventListener("click", selectOrCollapse);
+      };
+
       const addPmiDimensionLabel = (
         tolerance: any,
         point: THREE.Vector3,
@@ -5293,9 +5436,14 @@ export default function CadCanvas3D({
       ) => {
         if (!labelOverlay) return null;
         const element = makeDimensionTextElement(tolerance, datumIdentifiers);
+        const annotationId = tolerance?.id || `dimension-${pmiDimensionLabelCache.length}`;
+        const compactElement = makeCompactPmiMarker(tolerance, annotationId);
+        makeExpandedPmiLabelCollapsible(element, annotationId);
         labelOverlay.appendChild(element);
         const entry: PmiDimensionLabelEntry = {
           element,
+          compactElement,
+          annotationId,
           point: point.clone(),
           resolvePoint,
           resolveTransform,
@@ -5328,6 +5476,8 @@ export default function CadCanvas3D({
         element.style.zIndex = "19";
         tolerances.forEach((tolerance) => {
           const row = makeDimensionTextElement(tolerance);
+          const rowAnnotationId = tolerance?.id || `dimension-row-${pmiDimensionLabelCache.length}`;
+          makeExpandedPmiLabelCollapsible(row, rowAnnotationId, false);
           row.style.position = "static";
           row.style.display = "flex";
           row.style.transform = "";
@@ -5348,9 +5498,14 @@ export default function CadCanvas3D({
         const element = tolerances.length === 1
           ? makeDimensionTextElement(tolerances[0])
           : makeDimensionStackTextElement(tolerances);
+        const annotationId = tolerances[0]?.id || `dimension-stack-${pmiDimensionLabelCache.length}`;
+        const compactElement = makeCompactPmiMarker(tolerances[0], annotationId);
+        makeExpandedPmiLabelCollapsible(element, annotationId);
         labelOverlay.appendChild(element);
         const entry: PmiDimensionLabelEntry = {
           element,
+          compactElement,
+          annotationId,
           point: point.clone(),
           resolvePoint,
           resolveTransform,
@@ -5363,7 +5518,12 @@ export default function CadCanvas3D({
           visible: false,
           measuredWidth: 0,
           measuredHeight: 0,
-          leaderObjects: []
+          leaderObjects: [],
+          dimensionRows: new Map(
+            Array.from(element.querySelectorAll<HTMLElement>("[data-pmi-tolerance-id]"))
+              .map((row): [string, HTMLElement] => [row.dataset.pmiToleranceId || "", row])
+              .filter(([id]) => !!id)
+          )
         };
         pmiDimensionLabelCache.push(entry);
         tolerances.forEach((tolerance) => {
@@ -5415,10 +5575,21 @@ export default function CadCanvas3D({
           .map(getFcfModifierSymbol)
           .filter(Boolean)
           .join("");
+        const projectedZoneHeight = Number(tolerance.projectedToleranceZoneHeight);
+        const projectedZoneHeightText = Number.isFinite(projectedZoneHeight)
+          ? (Number.isInteger(projectedZoneHeight)
+            ? `${projectedZoneHeight}`
+            : projectedZoneHeight.toFixed(3).replace(/(?:\.0+|(?:(\.\d*?)0+))$/, "$1"))
+          : "";
+        const projectedZoneModifier = Number.isFinite(projectedZoneHeight) && !toleranceModifierText.includes("\u24c5")
+          ? "\u24c5"
+          : "";
         const toleranceText =
           `${tolerance.toleranceZoneDiameter ? "\u2300" : ""}` +
           `${Number(tolerance.value || 0).toFixed(3)}` +
-          toleranceModifierText;
+          toleranceModifierText +
+          projectedZoneModifier +
+          projectedZoneHeightText;
         addCompartment(toleranceText, 46);
 
         const references = Array.isArray(tolerance.datumReferenceFrame?.references)
@@ -5453,11 +5624,16 @@ export default function CadCanvas3D({
       const appendFeatureControlFrame = (
         entry: PmiDimensionLabelEntry,
         tolerance: any,
-        layout: "linear" | "radial"
+        layout: "linear" | "radial",
+        dimensionToleranceId?: string
       ) => {
         const element = entry.element;
         if (element.querySelector(`[data-pmi-feature-control-frame="${tolerance.id}"]`)) return;
-        if (element.dataset.pmiDimensionStack !== "true" && element.dataset.pmiCompositeLabel !== "true") {
+        if (
+          element.dataset.pmiDimensionStack !== "true" &&
+          element.dataset.pmiCompositeLabel !== "true" &&
+          element.dataset.pmiCompoundCallout !== "true"
+        ) {
           const dimensionRow = document.createElement("div");
           dimensionRow.style.display = "inline-flex";
           dimensionRow.style.alignItems = "center";
@@ -5471,7 +5647,56 @@ export default function CadCanvas3D({
         element.style.gap = "0";
         element.style.contain = "layout style";
         const featureControlFrame = makeFeatureControlFrameElement(tolerance);
-        element.appendChild(featureControlFrame);
+        makeExpandedPmiLabelCollapsible(featureControlFrame, tolerance.id, false);
+        const dimensionRow = dimensionToleranceId
+          ? entry.dimensionRows?.get(dimensionToleranceId)
+          : undefined;
+        const compoundHoleTargetIds = element.dataset.pmiCounterboreHoleTargetIds
+          ? JSON.parse(element.dataset.pmiCounterboreHoleTargetIds) as string[]
+          : [];
+        const compoundHoleFcfIds = element.dataset.pmiCounterboreHoleFcfIds
+          ? JSON.parse(element.dataset.pmiCounterboreHoleFcfIds) as string[]
+          : [];
+        const pilotHoleFaceNames = new Set(
+          compoundHoleTargetIds
+            .map((targetId) =>
+              mapTargetToWebGLName(targetId, "", false) || mapTargetToTopologicalWebGLName(targetId)
+            )
+            .filter((faceName): faceName is string => !!faceName)
+        );
+        const positionUsesPilotHole = compoundHoleFcfIds.includes(tolerance.id) ||
+          compoundHoleTargetIds.some((targetId) => (tolerance.targetIds || []).includes(targetId)) ||
+          getFaceNamesForTolerance(tolerance).some((faceName) => pilotHoleFaceNames.has(faceName));
+        const compoundDimensionRow = positionUsesPilotHole
+          ? entry.dimensionRows?.get(`${entry.annotationId}::hole`)
+          : dimensionRow;
+        if (compoundDimensionRow && (
+          element.dataset.pmiDimensionStack === "true" ||
+          element.dataset.pmiCompoundCallout === "true"
+        )) {
+          compoundDimensionRow.insertAdjacentElement("afterend", featureControlFrame);
+        } else {
+          element.appendChild(featureControlFrame);
+        }
+        if (element.dataset.pmiCompoundCallout === "true") {
+          const directChildren = Array.from(element.children) as HTMLElement[];
+          const holeRow = directChildren.find((child) => child.dataset.pmiCompoundRow === "hole");
+          const counterboreRow = directChildren.find((child) => child.dataset.pmiCompoundRow === "counterbore");
+          const frames = directChildren.filter((child) => !!child.dataset.pmiFeatureControlFrame);
+          const holeFrames = frames.filter((frame) =>
+            compoundHoleFcfIds.includes(frame.dataset.pmiFeatureControlFrame || "")
+          );
+          const counterboreFrames = frames.filter((frame) => !holeFrames.includes(frame));
+          const remainingChildren = directChildren.filter((child) =>
+            child !== holeRow &&
+            child !== counterboreRow &&
+            !frames.includes(child)
+          );
+          element.replaceChildren(
+            ...[holeRow, ...holeFrames, counterboreRow, ...counterboreFrames, ...remainingChildren]
+              .filter((child): child is HTMLElement => !!child)
+          );
+        }
         if (layout === "linear" && entry.linearDimension) {
           const linearDimension = entry.linearDimension;
           const dimensionSpan = linearDimension.dimStart.distanceTo(linearDimension.dimEnd);
@@ -5481,24 +5706,20 @@ export default function CadCanvas3D({
             ? linearDimension.dimStart.clone().add(linearDimension.dimEnd).multiplyScalar(0.5)
             : linearDimension.dimEnd.clone().addScaledVector(
                 linearDimension.axis,
-                Math.max(modelSizeMax * 0.045, dimensionSpan * 0.08)
+                Math.max(modelSizeMax * 0.012, dimensionSpan * 0.06)
               );
 
           const dimensionRow = element.firstElementChild as HTMLElement | null;
-          element.style.display = "block";
-          element.style.width = "0";
-          element.style.height = "0";
+          element.style.display = "flex";
+          element.style.width = "auto";
+          element.style.height = "auto";
           element.style.overflow = "visible";
           if (dimensionRow) {
-            dimensionRow.style.position = "absolute";
-            dimensionRow.style.left = "0";
-            dimensionRow.style.top = "0";
-            dimensionRow.style.transform = "translate(-50%, calc(-100% - 4px))";
+            dimensionRow.style.position = "static";
+            dimensionRow.style.transform = "";
           }
-          featureControlFrame.style.position = "absolute";
-          featureControlFrame.style.left = "0";
-          featureControlFrame.style.top = "0";
-          featureControlFrame.style.transform = "translate(-50%, -50%)";
+          featureControlFrame.style.position = "static";
+          featureControlFrame.style.transform = "";
 
           if (canBreakDimensionLine) {
             const breakLength = Math.min(dimensionSpan * 0.6, preferredBreakLength);
@@ -5529,7 +5750,9 @@ export default function CadCanvas3D({
 
           entry.point.copy(frameAnchor);
           entry.resolvePoint = () => frameAnchor;
-          entry.resolveTransform = () => "translate(0, 0)";
+          entry.resolveTransform = () => canBreakDimensionLine
+            ? "translate(-50%, -50%)"
+            : "translate(4px, -50%)";
           entry.placementPolicy = "fixed";
           entry.collisionOffsetX = 0;
           entry.collisionOffsetY = 0;
@@ -5549,6 +5772,10 @@ export default function CadCanvas3D({
             branch.style.width = "100%";
             branch.style.height = "42px";
             branch.style.pointerEvents = "none";
+            // This branch is the datum triangle/stem/badge attached below a
+            // radial FCF. It is a feature graphic, unlike the FCF and its
+            // dimensional callout above it.
+            branch.style.display = propsRef.current.showDatumFeatures ? "block" : "none";
 
             const branchCenter = document.createElement("div");
             branchCenter.style.position = "absolute";
@@ -5630,6 +5857,7 @@ export default function CadCanvas3D({
         if (!labelOverlay) return null;
         const element = document.createElement("div");
         element.dataset.pmiDimensionLabel = "true";
+        element.dataset.pmiStandaloneFeatureControlFrame = "true";
         element.className = "absolute left-0 top-0 hidden items-center whitespace-nowrap";
         element.style.transform = "translate3d(0, 0, 0) translate(0, -50%)";
         element.style.willChange = "transform";
@@ -5637,9 +5865,14 @@ export default function CadCanvas3D({
         element.style.contain = "layout style paint";
         element.style.zIndex = "19";
         element.appendChild(makeFeatureControlFrameElement(tolerance));
+        const annotationId = tolerance?.id || `feature-control-frame-${pmiDimensionLabelCache.length}`;
+        const compactElement = makeCompactPmiMarker(tolerance, annotationId);
+        makeExpandedPmiLabelCollapsible(element, annotationId);
         labelOverlay.appendChild(element);
         const entry: PmiDimensionLabelEntry = {
           element,
+          compactElement,
+          annotationId,
           point: point.clone(),
           resolveTransform,
           placementPolicy,
@@ -5933,14 +6166,17 @@ export default function CadCanvas3D({
 
       const getStackedHoleDimensionKey = (tolerance: any): string | null => {
         if (tolerance.dimensionKind !== "diameter" && tolerance.dimensionKind !== "radius") return null;
-        if (tolerance.isCounterboreDimension || tolerance.isCountersinkDimension || tolerance.isSphericalDimension) return null;
+        if (tolerance.isCountersinkDimension || tolerance.isSphericalDimension) return null;
+        // An explicit INDIVIDUALLY note represents a separate evaluation call;
+        // do not visually combine it with the pilot-hole call.
+        if (tolerance.isCounterboreDimension && /individually/i.test(`${tolerance.counterboreEvaluationNote || ""}`)) {
+          return null;
+        }
         if (!Number.isFinite(tolerance.nominalDimension)) return null;
         const targets = Array.isArray(tolerance.targetIds) ? [...tolerance.targetIds].sort() : [];
         if (targets.length === 0) return null;
         return [
-          tolerance.dimensionKind,
-          `${Number(tolerance.nominalDimension).toFixed(6)}`,
-          `${tolerance.dimensionPreModifier || ""}`.trim(),
+          "hole-feature",
           targets.join("|")
         ].join("::");
       };
@@ -5952,6 +6188,11 @@ export default function CadCanvas3D({
         const groupItems = stackedHoleDimensionGroups.get(key) || [];
         groupItems.push(tolerance);
         stackedHoleDimensionGroups.set(key, groupItems);
+      });
+      stackedHoleDimensionGroups.forEach((groupItems) => {
+        groupItems.sort((first, second) =>
+          Number(!!first.isCounterboreDimension) - Number(!!second.isCounterboreDimension)
+        );
       });
       // Compatible calls become one DOM block before screen-space placement.
       const stackedHoleDimensionOwnerById = new Map<string, any[]>();
@@ -6764,7 +7005,9 @@ export default function CadCanvas3D({
         const stackedGroup = stackedHoleDimensionOwnerById.get(tolerance.id);
         if (stackedGroup && stackedGroup.length === 0) return true;
         const shouldAttachDimensionToDatumLeader = !tolerance.isCounterboreDimension && !tolerance.isCountersinkDimension;
-        const datumAnchorForFace = shouldAttachDimensionToDatumLeader && propsRef.current.showDatumFeatures
+        // Datum visibility controls the datum graphics, not the geometry used
+        // to place an attached dimension or feature-control frame.
+        const datumAnchorForFace = shouldAttachDimensionToDatumLeader
           ? datumAnchorCache.find((anchor) =>
               anchor.annotationKind === "datum" &&
               anchor.calloutKind === "cylindrical" &&
@@ -6802,7 +7045,7 @@ export default function CadCanvas3D({
           }
         }
 
-        const faceDatumIds = (propsRef.current.showDatumFeatures ? (propsRef.current.datums || []) : [])
+        const faceDatumIds = (propsRef.current.datums || [])
           .filter((datum: any) => datum.type !== "Datum Target Set")
           .filter((datum: any) => mapDatumTargetsToWebGLNames(datum).includes(faceName))
           .map((datum: any) => `datum:${datum.id || datum.identifier || datum.entityId}`)
@@ -7168,7 +7411,7 @@ export default function CadCanvas3D({
         const canBreakDimensionLine = dimensionSpan >= preferredBreakLength * 1.8;
         const frameAnchor = canBreakDimensionLine
           ? dimStart.clone().add(dimEnd).multiplyScalar(0.5)
-          : dimEnd.clone().addScaledVector(axis, Math.max(modelSizeMax * 0.045, dimensionSpan * 0.08));
+          : dimEnd.clone().addScaledVector(axis, Math.max(modelSizeMax * 0.035, dimensionSpan * 0.08));
         const linePoints = [start, dimStart, end, dimEnd];
         if (canBreakDimensionLine) {
           const breakLength = Math.min(dimensionSpan * 0.6, preferredBreakLength);
@@ -7326,6 +7569,13 @@ export default function CadCanvas3D({
               .reduce((acc, sample) => acc.add(sample.point), new THREE.Vector3())
               .multiplyScalar(1 / samples.length);
             addPmiDimensionLabel(tolerance, center, mergedDatumIdentifiers);
+          } else {
+            // Threaded-hole targets can be represented by semantic STEP
+            // geometry that has no directly mapped rendered face. Preserve
+            // the dimension label so an associated position FCF can attach
+            // to it using the shared PMI target relationship.
+            const targetPoint = getPointTargetLabelPoint(tolerance);
+            if (targetPoint) addPmiDimensionLabel(tolerance, targetPoint, mergedDatumIdentifiers);
           }
           continue;
         }
@@ -7458,9 +7708,9 @@ export default function CadCanvas3D({
           // Two position tolerances should always be kept separate if they have
           // different tolerance zone types (diametral vs boxed zone)
           const tol1Diametral = tol1?.toleranceZoneDiameter === true ||
-            /cylindrical|circular/i.test(tol1?.toleranceZoneForm || "");
+            /cylindrical|circular|spherical/i.test(tol1?.toleranceZoneForm || "");
           const tol2Diametral = tol2?.toleranceZoneDiameter === true ||
-            /cylindrical|circular/i.test(tol2?.toleranceZoneForm || "");
+            /cylindrical|circular|spherical/i.test(tol2?.toleranceZoneForm || "");
           if (tol1Diametral !== tol2Diametral) {
             return true;
           }
@@ -7469,7 +7719,7 @@ export default function CadCanvas3D({
         if (tol1IsPosition && !tol2IsPosition) {
           // tol1 is position tolerance, tol2 is dimension tolerance
           const positionDiametral = tol1?.toleranceZoneDiameter === true ||
-            /cylindrical|circular/i.test(tol1?.toleranceZoneForm || "");
+            /cylindrical|circular|spherical/i.test(tol1?.toleranceZoneForm || "");
           // If position is diametral (cylindrical zone), keep separate from linear dimensions
           if (positionDiametral && tol2Linear) return true;
           // If position is boxed zone (non-cylindrical), keep separate from radial dimensions
@@ -7479,7 +7729,7 @@ export default function CadCanvas3D({
         if (tol2IsPosition && !tol1IsPosition) {
           // tol2 is position tolerance, tol1 is dimension tolerance
           const positionDiametral = tol2?.toleranceZoneDiameter === true ||
-            /cylindrical|circular/i.test(tol2?.toleranceZoneForm || "");
+            /cylindrical|circular|spherical/i.test(tol2?.toleranceZoneForm || "");
           // If position is diametral (cylindrical zone), keep separate from linear dimensions
           if (positionDiametral && tol1Linear) return true;
           // If position is boxed zone (non-cylindrical), keep separate from radial dimensions
@@ -7493,7 +7743,7 @@ export default function CadCanvas3D({
       // based on its tolerance zone type (diametral=cylindrical=radial, boxed=linear)
       const getPositionToleranceLayoutType = (positionTolerance: any): "radial" | "linear" => {
         const isDiametral = positionTolerance?.toleranceZoneDiameter === true ||
-          /cylindrical|circular/i.test(positionTolerance?.toleranceZoneForm || "");
+          /cylindrical|circular|spherical/i.test(positionTolerance?.toleranceZoneForm || "");
         return isDiametral ? "radial" : "linear";
       };
 
@@ -7504,24 +7754,43 @@ export default function CadCanvas3D({
         // Find all matching dimension tolerances that share semantic targets or rendered faces
         const matchingDimensions = dimensionTolerances
           .map((dimensionTolerance: any) => {
-            const entry = dimensionLabelEntryByToleranceId.get(dimensionTolerance.id);
-            if (!entry) return null;
             const sharedSemanticTargets = (dimensionTolerance.targetIds || [])
               .filter((targetId: string) => positionTargetIds.has(targetId)).length;
             const sharedRenderedFaces = getFaceNamesForTolerance(dimensionTolerance)
               .filter((faceName) => positionFaceNames.has(faceName)).length;
-            if (sharedSemanticTargets === 0 && sharedRenderedFaces === 0) return null;
+            const positionThreadCylinderTargets = new Set(positionTolerance.threadCylinderTargetIds || []);
+            const sharedThreadCylinderTargets = (dimensionTolerance.threadCylinderTargetIds || [])
+              .filter((targetId: string) => positionThreadCylinderTargets.has(targetId)).length;
+            if (sharedSemanticTargets === 0 && sharedRenderedFaces === 0 && sharedThreadCylinderTargets === 0) return null;
+
+            // Some AP242 thread-depth annotations resolve to semantic target
+            // points but no rendered face. Create their label here so the
+            // associated position FCF still has a stable callout to attach to.
+            let entry = dimensionLabelEntryByToleranceId.get(dimensionTolerance.id);
+            if (!entry) {
+              const targetPoint = getPointTargetLabelPoint(dimensionTolerance);
+              if (targetPoint) {
+                entry = addPmiDimensionLabel(dimensionTolerance, targetPoint);
+              }
+            }
+            if (!entry) return null;
             
             // Check if this dimension tolerance should be kept separate from the position tolerance
             // (e.g., radial vs linear - they have different control frame requirements)
             const shouldSeparate = shouldKeepSeparate(dimensionTolerance, positionTolerance);
             
             const radialPreference = isRadialDimension(dimensionTolerance) ? 20 : 0;
+            // A thread-depth call is the most specific dimensional call for a
+            // threaded feature. Prefer it over a broader diameter pattern when
+            // both overlap the same position-target set.
+            const threadDepthPreference = dimensionTolerance.dimensionKind === "threadDepth"
+              ? 1000
+              : 0;
             
             return {
               tolerance: dimensionTolerance,
               entry,
-              score: sharedSemanticTargets * 100 + sharedRenderedFaces * 10 + radialPreference,
+              score: sharedSemanticTargets * 100 + sharedRenderedFaces * 10 + sharedThreadCylinderTargets * 500 + radialPreference + threadDepthPreference,
               shouldSeparate
             };
           })
@@ -7543,11 +7812,12 @@ export default function CadCanvas3D({
             // The position tolerance will get its own display with appropriate layout based on its face names
           } else {
             // Original behavior: merge with the best matching dimension tolerance
-            const radialLayout = isRadialDimension(bestMatch.tolerance);
+            const radialLayout = getPositionToleranceLayoutType(positionTolerance) === "radial";
             appendFeatureControlFrame(
               bestMatch.entry,
               positionTolerance,
-              radialLayout ? "radial" : "linear"
+              radialLayout ? "radial" : "linear",
+              bestMatch.tolerance.id
             );
             return;
           }
@@ -7639,6 +7909,50 @@ export default function CadCanvas3D({
           ) {
             return;
           }
+        }
+
+        // Keep a semantically associated FCF attached to its dimensional
+        // call even when the dimension was created from target-point data.
+        // This prevents the position frame from becoming a floating label.
+        const fallbackAssociatedDimension = dimensionTolerances
+          .filter((dimensionTolerance: any) =>
+            (dimensionTolerance.targetIds || []).some((targetId: string) => positionTargetIds.has(targetId))
+          )
+          .sort((first: any, second: any) =>
+            Number(second.dimensionKind === "threadDepth") - Number(first.dimensionKind === "threadDepth")
+          )[0];
+        if (fallbackAssociatedDimension && !shouldKeepSeparate(fallbackAssociatedDimension, positionTolerance)) {
+          let dimensionEntry = dimensionLabelEntryByToleranceId.get(fallbackAssociatedDimension.id);
+          if (!dimensionEntry) {
+            const dimensionPoint = getPointTargetLabelPoint(fallbackAssociatedDimension);
+            if (dimensionPoint) {
+              dimensionEntry = addPmiDimensionLabel(fallbackAssociatedDimension, dimensionPoint);
+            }
+          }
+          if (dimensionEntry) {
+            appendFeatureControlFrame(
+              dimensionEntry,
+              positionTolerance,
+              "radial",
+              fallbackAssociatedDimension.id
+            );
+            return;
+          }
+        }
+
+        // AP242 may associate a position tolerance with GEOMETRIC_CURVE_SET
+        // entities instead of directly with rendered B-Rep faces. Preserve
+        // the FCF using the semantic PMI target points when face resolution
+        // is unavailable; otherwise the tolerance silently disappears.
+        const positionTargetPoint = getPointTargetLabelPoint(positionTolerance);
+        if (positionTargetPoint) {
+          addStandaloneFeatureControlFrameLabel(
+            positionTolerance,
+            positionTargetPoint,
+            "fixed",
+            () => "translate(6px, -50%)"
+          );
+          return;
         }
 
         const targetSample = faceNames
@@ -8003,11 +8317,9 @@ export default function CadCanvas3D({
 
     const refreshDatumAnchorCache = () => {
       const currentAnnotations = [
-        ...(propsRef.current.showDatumFeatures
-          ? (propsRef.current.datums || [])
-              .filter((d: any) => d.type !== "Datum Target Set")
-              .map((d: any) => ({ ...d, annotationKind: "datum" }))
-          : []),
+        ...(propsRef.current.datums || [])
+          .filter((d: any) => d.type !== "Datum Target Set")
+          .map((d: any) => ({ ...d, annotationKind: "datum" })),
         ...(propsRef.current.showDatumTargets
           ? (propsRef.current.datumTargets || []).map((d: any) => ({ ...d, annotationKind: "datumTarget" }))
           : []),
@@ -9429,6 +9741,40 @@ export default function CadCanvas3D({
         `translate3d(${entry.screenX}px, ${entry.screenY}px, 0) ${entry.baseTransform}${collisionTransform}`;
     };
 
+    const applyCompactPmiMarkerTransform = (entry: PmiDimensionLabelEntry) => {
+      entry.compactElement.style.transform =
+        `translate3d(${entry.screenX}px, ${entry.screenY}px, 0) ${entry.baseTransform}`;
+    };
+
+    const isCompactPmiEntry = (entry: PmiDimensionLabelEntry) =>
+      propsRef.current.pmiPresentationMode === "compact" &&
+      !propsRef.current.expandedPmiAnnotationIds.has(entry.annotationId);
+
+    const refreshPmiPresentation = () => {
+      pmiDimensionLabelCache.forEach((entry) => {
+        const showCompact = entry.visible && isCompactPmiEntry(entry);
+        const showExpandedCompactCallout = entry.visible &&
+          propsRef.current.pmiPresentationMode === "compact" &&
+          !showCompact;
+        entry.element.style.display = entry.visible && !showCompact ? "flex" : "none";
+        const showFullCallout = entry.visible && !showCompact;
+        entry.element.style.pointerEvents = showFullCallout ? "auto" : "none";
+        entry.element.style.cursor = showFullCallout ? "pointer" : "";
+        entry.element.title = showExpandedCompactCallout ? "Collapse PMI annotation" : "Select PMI annotation";
+        entry.compactElement.style.display = showCompact ? "flex" : "none";
+        if (entry.visible) {
+          applyPmiDimensionLabelTransform(entry);
+          applyCompactPmiMarkerTransform(entry);
+        }
+      });
+      pmiCollisionLayoutRequested = pmiDimensionLabelCache.some(
+        (entry) => entry.visible && !isCompactPmiEntry(entry)
+      );
+      requestRenderRef.current?.(2);
+    };
+
+    pmiPresentationRefreshRef.current = refreshPmiPresentation;
+
     const readPmiScreenRect = (element: HTMLElement): PmiScreenRect | null => {
       if (element.style.display === "none") return null;
       const rect = element.getBoundingClientRect();
@@ -9704,7 +10050,8 @@ export default function CadCanvas3D({
         "datum-attached": 0,
         "leader-attached": 1,
         "linear-attached": 2,
-        fixed: 3
+        "fcf-attached": 3,
+        fixed: 4
       };
       const candidateOffsetsByPolicy: Record<
         Exclude<PmiDimensionLabelEntry["placementPolicy"], "fixed">,
@@ -9721,8 +10068,13 @@ export default function CadCanvas3D({
         "linear-attached": [
           [0, 0], [0, -10], [0, 10], [-18, 0], [18, 0],
           [-20, -14], [20, -14], [-20, 14], [20, 14], [0, -32], [0, 32]
+        ],
+        "fcf-attached": [
+          [0, 0], [0, 28], [0, -28], [0, 54], [0, -54],
+          [-14, 28], [-14, -28], [14, 28], [14, -28]
         ]
       };
+      const placedFeatureControlFrames: PmiScreenRect[] = [];
       const managedEntries = pmiDimensionLabelCache
         .map((entry, index) => ({ entry, index }))
         .filter(({ entry }) => entry.visible && entry.placementPolicy !== "fixed")
@@ -9752,11 +10104,25 @@ export default function CadCanvas3D({
         let bestOffsetY = entry.collisionOffsetY;
         let bestScore = currentScore;
 
-        const candidateOffsets =
+        const candidateOffsets = [
+          ...
           candidateOffsetsByPolicy[entry.placementPolicy as Exclude<
             PmiDimensionLabelEntry["placementPolicy"],
             "fixed"
-          >];
+          >]
+        ];
+        if (entry.placementPolicy === "fcf-attached") {
+          placedFeatureControlFrames.forEach((placedFrame) => {
+            const isNearby = Math.abs(baseRect.left - placedFrame.left) < 140 ||
+              Math.abs(baseRect.top - placedFrame.top) < 100;
+            if (!isNearby) return;
+            const alignedX = placedFrame.left - baseRect.left;
+            candidateOffsets.push(
+              [alignedX, placedFrame.bottom + 6 - baseRect.top],
+              [alignedX, placedFrame.top - baseRect.bottom - 6]
+            );
+          });
+        }
         candidateOffsets.forEach(([offsetX, offsetY]) => {
           const score = scorePmiLabelRect(
             offsetPmiScreenRect(baseRect, offsetX, offsetY),
@@ -9796,6 +10162,9 @@ export default function CadCanvas3D({
           entry.collisionOffsetY
         );
         obstacleGrid.insert(placedRect, placedRect);
+        if (entry.placementPolicy === "fcf-attached") {
+          placedFeatureControlFrames.push(placedRect);
+        }
       });
     };
 
@@ -9980,6 +10349,33 @@ export default function CadCanvas3D({
         datumAnchorCache.forEach((anchor) => {
           updateDatumCalloutFacing(anchor);
 
+          const annotationVisible = anchor.annotationKind === "datum"
+            ? propsRef.current.showDatumFeatures
+            : propsRef.current.showDatumTargets;
+          if (!annotationVisible) {
+            anchor.element.style.display = "none";
+            if (anchor.leaderElement) anchor.leaderElement.style.display = "none";
+            if (anchor.triangleElement) anchor.triangleElement.style.display = "none";
+            [
+              anchor.triangleObject,
+              anchor.leaderObject,
+            ].forEach((object) => {
+              if (object) object.visible = false;
+            });
+            return;
+          }
+
+          [
+            anchor.triangleObject,
+            anchor.leaderObject,
+            anchor.arrowShaftObject,
+            anchor.arrowHeadObject,
+            anchor.targetMarkObject,
+            anchor.dimensionObject,
+          ].forEach((object) => {
+            if (object) object.visible = true;
+          });
+
           if (anchor.useFeatureControlFrameBranch) {
             if (anchor.triangleObject) anchor.triangleObject.visible = false;
             if (anchor.leaderObject) anchor.leaderObject.visible = false;
@@ -10091,6 +10487,7 @@ export default function CadCanvas3D({
           ) {
             if (entry.visible) {
               entry.element.style.display = "none";
+              entry.compactElement.style.display = "none";
               entry.visible = false;
               pmiProjectionChanged = true;
             }
@@ -10100,6 +10497,7 @@ export default function CadCanvas3D({
           const screenX = Math.round(rawX * 2) / 2;
           const screenY = Math.round(rawY * 2) / 2;
           setAnnotationDepthOrder(entry.element, projectedDatumPoint.z, 2);
+          setAnnotationDepthOrder(entry.compactElement, projectedDatumPoint.z, 2);
           const labelTransform = entry.resolveTransform?.() || "translate(0, -50%)";
           const positionChanged =
             !entry.visible ||
@@ -10111,10 +10509,19 @@ export default function CadCanvas3D({
             entry.screenY = screenY;
             entry.baseTransform = labelTransform;
             applyPmiDimensionLabelTransform(entry);
+            applyCompactPmiMarkerTransform(entry);
             pmiProjectionChanged = true;
           }
           if (!entry.visible) {
-            entry.element.style.display = "flex";
+            const showCompact = isCompactPmiEntry(entry);
+            const showExpandedCompactCallout =
+              propsRef.current.pmiPresentationMode === "compact" && !showCompact;
+            entry.element.style.display = showCompact ? "none" : "flex";
+            const showFullCallout = !showCompact;
+            entry.element.style.pointerEvents = showFullCallout ? "auto" : "none";
+            entry.element.style.cursor = showFullCallout ? "pointer" : "";
+            entry.element.title = showExpandedCompactCallout ? "Collapse PMI annotation" : "Select PMI annotation";
+            entry.compactElement.style.display = showCompact ? "flex" : "none";
             entry.visible = true;
             pmiProjectionChanged = true;
           }
@@ -10123,7 +10530,6 @@ export default function CadCanvas3D({
         const canSettlePlacement =
           !isNavigatingView &&
           !cameraFocusTarget &&
-          !controlsChanged &&
           !spinOn;
         if (pmiCollisionLayoutRequested && canSettlePlacement) {
           pmiCollisionStableFrames = pmiProjectionChanged
@@ -10188,6 +10594,7 @@ export default function CadCanvas3D({
     return () => {
       requestRenderRef.current = null;
       dimensionOverlayVisibilityRefreshRef.current = null;
+      pmiPresentationRefreshRef.current = null;
       if (animationFrameId !== null) {
         cancelAnimationFrame(animationFrameId);
       }
@@ -10266,17 +10673,24 @@ export default function CadCanvas3D({
         />
 
         {/* 3D Datums Overlay */}
-        {((showDatumFeatures && datums.length > 0) || (showDatumTargets && datumTargets.length > 0)) && (
+        {(datums.length > 0 || (showDatumTargets && datumTargets.length > 0)) && (
           <div className="absolute inset-0 pointer-events-none overflow-hidden" id="datum-annotations-overlay" style={{ width: '100%', height: '100%' }}>
           {[
-            ...(showDatumFeatures
-              ? datums.filter((d) => d.type !== "Datum Target Set").map((d) => ({ ...d, annotationKind: "datum" }))
-              : []),
+            ...datums.filter((d) => d.type !== "Datum Target Set").map((d) => ({ ...d, annotationKind: "datum" })),
             ...(showDatumTargets
               ? datumTargets.map((d) => ({ ...d, annotationKind: "datumTarget" }))
               : []),
           ].map((d) => (
-            <div key={d.id}>
+            <div
+              key={d.id}
+              style={{
+                // Keep hidden annotations mounted as layout anchors, but make
+                // their entire DOM branch impossible to re-show per frame.
+                display: d.annotationKind === "datum"
+                  ? (showDatumFeatures ? "contents" : "none")
+                  : (showDatumTargets ? "contents" : "none"),
+              }}
+            >
               <div
                 id={`3d-datum-leader-${d.id}`}
                 style={{

@@ -42,6 +42,7 @@ export interface ParsedStepTolerance {
   toleranceModifiers?: string[];
   toleranceZoneForm?: string;
   toleranceZoneDiameter?: boolean;
+  projectedToleranceZoneHeight?: number;
   dimensionEntityId?: string;
   dimensionKind?: "linear" | "angular" | "diameter" | "radius" | "size" | "threadDepth" | "chamfer" | "slot";
   nominalDimension?: number;
@@ -64,6 +65,8 @@ export interface ParsedStepTolerance {
   isCircularCurveDimension?: boolean;
   isControlledRadiusDimension?: boolean;
   isCounterboreDimension?: boolean;
+  counterboreHoleTargetIds?: string[];
+  counterboreHoleFeatureControlFrameIds?: string[];
   counterboreHoleNominal?: number;
   counterboreHoleUpperTolerance?: number;
   counterboreHoleLowerTolerance?: number;
@@ -2743,6 +2746,10 @@ export function parseStepFile(fileName: string, text: string): StepParseResult {
     return semanticTargets;
   };
 
+  // Links semantic thread-curve targets to the B-Rep cylinders they describe.
+  // AP242 uses either representation for the same threaded feature.
+  const threadCylinderFaceTargetsBySemanticTarget = new Map<string, string[]>();
+
   const buildSfaSemanticTolerances = (): ParsedStepTolerance[] => {
     const tolerances: ParsedStepTolerance[] = [];
 
@@ -2789,6 +2796,16 @@ export function parseStepFile(fileName: string, text: string): StepParseResult {
       const toleranceZoneForm = toleranceZoneFormId
         ? getQuotedValues(getEntityParams(toleranceZoneFormId).join(","))[0]
         : undefined;
+      const projectedZoneDefinitionId = toleranceZoneId
+        ? getUsedIn(toleranceZoneId)
+          .find((referrerId) => getEntityType(referrerId) === "PROJECTED_ZONE_DEFINITION")
+        : undefined;
+      const projectedToleranceZoneHeight = projectedZoneDefinitionId
+        ? getEntityRefs(projectedZoneDefinitionId)
+          .filter((ref) => /(?:LENGTH|PLANE_ANGLE)_MEASURE_WITH_UNIT/i.test(getEntityType(ref)))
+          .map(getMeasureValue)
+          .find((value): value is number => value !== null && Number.isFinite(value))
+        : undefined;
 
       tolerances.push({
         id: `PMI-STP-${tolerances.length + 1}`,
@@ -2806,6 +2823,7 @@ export function parseStepFile(fileName: string, text: string): StepParseResult {
         toleranceModifiers,
         toleranceZoneForm,
         toleranceZoneDiameter: /cylindrical|circular/i.test(toleranceZoneForm || ""),
+        projectedToleranceZoneHeight,
         category: definition.category,
         clinicalContext: definition.clinicalContext
       });
@@ -3545,18 +3563,24 @@ export function parseStepFile(fileName: string, text: string): StepParseResult {
         .map((face) => ({ id: face.id, frame: getCylinderSurfaceFrame(face.id) }))
         .filter((face): face is { id: string; frame: NonNullable<ReturnType<typeof getCylinderSurfaceFrame>> } => !!face.frame);
 
-      return threadTargets
+      const resolvedPairs = threadTargets
         .map((targetId) => {
           const points = getEntityCartesianPoints(targetId, 6);
           if (points.length === 0 || cylinderFaces.length === 0) return null;
-          return cylinderFaces
+          const faceTargetId = cylinderFaces
             .map((face) => ({
               id: face.id,
               score: points.reduce((sum, point) => sum + distancePointToCylinderSurface(point, face.frame), 0) / points.length
             }))
             .sort((a, b) => a.score - b.score)[0]?.id || null;
+          return faceTargetId ? { targetId, faceTargetId } : null;
         })
-        .filter((targetId): targetId is string => !!targetId)
+        .filter((pair): pair is { targetId: string; faceTargetId: string } => !!pair);
+      resolvedPairs.forEach(({ targetId, faceTargetId }) => {
+        threadCylinderFaceTargetsBySemanticTarget.set(targetId, [faceTargetId]);
+      });
+      return resolvedPairs
+        .map(({ faceTargetId }) => faceTargetId)
         .filter((targetId, index, all) => all.indexOf(targetId) === index);
     };
 
@@ -4235,6 +4259,45 @@ export function parseStepFile(fileName: string, text: string): StepParseResult {
       });
     };
 
+    const hasCompatiblePositionAssociation = (
+      first: ParsedStepTolerance,
+      second: ParsedStepTolerance
+    ): boolean => {
+      const positionIdsFor = (tolerance: ParsedStepTolerance) => {
+        const targetIds = new Set(tolerance.targetIds || []);
+        if (targetIds.size === 0) return new Set<string>();
+        return new Set(
+          parsedTolerances
+            .filter((candidate) =>
+              (candidate.type === "Position" || candidate.symbol === "POS") &&
+              (candidate.targetIds || []).some((targetId) => targetIds.has(targetId))
+            )
+            .map((candidate) => candidate.id)
+        );
+      };
+
+      const firstPositionIds = positionIdsFor(first);
+      const secondPositionIds = positionIdsFor(second);
+      return firstPositionIds.size === 0 ||
+        secondPositionIds.size === 0 ||
+        [...firstPositionIds].some((id) => secondPositionIds.has(id));
+    };
+
+    const canMergeCounterborePilotHole = (
+      counterboreTolerance: ParsedStepTolerance,
+      pilotTolerance: ParsedStepTolerance
+    ) => {
+      const compatibleModifiers =
+        !counterboreTolerance.dimensionPreModifier ||
+        !pilotTolerance.dimensionPreModifier ||
+        counterboreTolerance.dimensionPreModifier === pilotTolerance.dimensionPreModifier;
+      // A counterbored feature owns distinct pilot and counterbore cylinder
+      // targets. Their matching center pattern, plus the explicit AP242
+      // counterbored-hole feature, is the reliable association.
+      return compatibleModifiers &&
+        sameCylindricalCenterPattern(counterboreTolerance, pilotTolerance);
+    };
+
     const markAsCounterboreDimension = (diameterTolerance: ParsedStepTolerance) => {
       diameterTolerance.isCounterboreDimension = true;
       diameterTolerance.type = "Counterbore Dimensional";
@@ -4258,6 +4321,12 @@ export function parseStepFile(fileName: string, text: string): StepParseResult {
       counterboreTolerance: ParsedStepTolerance,
       holeTolerance: ParsedStepTolerance
     ) => {
+      counterboreTolerance.counterboreHoleTargetIds = uniqueGeometryTargets(holeTolerance.targetIds || []);
+      counterboreTolerance.targetIds = uniqueGeometryTargets([
+        ...(holeTolerance.targetIds || []),
+        ...(counterboreTolerance.targetIds || [])
+      ]);
+      counterboreTolerance.targetId = counterboreTolerance.targetIds[0] || counterboreTolerance.targetId;
       counterboreTolerance.counterboreHoleNominal = holeTolerance.nominalDimension;
       counterboreTolerance.counterboreHoleLowerTolerance = holeTolerance.lowerTolerance;
       counterboreTolerance.counterboreHoleUpperTolerance = holeTolerance.upperTolerance;
@@ -4286,9 +4355,16 @@ export function parseStepFile(fileName: string, text: string): StepParseResult {
       counterboredFeatureSpecs.forEach((spec) => {
         const modifier = spec.count && spec.count > 1 ? `${spec.count}X` : undefined;
         const diameterTolerances = dimensionTolerances
-          .filter((tolerance) => tolerance.category === "Dimension" && tolerance.dimensionKind === "diameter")
-        const pilotHoleTolerance = diameterTolerances.find((tolerance) => sameNominal(tolerance.nominalDimension, spec.boreDiameter));
-        const counterboreTolerance = diameterTolerances.find((tolerance) => sameNominal(tolerance.nominalDimension, spec.counterboreDiameter));
+          .filter((tolerance) => tolerance.category === "Dimension" && tolerance.dimensionKind === "diameter");
+        const counterboreTolerance = diameterTolerances.find((tolerance) =>
+          sameNominal(tolerance.nominalDimension, spec.counterboreDiameter)
+        );
+        const pilotHoleTolerance = counterboreTolerance
+          ? diameterTolerances.find((tolerance) =>
+            sameNominal(tolerance.nominalDimension, spec.boreDiameter) &&
+            canMergeCounterborePilotHole(counterboreTolerance, tolerance)
+          )
+          : undefined;
 
         if (pilotHoleTolerance && modifier && !pilotHoleTolerance.dimensionPreModifier && !pilotHoleTolerance.isReferenceDimension) {
           pilotHoleTolerance.dimensionPreModifier = modifier;
@@ -4358,7 +4434,7 @@ export function parseStepFile(fileName: string, text: string): StepParseResult {
               typeof candidate.nominalDimension === "number" &&
               candidate.nominalDimension < (counterboreTolerance.nominalDimension || 0) &&
               (!candidate.dimensionPreModifier || !counterboreTolerance.dimensionPreModifier || candidate.dimensionPreModifier === counterboreTolerance.dimensionPreModifier) &&
-              sameCylindricalCenterPattern(candidate, counterboreTolerance)
+              canMergeCounterborePilotHole(counterboreTolerance, candidate)
             )
             .sort((a, b) => (b.nominalDimension || 0) - (a.nominalDimension || 0))[0];
 
@@ -5001,7 +5077,30 @@ export function parseStepFile(fileName: string, text: string): StepParseResult {
       });
     });
 
-    return applyCounterboreFeatureSemantics(filteredTolerances);
+    const presentationDimensionKeys = new Set<string>();
+    const deduplicatedTolerances = filteredTolerances.filter((tolerance) => {
+      if (!tolerance.isBasicDimension && !tolerance.isReferenceDimension) return true;
+      const points = tolerance.targetPoints || [];
+      if (points.length < 2) return true;
+      const pointKey = points
+        .map((point) => `${point.x.toFixed(5)},${point.y.toFixed(5)},${point.z.toFixed(5)}`)
+        .sort()
+        .join("|");
+      const key = [
+        tolerance.dimensionKind,
+        tolerance.nominalDimension?.toFixed(5),
+        tolerance.lowerTolerance?.toFixed(5),
+        tolerance.upperTolerance?.toFixed(5),
+        tolerance.dimensionPreModifier || "",
+        tolerance.isBasicDimension ? "basic" : "reference",
+        pointKey
+      ].join(";");
+      if (presentationDimensionKeys.has(key)) return false;
+      presentationDimensionKeys.add(key);
+      return true;
+    });
+
+    return applyCounterboreFeatureSemantics(deduplicatedTolerances);
   };
 
   const buildDatumReferenceFrames = (datums: ParsedStepDatum[]): ParsedStepDatumReferenceFrame[] => {
@@ -5742,6 +5841,14 @@ export function parseStepFile(fileName: string, text: string): StepParseResult {
   const sfaSemanticDatumTargets = buildSfaSemanticDatumTargets();
   const sfaSemanticTolerances = buildSfaSemanticTolerances();
   const ap242DimensionalTolerances = buildAp242DimensionalTolerances();
+  sfaSemanticTolerances.forEach((tolerance) => {
+    const resolvedThreadCylinderTargets = (tolerance.targetIds || [])
+      .flatMap((targetId) => threadCylinderFaceTargetsBySemanticTarget.get(targetId) || [])
+      .filter((targetId, index, all) => all.indexOf(targetId) === index);
+    if (resolvedThreadCylinderTargets.length > 0) {
+      tolerance.threadCylinderTargetIds = resolvedThreadCylinderTargets;
+    }
+  });
   const ap242SemanticDatums = buildAp242SemanticDatums();
 
   // Fallback to rich inferred tolerances if the STEP file did not contain explicit geometric annotations
@@ -5760,6 +5867,43 @@ export function parseStepFile(fileName: string, text: string): StepParseResult {
       targetIds,
       tolerance.isDatumTargetDimension
     );
+  });
+  finalTolerances = finalTolerances.map((tolerance) => {
+    const resolvedThreadCylinderTargets = (tolerance.targetIds || [])
+      .flatMap((targetId) => threadCylinderFaceTargetsBySemanticTarget.get(targetId) || [])
+      .filter((targetId, index, all) => all.indexOf(targetId) === index);
+    return resolvedThreadCylinderTargets.length > 0
+      ? { ...tolerance, threadCylinderTargetIds: resolvedThreadCylinderTargets }
+      : tolerance;
+  });
+  finalTolerances.forEach((tolerance) => {
+    if (!tolerance.isCounterboreDimension || !(tolerance.counterboreHoleTargetIds || []).length) return;
+    const pilotHoleTargets = new Set(tolerance.counterboreHoleTargetIds);
+    tolerance.counterboreHoleFeatureControlFrameIds = finalTolerances
+      .filter((candidate) =>
+        (candidate.type === "Position" || candidate.symbol === "POS") &&
+        (candidate.targetIds || []).some((targetId) => pilotHoleTargets.has(targetId))
+      )
+      .map((candidate) => candidate.id);
+  });
+  const threadDepthTolerances = finalTolerances.filter((tolerance) =>
+    tolerance.dimensionKind === "threadDepth" &&
+    !!tolerance.threadDesignation &&
+    (tolerance.threadCylinderTargetIds || []).length > 0
+  );
+  finalTolerances = finalTolerances.filter((tolerance) => {
+    if (tolerance.dimensionKind !== "diameter" || tolerance.threadDesignation) return true;
+    const candidateThreadNominal = `${tolerance.nominalDimension ?? ""}`;
+    const candidateTargets = new Set(tolerance.threadCylinderTargetIds || []);
+    if (candidateTargets.size === 0) return true;
+    return !threadDepthTolerances.some((threadTolerance) => {
+      const threadNominal = `${threadTolerance.threadDesignation}`.match(/\bM\s*(\d+(?:\.\d+)?)/i)?.[1];
+      const sharesThreadCylinder = (threadTolerance.threadCylinderTargetIds || [])
+        .some((targetId) => candidateTargets.has(targetId));
+      return sharesThreadCylinder &&
+        threadNominal === candidateThreadNominal &&
+        threadTolerance.dimensionPreModifier === tolerance.dimensionPreModifier;
+    });
   });
 
   // Fallback to rich inferred datums if the STEP file did not contain explicit geometric annotations

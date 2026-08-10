@@ -7,6 +7,8 @@ it as the authoritative implementation rules. Then read:
   roadmap.
 - `docs/OCCT_NATIVE_TOPOLOGY_PLAN.md` before changing topology, OCCT loading,
   persistent IDs, or PMI-to-topology resolution.
+- `docs/COMPACT_PMI_MODE_PLAN.md` before implementing the collapsed, expandable
+  viewport-marker presentation for dimensions, FCFs, datums, targets, or DRFs.
 
 ## Non-Negotiable Rules
 
