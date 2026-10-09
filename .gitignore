@@ -1,2 +1,19 @@
-node_modules
+# Environment Variables
 .env.*
+.agents
+.clinerules
+.codex
+
+# Node.js dependencies
+node_modules
+
+# Logs
+*.log
+
+# OS Generated
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.swp
