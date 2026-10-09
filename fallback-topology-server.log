@@ -1,0 +1,8 @@
+
+> react-example@0.0.0 dev
+> tsx server.ts
+
+◇ injected env (0) from .env // tip: ⌘ enable debugging { debug: true }
+Setting up Vite development middleware...
+WebSocket server error: Port 24678 is already in use
+Maxillofacial CAD Verification server booted successfully at http://localhost:3002

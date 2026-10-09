@@ -1,0 +1,6 @@
+
+> react-example@0.0.0 dev
+> tsx server.ts --host 127.0.0.1 --port 3001
+
+◇ injected env (0) from .env // tip: ⌘ suppress logs { quiet: true }
+Setting up Vite development middleware...

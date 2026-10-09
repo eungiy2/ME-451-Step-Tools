@@ -1,0 +1,51 @@
+
+> react-example@0.0.0 dev
+> tsx server.ts
+
+◇ injected env (0) from .env // tip: ⌁ auth for agents [www.vestauth.com]
+Setting up Vite development middleware...
+Maxillofacial CAD Verification server booted successfully at http://localhost:3000
+5:35:43 PM [vite] (client) hmr update /src/App.tsx, /src/index.css
+5:48:40 PM [vite] (client) hmr update /src/index.css, /src/App.tsx
+5:48:58 PM [vite] (client) hmr update /@fs/C:\Users\jcorre20\source\UIUC research\remix_-maxillofacial-implant-cad-verification\src\components\CadCanvas3D.tsx, /src/index.css
+5:49:41 PM [vite] (client) hmr update /@fs/C:\Users\jcorre20\source\UIUC research\remix_-maxillofacial-implant-cad-verification\src\components\CadCanvas3D.tsx, /src/index.css
+5:49:46 PM [vite] (client) hmr update /@fs/C:\Users\jcorre20\source\UIUC research\remix_-maxillofacial-implant-cad-verification\src\components\CadCanvas3D.tsx, /src/index.css
+5:25:01 PM [vite] (client) page reload scripts/tmpInspectFile6Faces.ts
+10:35:48 PM [vite] (client) hmr update /@fs/C:\Users\jcorre20\source\UIUC research\remix_-maxillofacial-implant-cad-verification\src\components\CadCanvas3D.tsx, /src/index.css
+10:38:16 PM [vite] (client) page reload scripts/verifyNativeTopologyBrowser.mjs
+10:39:12 PM [vite] (client) page reload scripts/verifyNativeTopologyBrowser.mjs
+10:45:18 PM [vite] (client) page reload scripts/verifyOcctParserNativeIntegration.ts
+10:45:57 PM [vite] (client) page reload docs/OCCT_NATIVE_TOPOLOGY_PLAN.md
+10:46:26 PM [vite] (client) page reload docs/OCCT_NATIVE_TOPOLOGY_PLAN.md
+11:24:41 PM [vite] (client) page reload docs/OCCT_NATIVE_TOPOLOGY_PLAN.md
+7:25:59 AM [vite] (client) page reload native/occt-topology-wrapper/src/native-topology-export.cpp
+7:26:30 AM [vite] (client) hmr update /src/index.css, /src/App.tsx
+7:27:50 AM [vite] (client) hmr update /src/index.css, /src/App.tsx
+7:30:12 AM [vite] (client) hmr update /src/index.css, /src/App.tsx
+7:30:12 AM [vite] (client) hmr update /src/index.css, /src/App.tsx
+7:30:12 AM [vite] (client) hmr update /@fs/C:\Users\jcorre20\source\UIUC research\remix_-maxillofacial-implant-cad-verification\src\components\CadCanvas3D.tsx, /src/index.css
+7:30:31 AM [vite] (client) hmr update /src/App.tsx, /src/index.css
+7:31:18 AM [vite] (client) hmr update /src/index.css, /src/App.tsx
+7:31:18 AM [vite] (client) page reload scripts/verifyOcctTopologyPayload.ts
+7:31:18 AM [vite] (client) page reload scripts/verifyOcctNativeWrapper.ts
+7:31:55 AM [vite] (client) page reload scripts/verifyOcctParserNativeIntegration.ts
+7:34:30 AM [vite] (client) page reload native/occt-topology-wrapper/prepare-wrapper.mjs
+7:38:13 AM [vite] (client) hmr update /src/index.css, /src/App.tsx
+7:38:13 AM [vite] (client) page reload scripts/verifyOcctTopologyPayload.ts
+7:38:13 AM [vite] (client) page reload scripts/verifyOcctNativeWrapper.ts
+7:38:57 AM [vite] (client) page reload scripts/verifyOcctNativeWrapper.ts
+7:39:58 AM [vite] (client) page reload docs/OCCT_NATIVE_TOPOLOGY_PLAN.md
+7:40:32 AM [vite] (client) hmr update /src/index.css, /src/App.tsx
+8:11:52 AM [vite] (client) hmr update /src/index.css, /src/App.tsx
+8:12:37 AM [vite] (client) page reload src/utils/pmiTopologyReferences.ts
+8:12:37 AM [vite] (client) hmr update /src/App.tsx, /src/index.css
+8:16:14 AM [vite] (client) hmr update /src/index.css, /src/App.tsx
+8:16:31 AM [vite] (client) page reload scripts/verifyPmiTopologyReferences.ts
+8:18:22 AM [vite] (client) hmr update /src/index.css, /src/App.tsx
+8:18:22 AM [vite] (client) page reload scripts/verifyPmiTopologyReferences.ts
+8:18:59 AM [vite] (client) page reload docs/OCCT_NATIVE_TOPOLOGY_PLAN.md
+8:19:11 AM [vite] (client) page reload scripts/verifyPmiTopologyReferences.ts
+9:05:35 AM [vite] (client) hmr update /src/index.css, /src/App.tsx
+9:09:54 AM [vite] (client) page reload docs/OCCT_NATIVE_TOPOLOGY_PLAN.md
+11:58:03 AM [vite] (client) hmr update /src/index.css, /src/App.tsx
+11:59:01 AM [vite] (client) hmr update /src/index.css, /src/App.tsx
