@@ -1,0 +1,630 @@
+[
+  {
+    "fileName": "nist_ctc_01_asme1_ap242-e1.stp",
+    "status": "ok",
+    "schema": "AP242",
+    "geometryTopologySource": "occt",
+    "graphVersion": 1,
+    "graph": "nist_ctc_01_asme1_ap242-e1.graph.json",
+    "summary": "nist_ctc_01_asme1_ap242-e1.graph.md",
+    "nodeCounts": {
+      "Datum": 3,
+      "DatumReferenceFrame": 7,
+      "Dimension": 8,
+      "Edge": 318,
+      "Face": 117,
+      "GeometricTolerance": 6,
+      "Vertex": 206
+    },
+    "edgeCounts": {
+      "adjacency": 318,
+      "component": 15,
+      "datum-reference": 15,
+      "incidence": 1272,
+      "pmi-topology": 58
+    },
+    "pmiReferenceResolutionCounts": {
+      "resolved": 58
+    },
+    "adjacencyConvexityCounts": {
+      "concave": 4,
+      "convex": 220,
+      "flat": 94
+    },
+    "nonManifoldEdgeCount": 0,
+    "indifferminateConvexityCount": 0,
+    "normalOrientation": "outward"
+  },
+  {
+    "fileName": "nist_ctc_02_asme1_ap242-e2.stp",
+    "status": "ok",
+    "schema": "AP242",
+    "geometryTopologySource": "occt",
+    "graphVersion": 1,
+    "graph": "nist_ctc_02_asme1_ap242-e2.graph.json",
+    "summary": "nist_ctc_02_asme1_ap242-e2.graph.md",
+    "nodeCounts": {
+      "Datum": 10,
+      "DatumReferenceFrame": 34,
+      "DatumTarget": 9,
+      "Dimension": 7,
+      "Edge": 1410,
+      "Face": 635,
+      "GeometricTolerance": 22,
+      "Vertex": 870
+    },
+    "edgeCounts": {
+      "adjacency": 1410,
+      "component": 86,
+      "datum-reference": 86,
+      "datum-target-parent": 9,
+      "dimension-attachment": 7,
+      "incidence": 5640,
+      "pmi-topology": 283
+    },
+    "pmiReferenceResolutionCounts": {
+      "missing": 84,
+      "resolved": 199
+    },
+    "adjacencyConvexityCounts": {
+      "concave": 438,
+      "convex": 439,
+      "flat": 425,
+      "indeterminate": 108
+    },
+    "nonManifoldEdgeCount": 0,
+    "indifferminateConvexityCount": 108,
+    "normalOrientation": "outward"
+  },
+  {
+    "fileName": "nist_ctc_03_asme1_ap242-e2.stp",
+    "status": "ok",
+    "schema": "AP242",
+    "geometryTopologySource": "occt",
+    "graphVersion": 1,
+    "graph": "nist_ctc_03_asme1_ap242-e2.graph.json",
+    "summary": "nist_ctc_03_asme1_ap242-e2.graph.md",
+    "nodeCounts": {
+      "Datum": 6,
+      "DatumReferenceFrame": 17,
+      "Dimension": 9,
+      "Edge": 354,
+      "Face": 120,
+      "GeometricTolerance": 13,
+      "Vertex": 236
+    },
+    "edgeCounts": {
+      "adjacency": 354,
+      "component": 39,
+      "datum-reference": 39,
+      "dimension-attachment": 9,
+      "incidence": 1416,
+      "pmi-topology": 137
+    },
+    "pmiReferenceResolutionCounts": {
+      "resolved": 137
+    },
+    "adjacencyConvexityCounts": {
+      "concave": 7,
+      "convex": 258,
+      "flat": 86,
+      "indeterminate": 3
+    },
+    "nonManifoldEdgeCount": 0,
+    "indifferminateConvexityCount": 3,
+    "normalOrientation": "outward"
+  },
+  {
+    "fileName": "nist_ctc_04_asme1_ap242-e1.stp",
+    "status": "ok",
+    "schema": "AP242",
+    "geometryTopologySource": "occt",
+    "graphVersion": 1,
+    "graph": "nist_ctc_04_asme1_ap242-e1.graph.json",
+    "summary": "nist_ctc_04_asme1_ap242-e1.graph.md",
+    "nodeCounts": {
+      "Datum": 8,
+      "DatumReferenceFrame": 12,
+      "Dimension": 7,
+      "Edge": 1108,
+      "Face": 483,
+      "GeometricTolerance": 9,
+      "Vertex": 662
+    },
+    "edgeCounts": {
+      "adjacency": 1108,
+      "component": 30,
+      "datum-reference": 30,
+      "dimension-attachment": 2,
+      "incidence": 4432,
+      "pmi-topology": 349
+    },
+    "pmiReferenceResolutionCounts": {
+      "missing": 4,
+      "resolved": 345
+    },
+    "adjacencyConvexityCounts": {
+      "concave": 290,
+      "convex": 479,
+      "flat": 275,
+      "indeterminate": 64
+    },
+    "nonManifoldEdgeCount": 0,
+    "indifferminateConvexityCount": 64,
+    "normalOrientation": "outward"
+  },
+  {
+    "fileName": "nist_ctc_05_asme1_ap242-e1.stp",
+    "status": "ok",
+    "schema": "AP242",
+    "geometryTopologySource": "occt",
+    "graphVersion": 1,
+    "graph": "nist_ctc_05_asme1_ap242-e1.graph.json",
+    "summary": "nist_ctc_05_asme1_ap242-e1.graph.md",
+    "nodeCounts": {
+      "Datum": 4,
+      "DatumReferenceFrame": 13,
+      "DatumTarget": 2,
+      "Dimension": 4,
+      "Edge": 387,
+      "Face": 156,
+      "GeometricTolerance": 10,
+      "Vertex": 258
+    },
+    "edgeCounts": {
+      "adjacency": 340,
+      "component": 17,
+      "datum-reference": 17,
+      "datum-target-parent": 2,
+      "dimension-attachment": 1,
+      "incidence": 1441,
+      "pmi-topology": 44
+    },
+    "pmiReferenceResolutionCounts": {
+      "missing": 17,
+      "resolved": 27
+    },
+    "adjacencyConvexityCounts": {
+      "concave": 110,
+      "convex": 160,
+      "flat": 60,
+      "indeterminate": 10
+    },
+    "nonManifoldEdgeCount": 0,
+    "indifferminateConvexityCount": 10,
+    "normalOrientation": "outward"
+  },
+  {
+    "fileName": "nist_ftc_06_asme1_ap242-e2.stp",
+    "status": "ok",
+    "schema": "AP242",
+    "geometryTopologySource": "occt",
+    "graphVersion": 1,
+    "graph": "nist_ftc_06_asme1_ap242-e2.graph.json",
+    "summary": "nist_ftc_06_asme1_ap242-e2.graph.md",
+    "nodeCounts": {
+      "Datum": 10,
+      "DatumReferenceFrame": 37,
+      "DatumTarget": 6,
+      "Dimension": 17,
+      "Edge": 476,
+      "Face": 187,
+      "GeometricTolerance": 32,
+      "Vertex": 310
+    },
+    "edgeCounts": {
+      "adjacency": 476,
+      "component": 87,
+      "datum-reference": 87,
+      "datum-target-parent": 6,
+      "dimension-attachment": 12,
+      "incidence": 1904,
+      "pmi-topology": 341
+    },
+    "pmiReferenceResolutionCounts": {
+      "missing": 41,
+      "resolved": 300
+    },
+    "adjacencyConvexityCounts": {
+      "concave": 148,
+      "convex": 196,
+      "flat": 108,
+      "indeterminate": 24
+    },
+    "nonManifoldEdgeCount": 0,
+    "indifferminateConvexityCount": 24,
+    "normalOrientation": "outward"
+  },
+  {
+    "fileName": "nist_ftc_07_asme1_ap242-e2.stp",
+    "status": "ok",
+    "schema": "AP242",
+    "geometryTopologySource": "occt",
+    "graphVersion": 1,
+    "graph": "nist_ftc_07_asme1_ap242-e2.graph.json",
+    "summary": "nist_ftc_07_asme1_ap242-e2.graph.md",
+    "nodeCounts": {
+      "Datum": 5,
+      "DatumReferenceFrame": 30,
+      "Dimension": 10,
+      "Edge": 880,
+      "Face": 304,
+      "GeometricTolerance": 33,
+      "Vertex": 582
+    },
+    "edgeCounts": {
+      "adjacency": 865,
+      "component": 74,
+      "datum-reference": 74,
+      "dimension-attachment": 12,
+      "incidence": 3490,
+      "pmi-topology": 391
+    },
+    "pmiReferenceResolutionCounts": {
+      "missing": 1,
+      "resolved": 390
+    },
+    "adjacencyConvexityCounts": {
+      "concave": 348,
+      "convex": 278,
+      "flat": 129,
+      "indeterminate": 110
+    },
+    "nonManifoldEdgeCount": 0,
+    "indifferminateConvexityCount": 110,
+    "normalOrientation": "outward"
+  },
+  {
+    "fileName": "nist_ftc_08_asme1_ap242-e1-tg.stp",
+    "status": "no-geometry",
+    "reason": "no-renderable-geometry-in-step-file"
+  },
+  {
+    "fileName": "nist_ftc_08_asme1_ap242-e2.stp",
+    "status": "ok",
+    "schema": "AP242",
+    "geometryTopologySource": "occt",
+    "graphVersion": 1,
+    "graph": "nist_ftc_08_asme1_ap242-e2.graph.json",
+    "summary": "nist_ftc_08_asme1_ap242-e2.graph.md",
+    "nodeCounts": {
+      "Datum": 11,
+      "DatumReferenceFrame": 39,
+      "Dimension": 10,
+      "Edge": 640,
+      "Face": 247,
+      "GeometricTolerance": 39,
+      "Vertex": 400
+    },
+    "edgeCounts": {
+      "adjacency": 620,
+      "component": 97,
+      "datum-reference": 97,
+      "dimension-attachment": 15,
+      "incidence": 2504,
+      "pmi-topology": 258
+    },
+    "pmiReferenceResolutionCounts": {
+      "resolved": 258
+    },
+    "adjacencyConvexityCounts": {
+      "concave": 86,
+      "convex": 287,
+      "flat": 192,
+      "indeterminate": 55
+    },
+    "nonManifoldEdgeCount": 0,
+    "indifferminateConvexityCount": 55,
+    "normalOrientation": "outward"
+  },
+  {
+    "fileName": "nist_ftc_09_asme1_ap242-e1.stp",
+    "status": "ok",
+    "schema": "AP242",
+    "geometryTopologySource": "occt",
+    "graphVersion": 1,
+    "graph": "nist_ftc_09_asme1_ap242-e1.graph.json",
+    "summary": "nist_ftc_09_asme1_ap242-e1.graph.md",
+    "nodeCounts": {
+      "Datum": 8,
+      "DatumReferenceFrame": 38,
+      "Dimension": 20,
+      "Edge": 474,
+      "Face": 163,
+      "GeometricTolerance": 33,
+      "Vertex": 320
+    },
+    "edgeCounts": {
+      "adjacency": 454,
+      "component": 96,
+      "datum-reference": 96,
+      "dimension-attachment": 25,
+      "incidence": 1876,
+      "pmi-topology": 421
+    },
+    "pmiReferenceResolutionCounts": {
+      "resolved": 421
+    },
+    "adjacencyConvexityCounts": {
+      "concave": 19,
+      "convex": 292,
+      "flat": 100,
+      "indeterminate": 43
+    },
+    "nonManifoldEdgeCount": 0,
+    "indifferminateConvexityCount": 43,
+    "normalOrientation": "outward"
+  },
+  {
+    "fileName": "nist_ftc_10_asme1_ap242-e2.stp",
+    "status": "ok",
+    "schema": "AP242",
+    "geometryTopologySource": "occt",
+    "graphVersion": 1,
+    "graph": "nist_ftc_10_asme1_ap242-e2.graph.json",
+    "summary": "nist_ftc_10_asme1_ap242-e2.graph.md",
+    "nodeCounts": {
+      "Datum": 11,
+      "DatumReferenceFrame": 48,
+      "DatumTarget": 4,
+      "Dimension": 18,
+      "Edge": 799,
+      "Face": 264,
+      "GeometricTolerance": 43,
+      "Vertex": 560
+    },
+    "edgeCounts": {
+      "adjacency": 799,
+      "component": 118,
+      "datum-reference": 118,
+      "datum-target-parent": 4,
+      "dimension-attachment": 20,
+      "incidence": 3196,
+      "pmi-topology": 516
+    },
+    "pmiReferenceResolutionCounts": {
+      "missing": 43,
+      "resolved": 473
+    },
+    "adjacencyConvexityCounts": {
+      "concave": 110,
+      "convex": 451,
+      "flat": 184,
+      "indeterminate": 54
+    },
+    "nonManifoldEdgeCount": 0,
+    "indifferminateConvexityCount": 54,
+    "normalOrientation": "outward"
+  },
+  {
+    "fileName": "nist_ftc_11_asme1_ap242-e2.stp",
+    "status": "ok",
+    "schema": "AP242",
+    "geometryTopologySource": "occt",
+    "graphVersion": 1,
+    "graph": "nist_ftc_11_asme1_ap242-e2.graph.json",
+    "summary": "nist_ftc_11_asme1_ap242-e2.graph.md",
+    "nodeCounts": {
+      "Datum": 2,
+      "DatumReferenceFrame": 3,
+      "Dimension": 6,
+      "Edge": 112,
+      "Face": 42,
+      "GeometricTolerance": 4,
+      "Vertex": 74
+    },
+    "edgeCounts": {
+      "adjacency": 106,
+      "component": 6,
+      "datum-reference": 6,
+      "dimension-attachment": 3,
+      "incidence": 436,
+      "pmi-topology": 21
+    },
+    "pmiReferenceResolutionCounts": {
+      "resolved": 21
+    },
+    "adjacencyConvexityCounts": {
+      "concave": 48,
+      "convex": 41,
+      "flat": 12,
+      "indeterminate": 5
+    },
+    "nonManifoldEdgeCount": 0,
+    "indifferminateConvexityCount": 5,
+    "normalOrientation": "outward"
+  },
+  {
+    "fileName": "nist_stc_06_asme1_ap242-e3.stp",
+    "status": "ok",
+    "schema": "AP242",
+    "geometryTopologySource": "occt",
+    "graphVersion": 1,
+    "graph": "nist_stc_06_asme1_ap242-e3.graph.json",
+    "summary": "nist_stc_06_asme1_ap242-e3.graph.md",
+    "nodeCounts": {
+      "Datum": 6,
+      "DatumReferenceFrame": 31,
+      "Dimension": 11,
+      "Edge": 363,
+      "Face": 144,
+      "GeometricTolerance": 29,
+      "Vertex": 240
+    },
+    "edgeCounts": {
+      "adjacency": 320,
+      "component": 70,
+      "datum-reference": 70,
+      "dimension-attachment": 10,
+      "incidence": 1354,
+      "pmi-topology": 220
+    },
+    "pmiReferenceResolutionCounts": {
+      "resolved": 220
+    },
+    "adjacencyConvexityCounts": {
+      "concave": 69,
+      "convex": 153,
+      "flat": 83,
+      "indeterminate": 15
+    },
+    "nonManifoldEdgeCount": 0,
+    "indifferminateConvexityCount": 15,
+    "normalOrientation": "outward"
+  },
+  {
+    "fileName": "nist_stc_07_asme1_ap242-e3.stp",
+    "status": "occt-import-failed",
+    "reason": "Open Cascade WebAssembly failed to initialize. Ensure network connectivity to the CDN."
+  },
+  {
+    "fileName": "nist_stc_08_asme1_ap242-e3.stp",
+    "status": "ok",
+    "schema": "AP242",
+    "geometryTopologySource": "occt",
+    "graphVersion": 1,
+    "graph": "nist_stc_08_asme1_ap242-e3.graph.json",
+    "summary": "nist_stc_08_asme1_ap242-e3.graph.md",
+    "nodeCounts": {
+      "Datum": 8,
+      "DatumReferenceFrame": 36,
+      "Dimension": 7,
+      "Edge": 705,
+      "Face": 270,
+      "GeometricTolerance": 34,
+      "Vertex": 442
+    },
+    "edgeCounts": {
+      "adjacency": 705,
+      "component": 86,
+      "datum-reference": 86,
+      "dimension-attachment": 10,
+      "incidence": 2820,
+      "pmi-topology": 436
+    },
+    "pmiReferenceResolutionCounts": {
+      "missing": 2,
+      "resolved": 434
+    },
+    "adjacencyConvexityCounts": {
+      "concave": 94,
+      "convex": 294,
+      "flat": 235,
+      "indeterminate": 82
+    },
+    "nonManifoldEdgeCount": 0,
+    "indifferminateConvexityCount": 82,
+    "normalOrientation": "outward"
+  },
+  {
+    "fileName": "nist_stc_09_asme1_ap242-e3.stp",
+    "status": "ok",
+    "schema": "AP242",
+    "geometryTopologySource": "occt",
+    "graphVersion": 1,
+    "graph": "nist_stc_09_asme1_ap242-e3.graph.json",
+    "summary": "nist_stc_09_asme1_ap242-e3.graph.md",
+    "nodeCounts": {
+      "Datum": 8,
+      "DatumReferenceFrame": 34,
+      "Dimension": 19,
+      "Edge": 392,
+      "Face": 125,
+      "GeometricTolerance": 29,
+      "Vertex": 271
+    },
+    "edgeCounts": {
+      "adjacency": 359,
+      "component": 84,
+      "datum-reference": 84,
+      "dimension-attachment": 22,
+      "incidence": 1506,
+      "pmi-topology": 262
+    },
+    "pmiReferenceResolutionCounts": {
+      "missing": 2,
+      "resolved": 260
+    },
+    "adjacencyConvexityCounts": {
+      "concave": 10,
+      "convex": 248,
+      "flat": 46,
+      "indeterminate": 55
+    },
+    "nonManifoldEdgeCount": 0,
+    "indifferminateConvexityCount": 55,
+    "normalOrientation": "outward"
+  },
+  {
+    "fileName": "nist_stc_10_asme1_ap242-e2.stp",
+    "status": "ok",
+    "schema": "AP242",
+    "geometryTopologySource": "occt",
+    "graphVersion": 1,
+    "graph": "nist_stc_10_asme1_ap242-e2.graph.json",
+    "summary": "nist_stc_10_asme1_ap242-e2.graph.md",
+    "nodeCounts": {
+      "Datum": 9,
+      "DatumReferenceFrame": 45,
+      "Dimension": 22,
+      "Edge": 617,
+      "Face": 256,
+      "GeometricTolerance": 40,
+      "Vertex": 388
+    },
+    "edgeCounts": {
+      "adjacency": 563,
+      "component": 109,
+      "datum-reference": 109,
+      "dimension-attachment": 19,
+      "incidence": 2338,
+      "pmi-topology": 353
+    },
+    "pmiReferenceResolutionCounts": {
+      "missing": 15,
+      "resolved": 338
+    },
+    "adjacencyConvexityCounts": {
+      "concave": 106,
+      "convex": 232,
+      "flat": 136,
+      "indeterminate": 89
+    },
+    "nonManifoldEdgeCount": 0,
+    "indifferminateConvexityCount": 89,
+    "normalOrientation": "outward"
+  },
+  {
+    "fileName": "nist_ctc_01_asme1_ap203.stp",
+    "status": "ok",
+    "schema": "AP203",
+    "geometryTopologySource": "occt",
+    "graphVersion": 1,
+    "graph": "nist_ctc_01_asme1_ap203.graph.json",
+    "summary": "nist_ctc_01_asme1_ap203.graph.md",
+    "nodeCounts": {
+      "Datum": 3,
+      "Dimension": 14,
+      "Edge": 388,
+      "Face": 139,
+      "Vertex": 256
+    },
+    "edgeCounts": {
+      "adjacency": 376,
+      "incidence": 1526,
+      "pmi-topology": 17
+    },
+    "pmiReferenceResolutionCounts": {
+      "resolved": 17
+    },
+    "adjacencyConvexityCounts": {
+      "concave": 62,
+      "convex": 223,
+      "flat": 80,
+      "indeterminate": 11
+    },
+    "nonManifoldEdgeCount": 0,
+    "indifferminateConvexityCount": 11,
+    "normalOrientation": "outward"
+  }
+]
