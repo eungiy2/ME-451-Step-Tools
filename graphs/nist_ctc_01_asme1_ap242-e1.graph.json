@@ -47,7 +47,7 @@
       "resolved": 58
     },
     "nonManifoldEdgeCount": 0,
-    "indifferminateConvexityCount": 0,
+    "indeterminateConvexityCount": 0,
     "signedMeshVolume": 14644889.025299,
     "normalOrientation": "outward"
   },
@@ -20792,7 +20792,6 @@
         43.265406,
         0
       ],
-      "clinicalContext": "Primary osteotomy reference landing plane ensuring completely flush contact. Restricts 3 degrees of freedom.",
       "unresolvedTargetStepEntityIds": [],
       "ambiguousTargetStepEntityIds": []
     },
@@ -20862,7 +20861,6 @@
         -284.771761,
         0.023653
       ],
-      "clinicalContext": "Secondary alignment datum features; locks double lateral translations to prevent side-to-side skeletal translation.",
       "unresolvedTargetStepEntityIds": [],
       "ambiguousTargetStepEntityIds": []
     },
@@ -20932,7 +20930,6 @@
         -269.283875,
         -0.101403
       ],
-      "clinicalContext": "Secondary alignment datum features; locks double lateral translations to prevent side-to-side skeletal translation.",
       "unresolvedTargetStepEntityIds": [],
       "ambiguousTargetStepEntityIds": []
     },
@@ -20980,7 +20977,6 @@
         "slotRadiusNominal": null,
         "slotRadiusModel": null
       },
-      "clinicalContext": "Critical PMI diameter tolerance with mm limits resolved from AP242 PLUS_MINUS_TOLERANCE and TOLERANCE_VALUE relationships.",
       "unresolvedTargetStepEntityIds": [],
       "ambiguousTargetStepEntityIds": []
     },
@@ -21028,7 +21024,6 @@
         "slotRadiusNominal": null,
         "slotRadiusModel": null
       },
-      "clinicalContext": "Critical PMI diameter tolerance with mm limits resolved from AP242 PLUS_MINUS_TOLERANCE and TOLERANCE_VALUE relationships.",
       "unresolvedTargetStepEntityIds": [],
       "ambiguousTargetStepEntityIds": []
     },
@@ -21076,7 +21071,6 @@
         "slotRadiusNominal": null,
         "slotRadiusModel": null
       },
-      "clinicalContext": "Critical PMI diameter tolerance with mm limits resolved from AP242 PLUS_MINUS_TOLERANCE and TOLERANCE_VALUE relationships.",
       "unresolvedTargetStepEntityIds": [],
       "ambiguousTargetStepEntityIds": []
     },
@@ -21124,7 +21118,6 @@
         "slotRadiusNominal": null,
         "slotRadiusModel": null
       },
-      "clinicalContext": "Critical PMI diameter tolerance with mm limits resolved from AP242 PLUS_MINUS_TOLERANCE and TOLERANCE_VALUE relationships.",
       "unresolvedTargetStepEntityIds": [],
       "ambiguousTargetStepEntityIds": []
     },
@@ -21172,7 +21165,6 @@
         "slotRadiusNominal": null,
         "slotRadiusModel": null
       },
-      "clinicalContext": "Critical PMI angular tolerance with deg limits resolved from AP242 PLUS_MINUS_TOLERANCE and TOLERANCE_VALUE relationships.",
       "unresolvedTargetStepEntityIds": [],
       "ambiguousTargetStepEntityIds": []
     },
@@ -21220,7 +21212,6 @@
         "slotRadiusNominal": null,
         "slotRadiusModel": null
       },
-      "clinicalContext": "Critical PMI diameter tolerance with mm limits resolved from AP242 PLUS_MINUS_TOLERANCE and TOLERANCE_VALUE relationships.",
       "unresolvedTargetStepEntityIds": [],
       "ambiguousTargetStepEntityIds": []
     },
@@ -21268,7 +21259,6 @@
         "slotRadiusNominal": null,
         "slotRadiusModel": null
       },
-      "clinicalContext": "Critical PMI diameter tolerance with mm LSL/USL limits resolved from AP242 dimensional characteristic representation.",
       "unresolvedTargetStepEntityIds": [],
       "ambiguousTargetStepEntityIds": []
     },
@@ -21316,7 +21306,6 @@
         "slotRadiusNominal": null,
         "slotRadiusModel": null
       },
-      "clinicalContext": "Critical PMI diameter tolerance with mm LSL/USL limits resolved from AP242 dimensional characteristic representation.",
       "unresolvedTargetStepEntityIds": [],
       "ambiguousTargetStepEntityIds": []
     },
@@ -21351,7 +21340,6 @@
         "B",
         "C"
       ],
-      "clinicalContext": "Controls the location of a feature relative to the datum reference frame.",
       "unresolvedTargetStepEntityIds": [],
       "ambiguousTargetStepEntityIds": []
     },
@@ -21386,7 +21374,6 @@
         "B",
         "C"
       ],
-      "clinicalContext": "Controls the location of a feature relative to the datum reference frame.",
       "unresolvedTargetStepEntityIds": [],
       "ambiguousTargetStepEntityIds": []
     },
@@ -21421,7 +21408,6 @@
         "B",
         "C"
       ],
-      "clinicalContext": "Controls a three-dimensional surface boundary for fit and clearance.",
       "unresolvedTargetStepEntityIds": [],
       "ambiguousTargetStepEntityIds": []
     },
@@ -21458,7 +21444,6 @@
       "datumReferenceOrder": [
         "A"
       ],
-      "clinicalContext": "Controls a three-dimensional surface boundary for fit and clearance.",
       "unresolvedTargetStepEntityIds": [],
       "ambiguousTargetStepEntityIds": []
     },
@@ -21490,7 +21475,6 @@
       "datumReferenceOrder": [
         "A"
       ],
-      "clinicalContext": "Controls right-angle orientation to the referenced datum frame.",
       "unresolvedTargetStepEntityIds": [],
       "ambiguousTargetStepEntityIds": []
     },
@@ -21520,7 +21504,6 @@
       "datumReferenceFrameLabel": null,
       "datumReferenceFrameEntityId": null,
       "datumReferenceOrder": [],
-      "clinicalContext": "Assures a controlled flat contact surface and prevents local high spots.",
       "unresolvedTargetStepEntityIds": [],
       "ambiguousTargetStepEntityIds": []
     },

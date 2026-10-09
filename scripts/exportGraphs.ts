@@ -152,7 +152,7 @@ for (const fixturePath of fixtures) {
     pmiReferenceResolutionCounts: statistics.pmiReferenceResolutionCounts,
     adjacencyConvexityCounts: statistics.adjacencyConvexityCounts,
     nonManifoldEdgeCount: statistics.nonManifoldEdgeCount,
-    indifferminateConvexityCount: statistics.indifferminateConvexityCount,
+    indeterminateConvexityCount: statistics.indeterminateConvexityCount,
     normalOrientation: statistics.normalOrientation,
   });
 

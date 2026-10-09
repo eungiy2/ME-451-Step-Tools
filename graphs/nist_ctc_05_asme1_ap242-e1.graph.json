@@ -56,7 +56,7 @@
       "resolved": 27
     },
     "nonManifoldEdgeCount": 0,
-    "indifferminateConvexityCount": 10,
+    "indeterminateConvexityCount": 10,
     "signedMeshVolume": 12692135.67402,
     "normalOrientation": "outward"
   },
@@ -25782,7 +25782,6 @@
         }
       ],
       "presentationTargetPoint": null,
-      "clinicalContext": "Datum is established by datum targets rather than an explicit datum feature surface in the STEP presentation PMI.",
       "unresolvedTargetStepEntityIds": [
         "#3551"
       ],
@@ -25828,7 +25827,6 @@
         }
       ],
       "presentationTargetPoint": null,
-      "clinicalContext": "Datum is established by datum targets rather than an explicit datum feature surface in the STEP presentation PMI.",
       "unresolvedTargetStepEntityIds": [
         "#3552"
       ],
@@ -25878,7 +25876,6 @@
         2.36355,
         16.531925
       ],
-      "clinicalContext": "Secondary alignment datum features; locks double lateral translations to prevent side-to-side skeletal translation.",
       "unresolvedTargetStepEntityIds": [],
       "ambiguousTargetStepEntityIds": []
     },
@@ -25926,7 +25923,6 @@
         6.027343,
         -16.291911
       ],
-      "clinicalContext": "Secondary alignment datum features; locks double lateral translations to prevent side-to-side skeletal translation.",
       "unresolvedTargetStepEntityIds": [],
       "ambiguousTargetStepEntityIds": []
     },
@@ -25969,7 +25965,6 @@
           0
         ]
       },
-      "clinicalContext": "Datum target resolved from semantic PMI datum_target or placed_datum_target_feature relationships.",
       "unresolvedTargetStepEntityIds": [
         "#3551"
       ],
@@ -26014,7 +26009,6 @@
           0
         ]
       },
-      "clinicalContext": "Datum target resolved from semantic PMI datum_target or placed_datum_target_feature relationships.",
       "unresolvedTargetStepEntityIds": [
         "#3552"
       ],
@@ -26064,7 +26058,6 @@
         "slotRadiusNominal": null,
         "slotRadiusModel": null
       },
-      "clinicalContext": "Critical PMI linear tolerance with mm limits resolved from AP242 PLUS_MINUS_TOLERANCE and TOLERANCE_VALUE relationships.",
       "unresolvedTargetStepEntityIds": [],
       "ambiguousTargetStepEntityIds": []
     },
@@ -26111,7 +26104,6 @@
         "slotRadiusNominal": null,
         "slotRadiusModel": null
       },
-      "clinicalContext": "Critical PMI diameter tolerance with mm limits resolved from AP242 PLUS_MINUS_TOLERANCE and TOLERANCE_VALUE relationships.",
       "unresolvedTargetStepEntityIds": [],
       "ambiguousTargetStepEntityIds": []
     },
@@ -26161,7 +26153,6 @@
         "slotRadiusNominal": null,
         "slotRadiusModel": null
       },
-      "clinicalContext": "Basic PMI linear annotation with nominal mm value resolved from AP242 theoretical dimensional note.",
       "unresolvedTargetStepEntityIds": [
         "#1006",
         "#1007",
@@ -26216,7 +26207,6 @@
         "slotRadiusNominal": null,
         "slotRadiusModel": null
       },
-      "clinicalContext": "Basic PMI linear annotation with nominal mm value resolved from AP242 theoretical dimensional note.",
       "unresolvedTargetStepEntityIds": [
         "#1012",
         "#1013",
@@ -26254,7 +26244,6 @@
         "A",
         "B"
       ],
-      "clinicalContext": "Controls circular variation around an established datum axis.",
       "unresolvedTargetStepEntityIds": [],
       "ambiguousTargetStepEntityIds": []
     },
@@ -26287,7 +26276,6 @@
         "A",
         "B"
       ],
-      "clinicalContext": "Controls circular variation around an established datum axis.",
       "unresolvedTargetStepEntityIds": [],
       "ambiguousTargetStepEntityIds": []
     },
@@ -26320,7 +26308,6 @@
         "A",
         "B"
       ],
-      "clinicalContext": "Controls circular variation around an established datum axis.",
       "unresolvedTargetStepEntityIds": [],
       "ambiguousTargetStepEntityIds": []
     },
@@ -26352,7 +26339,6 @@
       "datumReferenceOrder": [
         "C"
       ],
-      "clinicalContext": "Controls right-angle orientation to the referenced datum frame.",
       "unresolvedTargetStepEntityIds": [],
       "ambiguousTargetStepEntityIds": []
     },
@@ -26384,7 +26370,6 @@
       "datumReferenceOrder": [
         "D"
       ],
-      "clinicalContext": "Controls right-angle orientation to the referenced datum frame.",
       "unresolvedTargetStepEntityIds": [],
       "ambiguousTargetStepEntityIds": []
     },
@@ -26414,7 +26399,6 @@
       "datumReferenceFrameLabel": null,
       "datumReferenceFrameEntityId": null,
       "datumReferenceOrder": [],
-      "clinicalContext": "Controls straight-line form of a surface element or axis.",
       "unresolvedTargetStepEntityIds": [
         "#3891"
       ],
@@ -26448,7 +26432,6 @@
       "datumReferenceOrder": [
         "A"
       ],
-      "clinicalContext": "Controls median point alignment around a common axis.",
       "unresolvedTargetStepEntityIds": [],
       "ambiguousTargetStepEntityIds": []
     },
@@ -26478,7 +26461,6 @@
       "datumReferenceFrameLabel": null,
       "datumReferenceFrameEntityId": null,
       "datumReferenceOrder": [],
-      "clinicalContext": "Controls circular form independently of feature location.",
       "unresolvedTargetStepEntityIds": [],
       "ambiguousTargetStepEntityIds": []
     },
@@ -26510,7 +26492,6 @@
       "datumReferenceOrder": [
         "A"
       ],
-      "clinicalContext": "Controls cumulative surface variation during full rotation about a datum axis.",
       "unresolvedTargetStepEntityIds": [],
       "ambiguousTargetStepEntityIds": []
     },
@@ -26542,7 +26523,6 @@
       "datumReferenceOrder": [
         "B"
       ],
-      "clinicalContext": "Controls cumulative surface variation during full rotation about a datum axis.",
       "unresolvedTargetStepEntityIds": [],
       "ambiguousTargetStepEntityIds": []
     },

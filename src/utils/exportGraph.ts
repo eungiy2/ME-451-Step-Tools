@@ -239,7 +239,6 @@ export interface GraphDatumNode extends GraphNodeBase {
     xDirection: Vec3 | null;
   }>;
   presentationTargetPoint: Vec3 | null;
-  clinicalContext: string;
   unresolvedTargetStepEntityIds: string[];
   ambiguousTargetStepEntityIds: string[];
 }
@@ -258,7 +257,6 @@ export interface GraphDatumTargetNode extends GraphNodeBase {
   targetCircle: { diameter: number; center: Vec3; normal: Vec3; radius: number } | null;
   targetCurvePointCount: number;
   targetZone: { shape: string; width: number; length: number; center: Vec3; normal: Vec3 } | null;
-  clinicalContext: string;
   unresolvedTargetStepEntityIds: string[];
   ambiguousTargetStepEntityIds: string[];
 }
@@ -309,7 +307,6 @@ export interface GraphDimensionNode extends GraphNodeBase {
     slotRadiusNominal: number | null;
     slotRadiusModel: number | null;
   };
-  clinicalContext: string;
   unresolvedTargetStepEntityIds: string[];
   ambiguousTargetStepEntityIds: string[];
 }
@@ -339,7 +336,6 @@ export interface GraphGeometricToleranceNode extends GraphNodeBase {
   datumReferenceFrameLabel: string | null;
   datumReferenceFrameEntityId: string | null;
   datumReferenceOrder: string[];
-  clinicalContext: string;
   unresolvedTargetStepEntityIds: string[];
   ambiguousTargetStepEntityIds: string[];
 }
@@ -494,7 +490,7 @@ export interface GraphStatistics {
   adjacencyConvexityCounts: Record<string, number>;
   pmiReferenceResolutionCounts: Record<string, number>;
   nonManifoldEdgeCount: number;
-  indifferminateConvexityCount: number;
+  indeterminateConvexityCount: number;
   signedMeshVolume: number;
   normalOrientation: "outward" | "inward" | "indeterminate";
 }
@@ -1744,7 +1740,6 @@ const buildDatumNode = (
     targetSource: datum.targetSource ?? null,
     surfaceGeometry: buildSurfaceGeometryNodes(datum.surfaceGeometry),
     presentationTargetPoint: roundVecOrNull(datum.presentationTargetPoint),
-    clinicalContext: datum.clinicalContext,
     unresolvedTargetStepEntityIds: stats.unresolved,
     ambiguousTargetStepEntityIds: stats.ambiguous,
   };
@@ -1793,7 +1788,6 @@ const buildDatumTargetNode = (
           normal: roundVecOrNull(target.targetZone.normal) || [0, 0, 0],
         }
       : null,
-    clinicalContext: target.clinicalContext,
     unresolvedTargetStepEntityIds: stats.unresolved,
     ambiguousTargetStepEntityIds: stats.ambiguous,
   };
@@ -1879,7 +1873,6 @@ const buildDimensionNode = (
         }
       : null,
     compound: compoundInfo(tolerance),
-    clinicalContext: tolerance.clinicalContext,
     unresolvedTargetStepEntityIds: stats.unresolved,
     ambiguousTargetStepEntityIds: stats.ambiguous,
   };
@@ -1916,7 +1909,6 @@ const buildGeometricToleranceNode = (
     datumReferenceFrameLabel: tolerance.datumReferenceFrame?.label ?? null,
     datumReferenceFrameEntityId: tolerance.datumReferenceFrame?.entityId ?? null,
     datumReferenceOrder: datumOrder(tolerance.datumReferenceFrame),
-    clinicalContext: tolerance.clinicalContext,
     unresolvedTargetStepEntityIds: stats.unresolved,
     ambiguousTargetStepEntityIds: stats.ambiguous,
   };
@@ -2653,7 +2645,7 @@ export function exportGraph(input: ExportGraphInput): ExportGraphResult {
       adjacencyConvexityCounts: sortedRecord(adjacencyConvexityCounts),
       pmiReferenceResolutionCounts: sortedRecord(pmiReferenceResolutionCounts),
       nonManifoldEdgeCount,
-      indifferminateConvexityCount: adjacencyConvexityCounts.indeterminate || 0,
+      indeterminateConvexityCount: adjacencyConvexityCounts.indeterminate || 0,
       signedMeshVolume: round(signedVolume),
       normalOrientation,
     },
@@ -2900,7 +2892,7 @@ export function buildGraphSummary(graph: GraphDocument): string {
   });
   lines.push("");
   lines.push(`Non-manifold shared edges: ${graph.statistics.nonManifoldEdgeCount}`);
-  lines.push(`Indeterminate convexity decisions: ${graph.statistics.indifferminateConvexityCount}`);
+  lines.push(`Indeterminate convexity decisions: ${graph.statistics.indeterminateConvexityCount}`);
   lines.push("");
 
   lines.push("## PMI to topology resolution");

@@ -186,7 +186,6 @@ the FCF node that owns them (section 2.7).
 | `modifiers` | string[] | - | yes | Diameter symbol and similar qualifiers. |
 | `secondary` | object \| null | mm | yes | Second row of a stacked dimension. |
 | `compound` | object \| null | mixed | yes | `counterbore`, `countersink`, `slot`: hole size, depth, angle, slot radius. |
-| `clinicalContext` | string | - | yes | Parser rationale; kept verbatim as provenance. |
 | `unresolvedTargetStepEntityIds` | string[] | - | yes | Unresolved targets. |
 | `ambiguousTargetStepEntityIds` | string[] | - | yes | Ambiguous targets. |
 
@@ -211,7 +210,6 @@ A geometric tolerance and its tolerance *zone*.
 | `datumReferenceFrameLabel` | string \| null | - | yes | e.g. `A | B | C`. |
 | `datumReferenceFrameEntityId` | string \| null | - | yes | Links to the DRF node. |
 | `datumReferenceOrder` | string[] | - | yes | Convenience copy of the ordered datum list. |
-| `clinicalContext` | string | - | yes | Parser rationale. |
 | `unresolvedTargetStepEntityIds` | string[] | - | yes | Unresolved targets. |
 | `ambiguousTargetStepEntityIds` | string[] | - | yes | Ambiguous targets. |
 
@@ -463,7 +461,7 @@ resolution-limited rather than inconsistent:
 Denormalized counters so a consumer can triage a file without a full scan:
 `nodeCounts`, `edgeCounts`, `faceSurfaceTypeCounts`, `edgeCurveTypeCounts`,
 `adjacencyConvexityCounts`, `pmiReferenceResolutionCounts`,
-`nonManifoldEdgeCount`, `indifferminateConvexityCount`, `signedMeshVolume`,
+`nonManifoldEdgeCount`, `indeterminateConvexityCount`, `signedMeshVolume`,
 `normalOrientation`.
 
 `normalOrientation` is `outward`, `inward`, or `indeterminate`, derived from the
@@ -581,7 +579,6 @@ the old one in the next major bump.
     }
   ],
   "presentationTargetPoint": [-4.646957, 43.265406, 0],
-  "clinicalContext": "Primary osteotomy reference landing plane ensuring completely flush contact. Restricts 3 degrees of freedom.",
   "unresolvedTargetStepEntityIds": [],
   "ambiguousTargetStepEntityIds": []
 }
@@ -606,7 +603,6 @@ the old one in the next major bump.
   "targetCircle": null,
   "targetCurvePointCount": 65,
   "targetZone": null,
-  "clinicalContext": "Datum target resolved from semantic PMI datum_target or placed_datum_target_feature relationships.",
   "unresolvedTargetStepEntityIds": ["#2119", "#2120"],
   "ambiguousTargetStepEntityIds": []
 }
@@ -660,7 +656,6 @@ dropping the target or attaching it to a nearby face.
     "slotRadiusNominal": null,
     "slotRadiusModel": null
   },
-  "clinicalContext": "Counterbore callout 2X with pilot hole diameter 0.5625 mm, counterbore diameter 0.8125 mm, and depth 0.5 mm resolved from AP242 counterbored-hole feature, diameter, depth, and plus-minus tolerance relationships.",
   "unresolvedTargetStepEntityIds": [],
   "ambiguousTargetStepEntityIds": []
 }
@@ -688,7 +683,6 @@ dropping the target or attaching it to a nearby face.
   "datumReferenceFrameLabel": "A | B | C",
   "datumReferenceFrameEntityId": "#52",
   "datumReferenceOrder": ["A", "B", "C"],
-  "clinicalContext": "Controls the location of a feature relative to the datum reference frame.",
   "unresolvedTargetStepEntityIds": [],
   "ambiguousTargetStepEntityIds": []
 }

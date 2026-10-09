@@ -55,7 +55,7 @@
       "resolved": 199
     },
     "nonManifoldEdgeCount": 0,
-    "indifferminateConvexityCount": 115,
+    "indeterminateConvexityCount": 115,
     "signedMeshVolume": 47108810.615649,
     "normalOrientation": "outward"
   },
@@ -94134,7 +94134,6 @@
         }
       ],
       "presentationTargetPoint": null,
-      "clinicalContext": "Datum is established by datum targets rather than an explicit datum feature surface in the STEP presentation PMI.",
       "unresolvedTargetStepEntityIds": [
         "#20078"
       ],
@@ -94180,7 +94179,6 @@
         }
       ],
       "presentationTargetPoint": null,
-      "clinicalContext": "Datum is established by datum targets rather than an explicit datum feature surface in the STEP presentation PMI.",
       "unresolvedTargetStepEntityIds": [
         "#3148"
       ],
@@ -94230,7 +94228,6 @@
         -409.040384,
         5.085192
       ],
-      "clinicalContext": "Planar datum feature establishing a flat inspection reference surface.",
       "unresolvedTargetStepEntityIds": [],
       "ambiguousTargetStepEntityIds": []
     },
@@ -94300,7 +94297,6 @@
         -735.41991,
         0
       ],
-      "clinicalContext": "Secondary alignment datum features; locks double lateral translations to prevent side-to-side skeletal translation.",
       "unresolvedTargetStepEntityIds": [],
       "ambiguousTargetStepEntityIds": []
     },
@@ -94370,7 +94366,6 @@
         51.704946,
         0
       ],
-      "clinicalContext": "Secondary alignment datum features; locks double lateral translations to prevent side-to-side skeletal translation.",
       "unresolvedTargetStepEntityIds": [],
       "ambiguousTargetStepEntityIds": []
     },
@@ -94484,7 +94479,6 @@
         -80.612826,
         3.025324
       ],
-      "clinicalContext": "Planar datum feature establishing a flat inspection reference surface.",
       "unresolvedTargetStepEntityIds": [],
       "ambiguousTargetStepEntityIds": []
     },
@@ -94554,7 +94548,6 @@
         -46.437819,
         3.2
       ],
-      "clinicalContext": "Secondary alignment datum features; locks double lateral translations to prevent side-to-side skeletal translation.",
       "unresolvedTargetStepEntityIds": [],
       "ambiguousTargetStepEntityIds": []
     },
@@ -94624,7 +94617,6 @@
         -94.791913,
         2.285714
       ],
-      "clinicalContext": "Secondary alignment datum features; locks double lateral translations to prevent side-to-side skeletal translation.",
       "unresolvedTargetStepEntityIds": [],
       "ambiguousTargetStepEntityIds": []
     },
@@ -94704,7 +94696,6 @@
         }
       ],
       "presentationTargetPoint": null,
-      "clinicalContext": "Datum is established by datum targets rather than an explicit datum feature surface in the STEP presentation PMI.",
       "unresolvedTargetStepEntityIds": [
         "#20071",
         "#20072",
@@ -94802,7 +94793,6 @@
         }
       ],
       "presentationTargetPoint": null,
-      "clinicalContext": "Datum is established by datum targets rather than an explicit datum feature surface in the STEP presentation PMI.",
       "unresolvedTargetStepEntityIds": [
         "#20074",
         "#20075",
@@ -94833,7 +94823,6 @@
       "targetCircle": null,
       "targetCurvePointCount": 0,
       "targetZone": null,
-      "clinicalContext": "Datum target resolved from semantic PMI datum_target or placed_datum_target_feature relationships.",
       "unresolvedTargetStepEntityIds": [
         "#20071"
       ],
@@ -94861,7 +94850,6 @@
       "targetCircle": null,
       "targetCurvePointCount": 0,
       "targetZone": null,
-      "clinicalContext": "Datum target resolved from semantic PMI datum_target or placed_datum_target_feature relationships.",
       "unresolvedTargetStepEntityIds": [
         "#20072"
       ],
@@ -94889,7 +94877,6 @@
       "targetCircle": null,
       "targetCurvePointCount": 0,
       "targetZone": null,
-      "clinicalContext": "Datum target resolved from semantic PMI datum_target or placed_datum_target_feature relationships.",
       "unresolvedTargetStepEntityIds": [
         "#20073"
       ],
@@ -94917,7 +94904,6 @@
       "targetCircle": null,
       "targetCurvePointCount": 0,
       "targetZone": null,
-      "clinicalContext": "Datum target resolved from semantic PMI datum_target or placed_datum_target_feature relationships.",
       "unresolvedTargetStepEntityIds": [
         "#20078"
       ],
@@ -94945,7 +94931,6 @@
       "targetCircle": null,
       "targetCurvePointCount": 0,
       "targetZone": null,
-      "clinicalContext": "Datum target resolved from semantic PMI datum_target or placed_datum_target_feature relationships.",
       "unresolvedTargetStepEntityIds": [
         "#20074"
       ],
@@ -94973,7 +94958,6 @@
       "targetCircle": null,
       "targetCurvePointCount": 0,
       "targetZone": null,
-      "clinicalContext": "Datum target resolved from semantic PMI datum_target or placed_datum_target_feature relationships.",
       "unresolvedTargetStepEntityIds": [
         "#20075"
       ],
@@ -95001,7 +94985,6 @@
       "targetCircle": null,
       "targetCurvePointCount": 0,
       "targetZone": null,
-      "clinicalContext": "Datum target resolved from semantic PMI datum_target or placed_datum_target_feature relationships.",
       "unresolvedTargetStepEntityIds": [
         "#20077"
       ],
@@ -95029,7 +95012,6 @@
       "targetCircle": null,
       "targetCurvePointCount": 0,
       "targetZone": null,
-      "clinicalContext": "Datum target resolved from semantic PMI datum_target or placed_datum_target_feature relationships.",
       "unresolvedTargetStepEntityIds": [
         "#20076"
       ],
@@ -95070,7 +95052,6 @@
       },
       "targetCurvePointCount": 0,
       "targetZone": null,
-      "clinicalContext": "Datum target resolved from semantic PMI datum_target or placed_datum_target_feature relationships.",
       "unresolvedTargetStepEntityIds": [
         "#3148"
       ],
@@ -95122,7 +95103,6 @@
         "slotRadiusNominal": null,
         "slotRadiusModel": null
       },
-      "clinicalContext": "Critical PMI diameter tolerance with mm limits resolved from AP242 PLUS_MINUS_TOLERANCE and TOLERANCE_VALUE relationships.",
       "unresolvedTargetStepEntityIds": [],
       "ambiguousTargetStepEntityIds": []
     },
@@ -95172,7 +95152,6 @@
         "slotRadiusNominal": null,
         "slotRadiusModel": null
       },
-      "clinicalContext": "Critical PMI diameter tolerance with mm limits resolved from AP242 PLUS_MINUS_TOLERANCE and TOLERANCE_VALUE relationships.",
       "unresolvedTargetStepEntityIds": [],
       "ambiguousTargetStepEntityIds": []
     },
@@ -95220,7 +95199,6 @@
         "slotRadiusNominal": null,
         "slotRadiusModel": null
       },
-      "clinicalContext": "Critical PMI diameter tolerance with mm limits resolved from AP242 PLUS_MINUS_TOLERANCE and TOLERANCE_VALUE relationships.",
       "unresolvedTargetStepEntityIds": [],
       "ambiguousTargetStepEntityIds": []
     },
@@ -95268,7 +95246,6 @@
         "slotRadiusNominal": null,
         "slotRadiusModel": null
       },
-      "clinicalContext": "Critical PMI diameter tolerance with mm limits resolved from AP242 PLUS_MINUS_TOLERANCE and TOLERANCE_VALUE relationships.",
       "unresolvedTargetStepEntityIds": [],
       "ambiguousTargetStepEntityIds": []
     },
@@ -95316,7 +95293,6 @@
         "slotRadiusNominal": null,
         "slotRadiusModel": null
       },
-      "clinicalContext": "Critical PMI diameter tolerance with mm limits resolved from AP242 PLUS_MINUS_TOLERANCE and TOLERANCE_VALUE relationships.",
       "unresolvedTargetStepEntityIds": [],
       "ambiguousTargetStepEntityIds": []
     },
@@ -95364,7 +95340,6 @@
         "slotRadiusNominal": null,
         "slotRadiusModel": null
       },
-      "clinicalContext": "Critical PMI diameter tolerance with mm limits resolved from AP242 PLUS_MINUS_TOLERANCE and TOLERANCE_VALUE relationships.",
       "unresolvedTargetStepEntityIds": [],
       "ambiguousTargetStepEntityIds": []
     },
@@ -95412,7 +95387,6 @@
         "slotRadiusNominal": null,
         "slotRadiusModel": null
       },
-      "clinicalContext": "Critical PMI diameter tolerance with mm limits resolved from AP242 PLUS_MINUS_TOLERANCE and TOLERANCE_VALUE relationships.",
       "unresolvedTargetStepEntityIds": [],
       "ambiguousTargetStepEntityIds": []
     },
@@ -95445,7 +95419,6 @@
       "datumReferenceFrameLabel": null,
       "datumReferenceFrameEntityId": null,
       "datumReferenceOrder": [],
-      "clinicalContext": "Controls a three-dimensional surface boundary for fit and clearance.",
       "unresolvedTargetStepEntityIds": [],
       "ambiguousTargetStepEntityIds": []
     },
@@ -95475,7 +95448,6 @@
       "datumReferenceFrameLabel": null,
       "datumReferenceFrameEntityId": null,
       "datumReferenceOrder": [],
-      "clinicalContext": "Assures a controlled flat contact surface and prevents local high spots.",
       "unresolvedTargetStepEntityIds": [],
       "ambiguousTargetStepEntityIds": []
     },
@@ -95509,7 +95481,6 @@
         "B",
         "C"
       ],
-      "clinicalContext": "Controls a three-dimensional surface boundary for fit and clearance.",
       "unresolvedTargetStepEntityIds": [],
       "ambiguousTargetStepEntityIds": []
     },
@@ -95543,7 +95514,6 @@
         "B",
         "C"
       ],
-      "clinicalContext": "Controls a three-dimensional surface boundary for fit and clearance.",
       "unresolvedTargetStepEntityIds": [],
       "ambiguousTargetStepEntityIds": []
     },
@@ -95577,7 +95547,6 @@
         "B",
         "C"
       ],
-      "clinicalContext": "Controls a three-dimensional surface boundary for fit and clearance.",
       "unresolvedTargetStepEntityIds": [],
       "ambiguousTargetStepEntityIds": []
     },
@@ -95611,7 +95580,6 @@
         "H",
         "J"
       ],
-      "clinicalContext": "Controls a three-dimensional surface boundary for fit and clearance.",
       "unresolvedTargetStepEntityIds": [],
       "ambiguousTargetStepEntityIds": []
     },
@@ -95645,7 +95613,6 @@
         "H",
         "J"
       ],
-      "clinicalContext": "Controls a three-dimensional surface boundary for fit and clearance.",
       "unresolvedTargetStepEntityIds": [],
       "ambiguousTargetStepEntityIds": []
     },
@@ -95679,7 +95646,6 @@
         "H",
         "J"
       ],
-      "clinicalContext": "Controls a three-dimensional surface boundary for fit and clearance.",
       "unresolvedTargetStepEntityIds": [],
       "ambiguousTargetStepEntityIds": []
     },
@@ -95713,7 +95679,6 @@
         "E",
         "F"
       ],
-      "clinicalContext": "Controls a three-dimensional surface boundary for fit and clearance.",
       "unresolvedTargetStepEntityIds": [],
       "ambiguousTargetStepEntityIds": []
     },
@@ -95747,7 +95712,6 @@
         "E",
         "F"
       ],
-      "clinicalContext": "Controls a three-dimensional surface boundary for fit and clearance.",
       "unresolvedTargetStepEntityIds": [],
       "ambiguousTargetStepEntityIds": []
     },
@@ -95781,7 +95745,6 @@
         "E",
         "F"
       ],
-      "clinicalContext": "Controls a three-dimensional surface boundary for fit and clearance.",
       "unresolvedTargetStepEntityIds": [],
       "ambiguousTargetStepEntityIds": []
     },
@@ -95815,7 +95778,6 @@
         "E",
         "F"
       ],
-      "clinicalContext": "Controls a three-dimensional surface boundary for fit and clearance.",
       "unresolvedTargetStepEntityIds": [],
       "ambiguousTargetStepEntityIds": []
     },
@@ -95849,7 +95811,6 @@
         "B",
         "C"
       ],
-      "clinicalContext": "Controls a three-dimensional surface boundary for fit and clearance.",
       "unresolvedTargetStepEntityIds": [],
       "ambiguousTargetStepEntityIds": []
     },
@@ -95883,7 +95844,6 @@
         "H",
         "J"
       ],
-      "clinicalContext": "Controls a three-dimensional surface boundary for fit and clearance.",
       "unresolvedTargetStepEntityIds": [],
       "ambiguousTargetStepEntityIds": []
     },
@@ -95918,7 +95878,6 @@
       "datumReferenceOrder": [
         "G"
       ],
-      "clinicalContext": "Controls right-angle orientation to the referenced datum frame.",
       "unresolvedTargetStepEntityIds": [],
       "ambiguousTargetStepEntityIds": []
     },
@@ -95952,7 +95911,6 @@
         "D",
         "E"
       ],
-      "clinicalContext": "Controls the location of a feature relative to the datum reference frame.",
       "unresolvedTargetStepEntityIds": [],
       "ambiguousTargetStepEntityIds": []
     },
@@ -95985,7 +95943,6 @@
       "datumReferenceOrder": [
         "D"
       ],
-      "clinicalContext": "Controls right-angle orientation to the referenced datum frame.",
       "unresolvedTargetStepEntityIds": [],
       "ambiguousTargetStepEntityIds": []
     },
@@ -96018,7 +95975,6 @@
       "datumReferenceOrder": [
         "K"
       ],
-      "clinicalContext": "Controls right-angle orientation to the referenced datum frame.",
       "unresolvedTargetStepEntityIds": [],
       "ambiguousTargetStepEntityIds": []
     },
@@ -96052,7 +96008,6 @@
         "B",
         "C"
       ],
-      "clinicalContext": "Controls a two-dimensional profile boundary along a measured section.",
       "unresolvedTargetStepEntityIds": [],
       "ambiguousTargetStepEntityIds": []
     },
@@ -96091,7 +96046,6 @@
         "B",
         "C"
       ],
-      "clinicalContext": "Controls the location of a feature relative to the datum reference frame.",
       "unresolvedTargetStepEntityIds": [],
       "ambiguousTargetStepEntityIds": []
     },
@@ -96130,7 +96084,6 @@
         "B",
         "C"
       ],
-      "clinicalContext": "Controls the location of a feature relative to the datum reference frame.",
       "unresolvedTargetStepEntityIds": [],
       "ambiguousTargetStepEntityIds": []
     },
@@ -96166,7 +96119,6 @@
         "G",
         "H"
       ],
-      "clinicalContext": "Controls the location of a feature relative to the datum reference frame.",
       "unresolvedTargetStepEntityIds": [],
       "ambiguousTargetStepEntityIds": []
     },
