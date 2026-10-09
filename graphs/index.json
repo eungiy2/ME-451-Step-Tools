@@ -27,9 +27,9 @@
       "resolved": 58
     },
     "adjacencyConvexityCounts": {
-      "concave": 4,
-      "convex": 220,
-      "flat": 94
+      "concave": 8,
+      "convex": 224,
+      "flat": 86
     },
     "nonManifoldEdgeCount": 0,
     "indifferminateConvexityCount": 0,
@@ -67,13 +67,13 @@
       "resolved": 199
     },
     "adjacencyConvexityCounts": {
-      "concave": 438,
-      "convex": 439,
-      "flat": 425,
-      "indeterminate": 108
+      "concave": 505,
+      "convex": 485,
+      "flat": 305,
+      "indeterminate": 115
     },
     "nonManifoldEdgeCount": 0,
-    "indifferminateConvexityCount": 108,
+    "indifferminateConvexityCount": 115,
     "normalOrientation": "outward"
   },
   {
@@ -106,8 +106,8 @@
     },
     "adjacencyConvexityCounts": {
       "concave": 7,
-      "convex": 258,
-      "flat": 86,
+      "convex": 272,
+      "flat": 72,
       "indeterminate": 3
     },
     "nonManifoldEdgeCount": 0,
@@ -144,13 +144,13 @@
       "resolved": 345
     },
     "adjacencyConvexityCounts": {
-      "concave": 290,
-      "convex": 479,
-      "flat": 275,
-      "indeterminate": 64
+      "concave": 301,
+      "convex": 471,
+      "flat": 278,
+      "indeterminate": 58
     },
     "nonManifoldEdgeCount": 0,
-    "indifferminateConvexityCount": 64,
+    "indifferminateConvexityCount": 58,
     "normalOrientation": "outward"
   },
   {
@@ -265,13 +265,13 @@
       "resolved": 390
     },
     "adjacencyConvexityCounts": {
-      "concave": 348,
-      "convex": 278,
-      "flat": 129,
-      "indeterminate": 110
+      "concave": 361,
+      "convex": 290,
+      "flat": 114,
+      "indeterminate": 100
     },
     "nonManifoldEdgeCount": 0,
-    "indifferminateConvexityCount": 110,
+    "indifferminateConvexityCount": 100,
     "normalOrientation": "outward"
   },
   {
@@ -308,9 +308,9 @@
       "resolved": 258
     },
     "adjacencyConvexityCounts": {
-      "concave": 86,
-      "convex": 287,
-      "flat": 192,
+      "concave": 102,
+      "convex": 295,
+      "flat": 168,
       "indeterminate": 55
     },
     "nonManifoldEdgeCount": 0,
@@ -387,9 +387,9 @@
       "resolved": 473
     },
     "adjacencyConvexityCounts": {
-      "concave": 110,
-      "convex": 451,
-      "flat": 184,
+      "concave": 106,
+      "convex": 453,
+      "flat": 186,
       "indeterminate": 54
     },
     "nonManifoldEdgeCount": 0,
@@ -425,13 +425,13 @@
       "resolved": 21
     },
     "adjacencyConvexityCounts": {
-      "concave": 48,
-      "convex": 41,
-      "flat": 12,
-      "indeterminate": 5
+      "concave": 47,
+      "convex": 35,
+      "flat": 17,
+      "indeterminate": 7
     },
     "nonManifoldEdgeCount": 0,
-    "indifferminateConvexityCount": 5,
+    "indifferminateConvexityCount": 7,
     "normalOrientation": "outward"
   },
   {
@@ -507,9 +507,9 @@
       "resolved": 434
     },
     "adjacencyConvexityCounts": {
-      "concave": 94,
-      "convex": 294,
-      "flat": 235,
+      "concave": 110,
+      "convex": 302,
+      "flat": 211,
       "indeterminate": 82
     },
     "nonManifoldEdgeCount": 0,
@@ -585,13 +585,13 @@
       "resolved": 338
     },
     "adjacencyConvexityCounts": {
-      "concave": 106,
+      "concave": 112,
       "convex": 232,
       "flat": 136,
-      "indeterminate": 89
+      "indeterminate": 83
     },
     "nonManifoldEdgeCount": 0,
-    "indifferminateConvexityCount": 89,
+    "indifferminateConvexityCount": 83,
     "normalOrientation": "outward"
   },
   {
@@ -618,9 +618,9 @@
       "resolved": 17
     },
     "adjacencyConvexityCounts": {
-      "concave": 62,
+      "concave": 64,
       "convex": 223,
-      "flat": 80,
+      "flat": 78,
       "indeterminate": 11
     },
     "nonManifoldEdgeCount": 0,

@@ -955,31 +955,47 @@ as `H-J` is not an ordered pair. see sections 3.5 and 10.
 
 ### 11.4 Cylindrical faces
 
-For a cylindrical face the plan's hint is followed in substance and sharpened: a
-fitted axis gives the true local normal, which matters most exactly where the
-patch mean is least representative, namely large-arc bores. The axis is the
-direction of least normal spread, computed as the smallest eigenvector of the
-area-weighted normal outer product.
+The axis direction follows the viewer. `computeFaceInteractionCache` in
+`CadCanvas3D.tsx` derives `interactionCache.cylinderAxis` by taking the mean
+absolute normal and selecting the coordinate axis whose component is smallest; on
+a true cylinder every normal is perpendicular to the axis, so that component
+vanishes and identifies it. That rule is authoritative here and overrides an
+eigen-decomposition of the normal outer product, which was the earlier choice.
 
-Three defects were found and fixed while implementing this, and each is a
-general rule rather than a fixture-specific workaround:
+The rule is a heuristic, not a fit: it snaps to a coordinate axis, so a bore at an
+arbitrary angle is assigned the nearest one rather than its true direction. Two
+consequences are handled rather than papered over.
 
-- **Eigenpair selection.** A cyclic Jacobi sweep returns an eigenvector of the
-  wrong eigenvalue when two eigenvalues are nearly equal, which is the normal case
-  for a wide arc. The eigenvalue now comes from inverse iteration with the
-  Rayleigh quotient, and the direction is refined against it.
-- **Axis placement.** The axis must pass through the fitted cross-section centre,
-  not the model origin; otherwise every radial is measured from the wrong point.
-- **Outward sense.** A patch subtending more than a hemisphere has a mean normal
-  that points away from the radial, so orienting the radial against the mean
-  would invert large-arc bores. The sense is taken from a majority vote of
-  triangle normals, each of which is locally outward on a consistently wound
-  patch.
+**The axis is checked against the patch before it is published.** The same mean
+absolute normal that selected the axis is read back as the mean absolute dot
+product of the patch's triangle normals with the chosen axis. It is zero when the
+normals really are perpendicular to that axis and grows with the angular error,
+so `MAX_AXIS_PERPENDICULARITY` gates the axis. Across the fixture set this
+withholds 73 cylinder faces whose true axes lie about 45 degrees off a coordinate
+axis: rather than publishing a snapped axis, `cylinderRadius` is reported `null`
+and `normalSource` stays `tessellation`. A partial arc of such a bore is not
+reliably caught and is a known limit of the heuristic.
 
-Degenerate fits are rejected rather than trusted: the near-null space of the
-normal matrix must be one-dimensional, the fitted radius must be plausible against
-the patch extent, and the patch must wind consistently. Rejection is visible in
-the output as `normalSource: "tessellation"` with `cylinderRadius: null`.
+**The cross-section centre is still fitted, not assumed.** The fitted circle
+centre plus the mean axial station gives a concrete point on the axis line. The
+axis must pass through the centre of its own cross-section, not through the model
+origin, or every radial derived from it is measured from the wrong place.
+
+**Outward sense comes from a majority vote of triangle normals**, each locally
+outward on a consistently wound patch. A patch subtending more than a hemisphere
+has a mean normal pointing away from the radial, so orienting the radial against
+the mean inverts large-arc bores.
+
+Degenerate fits are rejected rather than trusted: the patch must wind
+consistently (`MIN_WINDING_CONSISTENCY`) and the fitted radius must be plausible
+against the patch extent. Rejection is visible in the output as
+`normalSource: "tessellation"` with `cylinderRadius: null`.
+
+Because a coordinate axis is exactly determined, the eigen-degeneracy failure
+that previously suppressed coarse patches no longer applies: the number of
+cylinder faces publishing a radius rose from 1572 to 1591, and the count of
+junctions whose dihedral is stable to within 0.002 degrees across a tenfold
+change in `linearDeflection` rose from 190 of 318 to 210 of 318.
 
 ### 11.5 Minimum viable graph
 

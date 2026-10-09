@@ -52,13 +52,13 @@
 
 | Convexity | Count |
 | --- | ---: |
-| concave | 290 |
-| convex | 479 |
-| flat | 275 |
-| indeterminate | 64 |
+| concave | 301 |
+| convex | 471 |
+| flat | 278 |
+| indeterminate | 58 |
 
 Non-manifold shared edges: 0
-Indeterminate convexity decisions: 64
+Indeterminate convexity decisions: 58
 
 ## PMI to topology resolution
 

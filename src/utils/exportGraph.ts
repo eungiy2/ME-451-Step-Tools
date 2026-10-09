@@ -70,15 +70,18 @@ export const MIN_WINDING_CONSISTENCY = 0.9;
 export const MAX_CYLINDER_FIT_RESIDUAL_RATIO = 0.02;
 
 /**
- * Minimum eigenvalue separation for the fitted cylinder axis to be trusted.
+ * Maximum mean absolute dot product between a patch's normals and its chosen
+ * cylinder axis.
  *
- * A cylindrical patch never determines the axis eigenvalue, which is zero by
- * construction, so the axis direction is meaningful only when the near-null
- * space of the patch normal matrix is one-dimensional. As soon as a second
- * eigenvalue also collapses toward zero the patch no longer constrains the axis
- * at all and the fitted direction is dominated by tessellation noise.
+ * The axis direction comes from the viewer's rule, which snaps to a coordinate
+ * axis instead of fitting a direction. That rule identifies the axis component on
+ * a true cylinder, where the normals are perpendicular to it and this quantity
+ * is zero. Where the rule has been snapped away from the patch's true direction
+ * the quantity rises, and the axis is withheld rather than published: reporting a
+ * confident axis that is 45 degrees out would corrupt the dihedral angle at every
+ * junction the face touches.
  */
-export const MIN_CYLINDER_SPECTRAL_SEPARATION = 100;
+export const MAX_AXIS_PERPENDICULARITY = 0.1;
 
 /**
  * Maximum cylinder radius, relative to the extent of the patch it was fitted to.
@@ -878,17 +881,17 @@ interface CylinderFit {
   radius: number;
   deviation: number;
   /**
-   * Separation between the axis eigenvalue and the smaller in-plane eigenvalue.
+   * Mean absolute dot product of the patch's triangle normals with the chosen
+   * axis.
    *
-   * A cylindrical patch constrains the axis direction but leaves the rotation
-   * about it unconstrained, so the normal matrix always has a near-zero
-   * eigenvalue. When the patch is only a few flat facets the two in-plane
-   * eigenvalues are also small and close together, and the axis direction is no
-   * longer determined: any direction inside the near-null plane fits equally
-   * well. This ratio separates a genuine cylinder patch from that degenerate
-   * case.
+   * The axis comes from `viewerCylinderAxis`, which selects a coordinate axis
+   * rather than fitting a direction. This is the same mean absolute normal that
+   * selected it, so it measures whether the patch's own normals agree with the
+   * axis that was chosen for them. Near zero means they do; a large value means
+   * the axis was snapped away from the patch's true direction and the derived
+   * radius and radial directions should not be published.
    */
-  spectralSeparation: number;
+  axisPerpendicularity: number;
   /** False when the least-squares radius is not physically plausible. */
   radiusPlausible: boolean;
 }
@@ -952,6 +955,7 @@ const collectFaces = (
   nativeFaces.forEach((face, index) => nativeByIndex.set(index, face));
 
   const faces: FaceGeometry[] = [];
+  const seenRuntimeIds = new Set<string>();
   const positions: number[] = [];
   const faceOfTriangle: number[] = [];
   const faceTriangleRange: TriangleStore["faceTriangleRange"] = [];
@@ -977,6 +981,8 @@ const collectFaces = (
     const triangleStart = positions.length / 9;
     let triangleCount = 0;
     let normalAccumulator = vec(0, 0, 0);
+      let absNormalAccumulator = vec(0, 0, 0);
+      let absNormalWeight = 0;
     let normalMatrix = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
     const centroidAccumulator = vec(0, 0, 0);
     for (let index = 0; index < vertexCount; index++) {
@@ -1013,6 +1019,16 @@ const collectFaces = (
       if (magnitude > 1e-18) {
         const unit = scaleVec(weighted, 1 / magnitude);
         normalAccumulator = addVec(normalAccumulator, unit);
+        // Mean absolute normal, accumulated per component. The cylinder axis
+        // heuristic needs |n| rather than n: for a true cylinder every normal is
+        // perpendicular to the axis, so the axis component of this mean is the
+        // one that vanishes, and its magnitude identifies which axis that is.
+        absNormalAccumulator = addVec(absNormalAccumulator, [
+          Math.abs(unit[0]),
+          Math.abs(unit[1]),
+          Math.abs(unit[2]),
+        ]);
+        absNormalWeight += 1;
         for (let r = 0; r < 3; r++) {
           for (let cIndex = 0; cIndex < 3; cIndex++) {
             normalMatrix[r][cIndex] += unit[r] * unit[cIndex];
@@ -1024,6 +1040,18 @@ const collectFaces = (
     const surfaceType = toSurfaceType(native?.surfaceType ?? "other");
     const faceBounds = bounds ?? nativeBoundsToBox(native?.bounds);
     const runtimeId = typeof native?.id === "string" ? native.id : `BRepFace-${faceIndex}`;
+
+    // A node id must be unique within a graph document. Two faces resolving to the
+    // same runtime id would emit two nodes sharing one `id`, after which every
+    // edge pointing at that id is ambiguous and any consumer keyed by id silently
+    // collapses them. Failing loudly beats silently dropping a face, because a
+    // dropped face reads as absent geometry rather than as a bad input.
+    if (seenRuntimeIds.has(runtimeId)) {
+      throw new Error(
+        `Duplicate face runtime id "${runtimeId}": exported face node ids would collide`
+      );
+    }
+    seenRuntimeIds.add(runtimeId);
 
     faces.push({
       runtimeId,
@@ -1046,7 +1074,11 @@ const collectFaces = (
         ? scaleVec(centroidAccumulator, 1 / vertexCount)
         : null,
       cylinder: surfaceType === "cylinder" && vertexPositions.length >= 9
-        ? fitCylinder(vertexPositions, vertexCount, normalMatrix)
+        ? fitCylinder(
+            vertexPositions,
+            vertexCount,
+            absNormalWeight > 0 ? scaleVec(absNormalAccumulator, 1 / absNormalWeight) : null
+          )
         : null,
       maxRadialDeviationDeg: null,
       windingConsistency: null,
@@ -1155,20 +1187,42 @@ const nativeBoundsToBox = (values: ArrayLike<number> | undefined | null): Box3 |
 };
 
 /**
+ * Cylinder axis direction, following the viewer.
+ *
+ * This is the rule used by `computeFaceInteractionCache` in `CadCanvas3D.tsx`:
+ * take the mean absolute normal and pick the coordinate axis whose component is
+ * smallest. On a true cylinder every normal is perpendicular to the axis, so that
+ * component vanishes and the axis is identified by it. The viewer prefers Y, then
+ * Z, then X, and the same tie-breaking is reproduced here.
+ *
+ * `interactionCache.cylinderAxis` overrides any alternative derivation. It is a
+ * heuristic rather than a fit: it snaps to a coordinate axis, so a bore at an
+ * arbitrary angle is assigned the nearest coordinate axis instead of its true
+ * direction. `fitCylinder` measures how far the patch's own normals disagree with
+ * the chosen axis so that such a case can be withheld rather than published.
+ */
+const viewerCylinderAxis = (meanAbsNormal: Vec3): Vec3 => {
+  const { 0: x, 1: y, 2: z } = meanAbsNormal;
+  if (y <= x && y <= z) return vec(0, 1, 0);
+  if (z <= x && z <= y) return vec(0, 0, 1);
+  return vec(1, 0, 0);
+};
+
+/**
  * Least-squares cylinder fit for a tessellated cylindrical patch.
  *
- * The axis is the direction that minimises the squared normal spread, i.e. the
- * smallest eigenvector of the area-weighted outer product of triangle normals.
- * That is exact for the whole cylinder and stays stable for partial patches,
- * where the area-weighted mean normal tilts away from the true radial direction.
+ * The axis direction comes from `viewerCylinderAxis`, matching the viewer. The
+ * cross-section centre, radius and residual are then fitted against that axis, so
+ * the axis is placed through the centre of its own cross-section circle rather
+ * than through the model origin.
  */
 export const fitCylinder = (
   positions: number[],
   vertexCount: number,
-  normalMatrix: number[][]
+  meanAbsNormal: Vec3 | null
 ): CylinderFit | null => {
-  const axis = smallestEigenvector(normalMatrix);
-  if (lengthVec(axis) < 0.5) return null;
+  if (!meanAbsNormal) return null;
+  const axis = viewerCylinderAxis(meanAbsNormal);
 
   const reference = Math.abs(axis[0]) < 0.9 ? vec(1, 0, 0) : vec(0, 1, 0);
   const e1 = normalizeVec(crossVec(axis, reference), vec(1, 0, 0));
@@ -1238,25 +1292,22 @@ export const fitCylinder = (
   const centerInPlane = addVec(scaleVec(e1, centerU), scaleVec(e2, centerV));
   const axisPoint = scaleVec(axis, sumAlongAxis / count);
 
-  // Conditioning of the axis estimate.
+  // Axis consistency.
   //
-  // The axis eigenvalue is zero for any true cylinder, so the axis direction is
-  // determined only if the near-null space is one-dimensional. Comparing the
-  // smallest two eigenvalues against each other is not enough, because the axis
-  // eigenvalue is numerically indistinguishable from exact zero either way; what
-  // distinguishes a determined axis from an undetermined one is that a second
-  // eigenvalue is also near zero.
+  // The viewer's rule selects a coordinate axis from the smallest component of
+  // the mean absolute normal, without checking that component against the patch.
+  // Read as the mean absolute dot product of the patch's normals with the chosen
+  // axis, the same number is a direct test: it is zero when the normals really
+  // are perpendicular to that axis, and it grows with the angular error.
   //
-  // The threshold must be relative to the largest eigenvalue. An absolute floor
-  // makes a rank-deficient matrix look perfectly conditioned, because its true
-  // zero eigenvalue and its rounding noise both fall below the floor.
-  const eigenvalues = symmetric3Eigenvalues(normalMatrix);
-  const largest = eigenvalues[eigenvalues.length - 1];
-  const relativeFloor = Math.max(largest * 1e-6, 0);
-  const nullDimension = eigenvalues.filter((value) => value <= relativeFloor).length;
-  const spectralSeparation = nullDimension === 1
-    ? eigenvalues[1] / Math.max(eigenvalues[0], relativeFloor, 1e-300)
-    : 0;
+  // A full-ring bore on a diagonal axis is caught here. Its normals lie in the
+  // plane perpendicular to the true axis, so the axial component spans the full
+  // range while the two in-plane components stay small; the smallest component is
+  // therefore never the true axis, and the component the viewer picks is large.
+  // A partial arc of such a bore is not reliably caught, and is recorded as a
+  // known limit of the heuristic rather than papered over.
+  const axisIndex = axis[1] === 1 ? 1 : axis[2] === 1 ? 2 : 0;
+  const axisPerpendicularity = meanAbsNormal[axisIndex];
 
   // A two-facet patch admits an enormous family of near-degenerate circles, and
   // least squares will happily return one of astronomical radius. Such a fit has
@@ -1277,7 +1328,7 @@ export const fitCylinder = (
     centerInPlane,
     radius: radiusPlausible ? radius : Number.NaN,
     deviation,
-    spectralSeparation,
+    axisPerpendicularity,
     radiusPlausible,
   };
 };
@@ -1552,7 +1603,7 @@ const faceNormalAt = (face: FaceGeometry, point: Vec3): Vec3 | null => {
 const isCylinderFitTrustworthy = (face: FaceGeometry): boolean => {
   if (!face.cylinder || !face.cylinder.radiusPlausible) return false;
   if ((face.windingConsistency ?? 0) < MIN_WINDING_CONSISTENCY) return false;
-  if (face.cylinder.spectralSeparation < MIN_CYLINDER_SPECTRAL_SEPARATION) return false;
+  if (face.cylinder.axisPerpendicularity > MAX_AXIS_PERPENDICULARITY) return false;
   const radius = face.cylinder.radius;
   if (!(radius > 0)) return false;
   return face.cylinder.deviation / radius <= MAX_CYLINDER_FIT_RESIDUAL_RATIO;
@@ -1969,14 +2020,38 @@ const nodeIdForTopology = (runtimeId: string): string => {
 export function exportGraph(input: ExportGraphInput): ExportGraphResult {
   const { parsed, occtResult, faceMapping, linearDeflection, angularDeflection } = input;
 
+  // `enrichPmiTopologyReferences` reads `occtResult.faces` unguarded, so a missing
+  // payload surfaces as a `TypeError` from inside that module rather than as a
+  // statement about what the caller got wrong. Validate here, where the message
+  // can name the actual problem.
+  if (!occtResult || typeof occtResult !== "object") {
+    throw new Error(
+      "exportGraph requires the occtResult payload from parseStepWithOcct"
+    );
+  }
+
   const enriched = enrichPmiTopologyReferences(parsed, occtResult, faceMapping);
 
+  // Tessellation fallback, used only when the payload carries no native face
+  // table. Enumerates meshes exactly as `collectFaces` does, which skips
+  // auxiliary meshes and indexes the survivors by their position among the
+  // non-auxiliary ones.
+  //
+  // Output is identical either way today: a synthesized descriptor carries only
+  // `id` and `nativeIndex`, `collectFaces` reads only `id` from it (taking the
+  // exported `nativeIndex` from `faceIndex`), and the descriptor at index k
+  // always has `id = BRepFace-k`, which is what the positional fallback on the
+  // `runtimeId` line would produce regardless. Filtering is kept so the two
+  // enumerations cannot silently diverge if a synthesized descriptor ever grows
+  // a field the consumer reads.
   const nativeFaces: any[] = Array.isArray(occtResult?.faces) && occtResult.faces.length > 0
     ? occtResult.faces
-    : (occtResult?.meshes || []).map((mesh: any, index: number) => ({
-      id: `BRepFace-${index}`,
-      nativeIndex: index,
-    }));
+    : (occtResult?.meshes || [])
+      .filter((mesh: any) => mesh?.auxiliary !== true)
+      .map((mesh: any, index: number) => ({
+        id: `BRepFace-${index}`,
+        nativeIndex: index,
+      }));
   const nativeEdges: any[] = Array.isArray(occtResult?.edges) && occtResult.edges.length > 0
     ? occtResult.edges
     : occtResult?.lines || [];
@@ -2028,15 +2103,16 @@ export function exportGraph(input: ExportGraphInput): ExportGraphResult {
       // coarse patch still yields an accurate axis, and substituting the patch
       // mean normal there would move the dihedral by tens of degrees on large-arc
       // bores, where the mean normal is not the local normal.
-      // The radial direction requires a well-conditioned axis. Without the
-      // conditioning check, a few flat facets produce an axis that is pure noise
-      // and a radial that swings tens of degrees with the tessellation, which
-      // would corrupt the dihedral of every junction it touches.
+      // The radial direction requires an axis the patch's own normals agree with.
+      // Without that check the viewer's rule can snap to a coordinate axis well
+      // away from the patch's true direction, and every radial computed from it
+      // would swing with the tessellation and corrupt the dihedral of every
+      // junction it touches.
       const cylinderUsable =
         !!cylinder &&
         cylinder.radiusPlausible &&
         face.radialOutwardSign !== null &&
-        cylinder.spectralSeparation >= MIN_CYLINDER_SPECTRAL_SEPARATION;
+        cylinder.axisPerpendicularity <= MAX_AXIS_PERPENDICULARITY;
       const cylinderTrustworthy = cylinderUsable && isCylinderFitTrustworthy(face);
 
       let cylinderAxis: Vec3 | null = cylinder

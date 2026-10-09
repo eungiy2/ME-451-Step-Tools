@@ -135,8 +135,28 @@ const near = (a: number, b: number, tolerance: number) => Math.abs(a - b) <= tol
     `full-circle cylinder axis must be recovered: ${fullCircleAxis}`
   );
 
-  const fit = fitCylinder(positions, positions.length / 3, normalMatrix);
+  // The axis now comes from the viewer's rule, which reads the mean absolute
+  // normal. On this Z-axis cylinder the z component of that mean is the only one
+  // that vanishes, so the viewer picks Z and the fit must agree.
+  const meanAbsNormal: [number, number, number] = [0, 0, 0];
+  for (let step = 0; step < 64; step++) {
+    const theta = (step / 64) * Math.PI * 2;
+    const n = [Math.cos(theta), Math.sin(theta), 0];
+    meanAbsNormal[0] += Math.abs(n[0]);
+    meanAbsNormal[1] += Math.abs(n[1]);
+    meanAbsNormal[2] += Math.abs(n[2]);
+  }
+
+  const fit = fitCylinder(positions, positions.length / 3, meanAbsNormal);
   assert.ok(fit !== null, "Exact cylinder must fit");
+  assert.ok(
+    near(fit!.axis[2], 1, 1e-9),
+    `Viewer axis rule must recover the Z axis: ${fit!.axis}`
+  );
+  assert.ok(
+    fit!.axisPerpendicularity <= 1e-9,
+    `Normals of a true cylinder are perpendicular to its axis: ${fit!.axisPerpendicularity}`
+  );
   assert.ok(
     near(fit!.radius, radius, 1e-9),
     `Fitted radius must be exact for a true cylinder: ${fit!.radius}`

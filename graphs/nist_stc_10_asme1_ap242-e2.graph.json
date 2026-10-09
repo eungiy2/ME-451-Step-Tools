@@ -43,17 +43,17 @@
       "line": 248
     },
     "adjacencyConvexityCounts": {
-      "concave": 106,
+      "concave": 112,
       "convex": 232,
       "flat": 136,
-      "indeterminate": 89
+      "indeterminate": 83
     },
     "pmiReferenceResolutionCounts": {
       "missing": 15,
       "resolved": 338
     },
     "nonManifoldEdgeCount": 0,
-    "indifferminateConvexityCount": 89,
+    "indifferminateConvexityCount": 83,
     "signedMeshVolume": 188325.391257,
     "normalOrientation": "outward"
   },
@@ -139,14 +139,14 @@
         0
       ],
       "normalSource": "cylinder-radial",
-      "normalDeviationDeg": 0.857758,
+      "normalDeviationDeg": 0.85768,
       "cylinderAxis": [
         0,
-        -0.000001,
+        0,
         1
       ],
       "cylinderRadius": 7.999495,
-      "cylinderRadiusDeviation": 0.001081,
+      "cylinderRadiusDeviation": 0.00108,
       "cylinderOrientation": "external",
       "windingConsistency": 1,
       "windingMinorityTriangles": 0,
@@ -1299,18 +1299,18 @@
       },
       "outwardNormal": [
         -0.095518,
-        -0.000002,
+        0,
         0.995428
       ],
       "normalSource": "cylinder-radial",
-      "normalDeviationDeg": 0.562664,
+      "normalDeviationDeg": 0.562667,
       "cylinderAxis": [
         0,
         1,
-        0.000002
+        0
       ],
       "cylinderRadius": 3,
-      "cylinderRadiusDeviation": 0.000008,
+      "cylinderRadiusDeviation": 0.000004,
       "cylinderOrientation": "internal",
       "windingConsistency": 1,
       "windingMinorityTriangles": 0,
@@ -1448,18 +1448,18 @@
       },
       "outwardNormal": [
         -0.095512,
-        -0.000002,
+        0,
         0.995428
       ],
       "normalSource": "cylinder-radial",
-      "normalDeviationDeg": 0.562659,
+      "normalDeviationDeg": 0.562663,
       "cylinderAxis": [
         0,
         1,
-        0.000002
+        0
       ],
       "cylinderRadius": 3,
-      "cylinderRadiusDeviation": 0.000005,
+      "cylinderRadiusDeviation": 0.000001,
       "cylinderOrientation": "internal",
       "windingConsistency": 1,
       "windingMinorityTriangles": 0,
@@ -2787,19 +2787,19 @@
         ]
       },
       "outwardNormal": [
-        0.000018,
-        -0.000005,
+        0.000017,
+        0,
         1
       ],
       "normalSource": "cylinder-radial",
-      "normalDeviationDeg": 1.112127,
+      "normalDeviationDeg": 1.112137,
       "cylinderAxis": [
         0,
         1,
-        0.000005
+        0
       ],
       "cylinderRadius": 1.5,
-      "cylinderRadiusDeviation": 0.000017,
+      "cylinderRadiusDeviation": 0.000007,
       "cylinderOrientation": "internal",
       "windingConsistency": 1,
       "windingMinorityTriangles": 0,
@@ -2885,20 +2885,20 @@
         ]
       },
       "outwardNormal": [
-        -0.000233,
-        -0.999997,
-        -0.002523
+        0,
+        -0.9998,
+        -0.020001
       ],
-      "normalSource": "tessellation",
-      "normalDeviationDeg": null,
+      "normalSource": "cylinder-radial",
+      "normalDeviationDeg": 9.566397,
       "cylinderAxis": [
         1,
-        -0.0001,
-        -0.000155
+        0,
+        0
       ],
-      "cylinderRadius": null,
-      "cylinderRadiusDeviation": null,
-      "cylinderOrientation": null,
+      "cylinderRadius": 2.749891,
+      "cylinderRadiusDeviation": 0.005355,
+      "cylinderOrientation": "internal",
       "windingConsistency": 1,
       "windingMinorityTriangles": 0,
       "edgeCount": 7,
@@ -2983,20 +2983,20 @@
         ]
       },
       "outwardNormal": [
-        -0.000683,
-        -0.999994,
-        -0.003273
+        0,
+        -0.9998,
+        -0.020001
       ],
-      "normalSource": "tessellation",
-      "normalDeviationDeg": null,
+      "normalSource": "cylinder-radial",
+      "normalDeviationDeg": 13.023314,
       "cylinderAxis": [
         1,
-        -0.000296,
-        -0.000415
+        0,
+        0
       ],
-      "cylinderRadius": null,
-      "cylinderRadiusDeviation": null,
-      "cylinderOrientation": null,
+      "cylinderRadius": 2.749891,
+      "cylinderRadiusDeviation": 0.005355,
+      "cylinderOrientation": "internal",
       "windingConsistency": 1,
       "windingMinorityTriangles": 0,
       "edgeCount": 7,
@@ -3034,19 +3034,19 @@
         ]
       },
       "outwardNormal": [
-        -0.483216,
-        0.000001,
-        0.875501
+        -0.483222,
+        0,
+        0.875498
       ],
       "normalSource": "cylinder-radial",
-      "normalDeviationDeg": 1.703606,
+      "normalDeviationDeg": 1.703798,
       "cylinderAxis": [
-        -0.000009,
+        0,
         1,
-        -0.000006
+        0
       ],
       "cylinderRadius": 1.749589,
-      "cylinderRadiusDeviation": 0.002656,
+      "cylinderRadiusDeviation": 0.002697,
       "cylinderOrientation": "internal",
       "windingConsistency": 1,
       "windingMinorityTriangles": 0,
@@ -3085,19 +3085,19 @@
         ]
       },
       "outwardNormal": [
-        -0.483208,
-        0.000001,
-        0.875506
+        -0.483226,
+        0,
+        0.875496
       ],
       "normalSource": "cylinder-radial",
-      "normalDeviationDeg": 1.702362,
+      "normalDeviationDeg": 1.702536,
       "cylinderAxis": [
-        -0.000009,
+        0,
         1,
-        -0.000006
+        0
       ],
-      "cylinderRadius": 1.749589,
-      "cylinderRadiusDeviation": 0.002658,
+      "cylinderRadius": 1.74959,
+      "cylinderRadiusDeviation": 0.002699,
       "cylinderOrientation": "internal",
       "windingConsistency": 1,
       "windingMinorityTriangles": 0,
@@ -3136,19 +3136,19 @@
         ]
       },
       "outwardNormal": [
-        -0.483188,
-        0.000001,
-        0.875517
+        -0.483214,
+        0,
+        0.875502
       ],
       "normalSource": "cylinder-radial",
-      "normalDeviationDeg": 1.702398,
+      "normalDeviationDeg": 1.702563,
       "cylinderAxis": [
-        -0.000009,
+        0,
         1,
-        -0.000006
+        0
       ],
       "cylinderRadius": 1.74959,
-      "cylinderRadiusDeviation": 0.002658,
+      "cylinderRadiusDeviation": 0.002698,
       "cylinderOrientation": "internal",
       "windingConsistency": 1,
       "windingMinorityTriangles": 0,
@@ -3187,19 +3187,19 @@
         ]
       },
       "outwardNormal": [
-        -0.483197,
-        0.000001,
-        0.875511
+        -0.483212,
+        0,
+        0.875503
       ],
       "normalSource": "cylinder-radial",
-      "normalDeviationDeg": 1.703162,
+      "normalDeviationDeg": 1.70334,
       "cylinderAxis": [
-        -0.00001,
+        0,
         1,
-        -0.000006
+        0
       ],
       "cylinderRadius": 1.749589,
-      "cylinderRadiusDeviation": 0.002655,
+      "cylinderRadiusDeviation": 0.002696,
       "cylinderOrientation": "internal",
       "windingConsistency": 1,
       "windingMinorityTriangles": 0,
@@ -3238,19 +3238,19 @@
         ]
       },
       "outwardNormal": [
-        -0.000004,
+        0,
         0.999999,
         -0.00108
       ],
       "normalSource": "cylinder-radial",
-      "normalDeviationDeg": 0.768813,
+      "normalDeviationDeg": 0.768792,
       "cylinderAxis": [
         1,
-        0.000004,
-        0.000001
+        0,
+        0
       ],
-      "cylinderRadius": 6.000208,
-      "cylinderRadiusDeviation": 0.004318,
+      "cylinderRadius": 6.000217,
+      "cylinderRadiusDeviation": 0.004239,
       "cylinderOrientation": "external",
       "windingConsistency": 1,
       "windingMinorityTriangles": 0,
@@ -3291,17 +3291,17 @@
       "outwardNormal": [
         -0.029449,
         0.999566,
-        0.000006
+        0
       ],
       "normalSource": "cylinder-radial",
-      "normalDeviationDeg": 2.149216,
+      "normalDeviationDeg": 2.150061,
       "cylinderAxis": [
-        0.000001,
-        -0.000006,
+        0,
+        0,
         1
       ],
       "cylinderRadius": 3.499987,
-      "cylinderRadiusDeviation": 0.002396,
+      "cylinderRadiusDeviation": 0.002316,
       "cylinderOrientation": "internal",
       "windingConsistency": 1,
       "windingMinorityTriangles": 0,
@@ -3440,17 +3440,17 @@
       "outwardNormal": [
         -0.029449,
         0.999566,
-        0.000006
+        0
       ],
       "normalSource": "cylinder-radial",
-      "normalDeviationDeg": 2.151374,
+      "normalDeviationDeg": 2.152219,
       "cylinderAxis": [
-        0.000001,
-        -0.000006,
+        0,
+        0,
         1
       ],
-      "cylinderRadius": 3.499988,
-      "cylinderRadiusDeviation": 0.002397,
+      "cylinderRadius": 3.499987,
+      "cylinderRadiusDeviation": 0.002317,
       "cylinderOrientation": "internal",
       "windingConsistency": 1,
       "windingMinorityTriangles": 0,
@@ -3589,17 +3589,17 @@
       "outwardNormal": [
         -0.029449,
         0.999566,
-        0.000006
+        0
       ],
       "normalSource": "cylinder-radial",
-      "normalDeviationDeg": 2.147052,
+      "normalDeviationDeg": 2.147897,
       "cylinderAxis": [
-        0.000001,
-        -0.000006,
+        0,
+        0,
         1
       ],
       "cylinderRadius": 3.499987,
-      "cylinderRadiusDeviation": 0.002397,
+      "cylinderRadiusDeviation": 0.002316,
       "cylinderOrientation": "internal",
       "windingConsistency": 1,
       "windingMinorityTriangles": 0,
@@ -3738,17 +3738,17 @@
       "outwardNormal": [
         -0.029447,
         0.999566,
-        0.000006
+        0
       ],
       "normalSource": "cylinder-radial",
-      "normalDeviationDeg": 2.141807,
+      "normalDeviationDeg": 2.142652,
       "cylinderAxis": [
-        0.000001,
-        -0.000006,
+        0,
+        0,
         1
       ],
       "cylinderRadius": 3.499987,
-      "cylinderRadiusDeviation": 0.002396,
+      "cylinderRadiusDeviation": 0.002315,
       "cylinderOrientation": "internal",
       "windingConsistency": 1,
       "windingMinorityTriangles": 0,
@@ -4277,19 +4277,19 @@
         ]
       },
       "outwardNormal": [
-        -0.483199,
-        0.000001,
-        0.87551
+        -0.483213,
+        0,
+        0.875503
       ],
       "normalSource": "cylinder-radial",
-      "normalDeviationDeg": 1.701913,
+      "normalDeviationDeg": 1.702092,
       "cylinderAxis": [
-        -0.00001,
+        0,
         1,
-        -0.000006
+        0
       ],
       "cylinderRadius": 1.74959,
-      "cylinderRadiusDeviation": 0.002657,
+      "cylinderRadiusDeviation": 0.002698,
       "cylinderOrientation": "internal",
       "windingConsistency": 1,
       "windingMinorityTriangles": 0,
@@ -4328,19 +4328,19 @@
         ]
       },
       "outwardNormal": [
-        -0.483198,
-        0.000001,
-        0.875511
+        -0.483213,
+        0,
+        0.875503
       ],
       "normalSource": "cylinder-radial",
-      "normalDeviationDeg": 1.701914,
+      "normalDeviationDeg": 1.702092,
       "cylinderAxis": [
-        -0.00001,
+        0,
         1,
-        -0.000006
+        0
       ],
       "cylinderRadius": 1.74959,
-      "cylinderRadiusDeviation": 0.002657,
+      "cylinderRadiusDeviation": 0.002698,
       "cylinderOrientation": "internal",
       "windingConsistency": 1,
       "windingMinorityTriangles": 0,
@@ -4614,20 +4614,20 @@
         ]
       },
       "outwardNormal": [
-        0.271495,
-        -0.06213,
-        0.960432
+        0.35807,
+        0,
+        -0.933695
       ],
-      "normalSource": "tessellation",
-      "normalDeviationDeg": null,
+      "normalSource": "cylinder-radial",
+      "normalDeviationDeg": 1.862315,
       "cylinderAxis": [
-        -0.000102,
+        0,
         1,
-        -0.000179
+        0
       ],
-      "cylinderRadius": null,
-      "cylinderRadiusDeviation": null,
-      "cylinderOrientation": null,
+      "cylinderRadius": 1.249695,
+      "cylinderRadiusDeviation": 0.001485,
+      "cylinderOrientation": "internal",
       "windingConsistency": 1,
       "windingMinorityTriangles": 0,
       "edgeCount": 3,
@@ -4665,20 +4665,20 @@
         ]
       },
       "outwardNormal": [
-        0.271499,
-        -0.062134,
-        0.960431
+        0.358068,
+        0,
+        -0.933696
       ],
-      "normalSource": "tessellation",
-      "normalDeviationDeg": null,
+      "normalSource": "cylinder-radial",
+      "normalDeviationDeg": 1.861345,
       "cylinderAxis": [
-        -0.000102,
+        0,
         1,
-        -0.000179
+        0
       ],
-      "cylinderRadius": null,
-      "cylinderRadiusDeviation": null,
-      "cylinderOrientation": null,
+      "cylinderRadius": 1.249696,
+      "cylinderRadiusDeviation": 0.001484,
+      "cylinderOrientation": "internal",
       "windingConsistency": 1,
       "windingMinorityTriangles": 0,
       "edgeCount": 3,
@@ -4716,20 +4716,20 @@
         ]
       },
       "outwardNormal": [
-        0.271503,
-        -0.062133,
-        0.96043
+        0.358079,
+        0,
+        -0.933691
       ],
-      "normalSource": "tessellation",
-      "normalDeviationDeg": null,
+      "normalSource": "cylinder-radial",
+      "normalDeviationDeg": 1.861493,
       "cylinderAxis": [
-        -0.000101,
+        0,
         1,
-        -0.000179
+        0
       ],
-      "cylinderRadius": null,
-      "cylinderRadiusDeviation": null,
-      "cylinderOrientation": null,
+      "cylinderRadius": 1.249696,
+      "cylinderRadiusDeviation": 0.001484,
+      "cylinderOrientation": "internal",
       "windingConsistency": 1,
       "windingMinorityTriangles": 0,
       "edgeCount": 3,
@@ -4767,20 +4767,20 @@
         ]
       },
       "outwardNormal": [
-        0.271507,
-        -0.062137,
-        0.960429
+        0.358074,
+        0,
+        -0.933693
       ],
-      "normalSource": "tessellation",
-      "normalDeviationDeg": null,
+      "normalSource": "cylinder-radial",
+      "normalDeviationDeg": 1.860521,
       "cylinderAxis": [
-        -0.000101,
+        0,
         1,
-        -0.000179
+        0
       ],
-      "cylinderRadius": null,
-      "cylinderRadiusDeviation": null,
-      "cylinderOrientation": null,
+      "cylinderRadius": 1.249696,
+      "cylinderRadiusDeviation": 0.001484,
+      "cylinderOrientation": "internal",
       "windingConsistency": 1,
       "windingMinorityTriangles": 0,
       "edgeCount": 3,
@@ -4818,20 +4818,20 @@
         ]
       },
       "outwardNormal": [
-        0.271501,
-        -0.062119,
-        0.960431
+        0.358073,
+        0,
+        -0.933694
       ],
-      "normalSource": "tessellation",
-      "normalDeviationDeg": null,
+      "normalSource": "cylinder-radial",
+      "normalDeviationDeg": 1.862286,
       "cylinderAxis": [
-        -0.000102,
+        0,
         1,
-        -0.000179
+        0
       ],
-      "cylinderRadius": null,
-      "cylinderRadiusDeviation": null,
-      "cylinderOrientation": null,
+      "cylinderRadius": 1.249696,
+      "cylinderRadiusDeviation": 0.001482,
+      "cylinderOrientation": "internal",
       "windingConsistency": 1,
       "windingMinorityTriangles": 0,
       "edgeCount": 3,
@@ -4869,20 +4869,20 @@
         ]
       },
       "outwardNormal": [
-        0.271505,
-        -0.062124,
-        0.96043
+        0.358063,
+        0,
+        -0.933697
       ],
-      "normalSource": "tessellation",
-      "normalDeviationDeg": null,
+      "normalSource": "cylinder-radial",
+      "normalDeviationDeg": 1.861311,
       "cylinderAxis": [
-        -0.000102,
+        0,
         1,
-        -0.000179
+        0
       ],
-      "cylinderRadius": null,
-      "cylinderRadiusDeviation": null,
-      "cylinderOrientation": null,
+      "cylinderRadius": 1.249696,
+      "cylinderRadiusDeviation": 0.001481,
+      "cylinderOrientation": "internal",
       "windingConsistency": 1,
       "windingMinorityTriangles": 0,
       "edgeCount": 3,
@@ -4920,20 +4920,20 @@
         ]
       },
       "outwardNormal": [
-        0.271508,
-        -0.062117,
-        0.960429
+        0.358047,
+        0,
+        -0.933703
       ],
-      "normalSource": "tessellation",
-      "normalDeviationDeg": null,
+      "normalSource": "cylinder-radial",
+      "normalDeviationDeg": 1.862267,
       "cylinderAxis": [
-        -0.000102,
+        0,
         1,
-        -0.000179
+        0
       ],
-      "cylinderRadius": null,
-      "cylinderRadiusDeviation": null,
-      "cylinderOrientation": null,
+      "cylinderRadius": 1.249696,
+      "cylinderRadiusDeviation": 0.001482,
+      "cylinderOrientation": "internal",
       "windingConsistency": 1,
       "windingMinorityTriangles": 0,
       "edgeCount": 3,
@@ -4971,20 +4971,20 @@
         ]
       },
       "outwardNormal": [
-        0.271511,
-        -0.062125,
-        0.960428
+        0.358075,
+        0,
+        -0.933693
       ],
-      "normalSource": "tessellation",
-      "normalDeviationDeg": null,
+      "normalSource": "cylinder-radial",
+      "normalDeviationDeg": 1.861319,
       "cylinderAxis": [
-        -0.000102,
+        0,
         1,
-        -0.000179
+        0
       ],
-      "cylinderRadius": null,
-      "cylinderRadiusDeviation": null,
-      "cylinderOrientation": null,
+      "cylinderRadius": 1.249696,
+      "cylinderRadiusDeviation": 0.001481,
+      "cylinderOrientation": "internal",
       "windingConsistency": 1,
       "windingMinorityTriangles": 0,
       "edgeCount": 3,
@@ -10020,19 +10020,19 @@
         ]
       },
       "outwardNormal": [
-        -0.000018,
-        -0.000005,
+        -0.000016,
+        0,
         1
       ],
       "normalSource": "cylinder-radial",
-      "normalDeviationDeg": 1.112439,
+      "normalDeviationDeg": 1.11245,
       "cylinderAxis": [
         0,
         1,
-        0.000005
+        0
       ],
       "cylinderRadius": 1.5,
-      "cylinderRadiusDeviation": 0.000016,
+      "cylinderRadiusDeviation": 0.000007,
       "cylinderOrientation": "internal",
       "windingConsistency": 1,
       "windingMinorityTriangles": 0,
@@ -10119,18 +10119,18 @@
       },
       "outwardNormal": [
         -0.000015,
-        -0.000005,
+        0,
         1
       ],
       "normalSource": "cylinder-radial",
-      "normalDeviationDeg": 1.112205,
+      "normalDeviationDeg": 1.112207,
       "cylinderAxis": [
         0,
         1,
-        0.000005
+        0
       ],
       "cylinderRadius": 1.5,
-      "cylinderRadiusDeviation": 0.000015,
+      "cylinderRadiusDeviation": 0.000004,
       "cylinderOrientation": "internal",
       "windingConsistency": 1,
       "windingMinorityTriangles": 0,
@@ -10216,8 +10216,8 @@
         ]
       },
       "outwardNormal": [
-        -0.000016,
-        -0.000005,
+        -0.000015,
+        0,
         1
       ],
       "normalSource": "cylinder-radial",
@@ -10225,10 +10225,10 @@
       "cylinderAxis": [
         0,
         1,
-        0.000005
+        0
       ],
       "cylinderRadius": 1.5,
-      "cylinderRadiusDeviation": 0.000015,
+      "cylinderRadiusDeviation": 0.000004,
       "cylinderOrientation": "internal",
       "windingConsistency": 1,
       "windingMinorityTriangles": 0,
@@ -10314,19 +10314,19 @@
         ]
       },
       "outwardNormal": [
-        0.000016,
-        -0.000005,
+        0.000014,
+        0,
         1
       ],
       "normalSource": "cylinder-radial",
-      "normalDeviationDeg": 1.112518,
+      "normalDeviationDeg": 1.112517,
       "cylinderAxis": [
         0,
         1,
-        0.000005
+        0
       ],
       "cylinderRadius": 1.5,
-      "cylinderRadiusDeviation": 0.000016,
+      "cylinderRadiusDeviation": 0.000003,
       "cylinderOrientation": "internal",
       "windingConsistency": 1,
       "windingMinorityTriangles": 0,
@@ -10412,19 +10412,19 @@
         ]
       },
       "outwardNormal": [
-        -0.000001,
-        -0.000005,
+        -0.000002,
+        0,
         1
       ],
       "normalSource": "cylinder-radial",
-      "normalDeviationDeg": 1.112439,
+      "normalDeviationDeg": 1.112447,
       "cylinderAxis": [
         0,
         1,
-        0.000005
+        0
       ],
       "cylinderRadius": 1.5,
-      "cylinderRadiusDeviation": 0.000016,
+      "cylinderRadiusDeviation": 0.000004,
       "cylinderOrientation": "internal",
       "windingConsistency": 1,
       "windingMinorityTriangles": 0,
@@ -10800,19 +10800,19 @@
         ]
       },
       "outwardNormal": [
-        -0.00001,
-        -0.916557,
-        -0.399903
+        0,
+        -0.916688,
+        -0.399603
       ],
       "normalSource": "cylinder-radial",
-      "normalDeviationDeg": 8.463973,
+      "normalDeviationDeg": 8.478456,
       "cylinderAxis": [
         1,
-        -0.000002,
-        -0.00002
+        0,
+        0
       ],
-      "cylinderRadius": 0.130825,
-      "cylinderRadiusDeviation": 0.000234,
+      "cylinderRadius": 0.130779,
+      "cylinderRadiusDeviation": 0.000258,
       "cylinderOrientation": "external",
       "windingConsistency": 1,
       "windingMinorityTriangles": 0,
@@ -12101,19 +12101,19 @@
         ]
       },
       "outwardNormal": [
-        -0.095518,
-        -0.000002,
-        0.995428
+        -0.095522,
+        0,
+        0.995427
       ],
       "normalSource": "cylinder-radial",
-      "normalDeviationDeg": 0.562776,
+      "normalDeviationDeg": 0.562783,
       "cylinderAxis": [
         0,
         1,
-        0.000002
+        0
       ],
       "cylinderRadius": 3,
-      "cylinderRadiusDeviation": 0.000011,
+      "cylinderRadiusDeviation": 0.000007,
       "cylinderOrientation": "internal",
       "windingConsistency": 1,
       "windingMinorityTriangles": 0,
@@ -12251,18 +12251,18 @@
       },
       "outwardNormal": [
         -0.095515,
-        -0.000002,
+        0,
         0.995428
       ],
       "normalSource": "cylinder-radial",
-      "normalDeviationDeg": 0.562773,
+      "normalDeviationDeg": 0.562779,
       "cylinderAxis": [
         0,
         1,
-        0.000002
+        0
       ],
       "cylinderRadius": 3,
-      "cylinderRadiusDeviation": 0.000009,
+      "cylinderRadiusDeviation": 0.000007,
       "cylinderOrientation": "internal",
       "windingConsistency": 1,
       "windingMinorityTriangles": 0,
@@ -46731,12 +46731,12 @@
         "cylinder-radial"
       ],
       "nonManifold": false,
-      "normalAngleRad": 1.570806,
-      "normalAngleDeg": 90.00055,
+      "normalAngleRad": 1.570796,
+      "normalAngleDeg": 90,
       "patchNormalAngleDeg": 90.000662,
       "convexity": "concave",
-      "dihedralAngleRad": 4.712399,
-      "dihedralAngleDeg": 270.00055,
+      "dihedralAngleRad": 4.712389,
+      "dihedralAngleDeg": 270,
       "convexityNote": null
     },
     {
@@ -47507,7 +47507,7 @@
       ],
       "nonManifold": false,
       "normalAngleRad": 0.000062,
-      "normalAngleDeg": 0.003536,
+      "normalAngleDeg": 0.003537,
       "patchNormalAngleDeg": 39.621803,
       "convexity": "flat",
       "dihedralAngleRad": 3.141593,
@@ -47537,12 +47537,12 @@
         "tessellation"
       ],
       "nonManifold": false,
-      "normalAngleRad": 0.873417,
-      "normalAngleDeg": 50.043105,
+      "normalAngleRad": 0.873418,
+      "normalAngleDeg": 50.043146,
       "patchNormalAngleDeg": 51.462009,
       "convexity": "convex",
-      "dihedralAngleRad": 2.268176,
-      "dihedralAngleDeg": 129.956895,
+      "dihedralAngleRad": 2.268175,
+      "dihedralAngleDeg": 129.956854,
       "convexityNote": null
     },
     {
@@ -47568,8 +47568,8 @@
         "cylinder-radial"
       ],
       "nonManifold": false,
-      "normalAngleRad": 0.000123,
-      "normalAngleDeg": 0.007021,
+      "normalAngleRad": 0.000125,
+      "normalAngleDeg": 0.007177,
       "patchNormalAngleDeg": 2.188451,
       "convexity": "flat",
       "dihedralAngleRad": 3.141593,
@@ -47600,11 +47600,11 @@
       ],
       "nonManifold": false,
       "normalAngleRad": 0.759922,
-      "normalAngleDeg": 43.540321,
+      "normalAngleDeg": 43.540322,
       "patchNormalAngleDeg": 0.743247,
       "convexity": "concave",
       "dihedralAngleRad": 3.901515,
-      "dihedralAngleDeg": 223.540321,
+      "dihedralAngleDeg": 223.540322,
       "convexityNote": null
     },
     {
@@ -47630,8 +47630,8 @@
         "cylinder-radial"
       ],
       "nonManifold": false,
-      "normalAngleRad": 0.000128,
-      "normalAngleDeg": 0.007331,
+      "normalAngleRad": 0.000125,
+      "normalAngleDeg": 0.007177,
       "patchNormalAngleDeg": 2.188451,
       "convexity": "flat",
       "dihedralAngleRad": 3.141593,
@@ -47662,11 +47662,11 @@
       ],
       "nonManifold": false,
       "normalAngleRad": 0.873419,
-      "normalAngleDeg": 50.043239,
+      "normalAngleDeg": 50.043199,
       "patchNormalAngleDeg": 51.462097,
       "convexity": "convex",
-      "dihedralAngleRad": 2.268173,
-      "dihedralAngleDeg": 129.956761,
+      "dihedralAngleRad": 2.268174,
+      "dihedralAngleDeg": 129.956801,
       "convexityNote": null
     },
     {
@@ -48436,12 +48436,12 @@
         "cylinder-radial"
       ],
       "nonManifold": false,
-      "normalAngleRad": 1.57079,
-      "normalAngleDeg": 89.999629,
+      "normalAngleRad": 1.570796,
+      "normalAngleDeg": 90,
       "patchNormalAngleDeg": 88.436369,
       "convexity": "indeterminate",
-      "dihedralAngleRad": 1.570803,
-      "dihedralAngleDeg": 90.000371,
+      "dihedralAngleRad": 1.570796,
+      "dihedralAngleDeg": 90,
       "convexityNote": "wing-probe-disagreement"
     },
     {
@@ -48529,12 +48529,12 @@
         "cylinder-radial"
       ],
       "nonManifold": false,
-      "normalAngleRad": 1.570801,
-      "normalAngleDeg": 90.00028,
+      "normalAngleRad": 1.570796,
+      "normalAngleDeg": 90,
       "patchNormalAngleDeg": 178.179212,
       "convexity": "indeterminate",
-      "dihedralAngleRad": 1.570791,
-      "dihedralAngleDeg": 89.99972,
+      "dihedralAngleRad": 1.570796,
+      "dihedralAngleDeg": 90,
       "convexityNote": "wing-probe-disagreement"
     },
     {
@@ -48560,12 +48560,12 @@
         "cylinder-radial"
       ],
       "nonManifold": false,
-      "normalAngleRad": 1.570801,
-      "normalAngleDeg": 90.000285,
+      "normalAngleRad": 1.570796,
+      "normalAngleDeg": 90,
       "patchNormalAngleDeg": 178.625603,
       "convexity": "indeterminate",
-      "dihedralAngleRad": 1.570791,
-      "dihedralAngleDeg": 89.999715,
+      "dihedralAngleRad": 1.570796,
+      "dihedralAngleDeg": 90,
       "convexityNote": "wing-probe-disagreement"
     },
     {
@@ -49335,12 +49335,12 @@
         "cylinder-radial"
       ],
       "nonManifold": false,
-      "normalAngleRad": 1.57079,
-      "normalAngleDeg": 89.999629,
+      "normalAngleRad": 1.570796,
+      "normalAngleDeg": 90,
       "patchNormalAngleDeg": 88.436369,
       "convexity": "indeterminate",
-      "dihedralAngleRad": 1.570803,
-      "dihedralAngleDeg": 90.000371,
+      "dihedralAngleRad": 1.570796,
+      "dihedralAngleDeg": 90,
       "convexityNote": "wing-probe-disagreement"
     },
     {
@@ -49366,12 +49366,12 @@
         "cylinder-radial"
       ],
       "nonManifold": false,
-      "normalAngleRad": 1.570801,
-      "normalAngleDeg": 90.00028,
+      "normalAngleRad": 1.570796,
+      "normalAngleDeg": 90,
       "patchNormalAngleDeg": 178.179212,
       "convexity": "indeterminate",
-      "dihedralAngleRad": 1.570791,
-      "dihedralAngleDeg": 89.99972,
+      "dihedralAngleRad": 1.570796,
+      "dihedralAngleDeg": 90,
       "convexityNote": "wing-probe-disagreement"
     },
     {
@@ -49397,12 +49397,12 @@
         "cylinder-radial"
       ],
       "nonManifold": false,
-      "normalAngleRad": 1.570801,
-      "normalAngleDeg": 90.000279,
+      "normalAngleRad": 1.570796,
+      "normalAngleDeg": 90,
       "patchNormalAngleDeg": 178.179875,
       "convexity": "indeterminate",
-      "dihedralAngleRad": 1.570791,
-      "dihedralAngleDeg": 89.999721,
+      "dihedralAngleRad": 1.570796,
+      "dihedralAngleDeg": 90,
       "convexityNote": "wing-probe-disagreement"
     },
     {
@@ -50172,12 +50172,12 @@
         "cylinder-radial"
       ],
       "nonManifold": false,
-      "normalAngleRad": 1.570795,
-      "normalAngleDeg": 89.99993,
+      "normalAngleRad": 1.570796,
+      "normalAngleDeg": 90,
       "patchNormalAngleDeg": 89.916297,
       "convexity": "convex",
-      "dihedralAngleRad": 1.570798,
-      "dihedralAngleDeg": 90.00007,
+      "dihedralAngleRad": 1.570796,
+      "dihedralAngleDeg": 90,
       "convexityNote": null
     },
     {
@@ -50203,12 +50203,12 @@
         "cylinder-radial"
       ],
       "nonManifold": false,
-      "normalAngleRad": 1.570795,
-      "normalAngleDeg": 89.99993,
+      "normalAngleRad": 1.570796,
+      "normalAngleDeg": 90,
       "patchNormalAngleDeg": 89.916297,
       "convexity": "convex",
-      "dihedralAngleRad": 1.570798,
-      "dihedralAngleDeg": 90.00007,
+      "dihedralAngleRad": 1.570796,
+      "dihedralAngleDeg": 90,
       "convexityNote": null
     },
     {
@@ -50234,12 +50234,12 @@
         "cylinder-radial"
       ],
       "nonManifold": false,
-      "normalAngleRad": 1.570795,
-      "normalAngleDeg": 89.999925,
+      "normalAngleRad": 1.570796,
+      "normalAngleDeg": 90,
       "patchNormalAngleDeg": 89.917266,
       "convexity": "convex",
-      "dihedralAngleRad": 1.570798,
-      "dihedralAngleDeg": 90.000075,
+      "dihedralAngleRad": 1.570796,
+      "dihedralAngleDeg": 90,
       "convexityNote": null
     },
     {
@@ -50265,12 +50265,12 @@
         "cylinder-radial"
       ],
       "nonManifold": false,
-      "normalAngleRad": 1.570795,
-      "normalAngleDeg": 89.999925,
+      "normalAngleRad": 1.570796,
+      "normalAngleDeg": 90,
       "patchNormalAngleDeg": 89.917266,
       "convexity": "convex",
-      "dihedralAngleRad": 1.570798,
-      "dihedralAngleDeg": 90.000075,
+      "dihedralAngleRad": 1.570796,
+      "dihedralAngleDeg": 90,
       "convexityNote": null
     },
     {
@@ -51102,12 +51102,12 @@
         "cylinder-radial"
       ],
       "nonManifold": false,
-      "normalAngleRad": 1.570795,
-      "normalAngleDeg": 89.999926,
+      "normalAngleRad": 1.570796,
+      "normalAngleDeg": 90,
       "patchNormalAngleDeg": 89.913573,
       "convexity": "indeterminate",
-      "dihedralAngleRad": 1.570798,
-      "dihedralAngleDeg": 90.000074,
+      "dihedralAngleRad": 1.570796,
+      "dihedralAngleDeg": 90,
       "convexityNote": "wing-probe-disagreement"
     },
     {
@@ -51133,12 +51133,12 @@
         "cylinder-radial"
       ],
       "nonManifold": false,
-      "normalAngleRad": 1.570795,
-      "normalAngleDeg": 89.999926,
+      "normalAngleRad": 1.570796,
+      "normalAngleDeg": 90,
       "patchNormalAngleDeg": 89.913573,
       "convexity": "indeterminate",
-      "dihedralAngleRad": 1.570798,
-      "dihedralAngleDeg": 90.000074,
+      "dihedralAngleRad": 1.570796,
+      "dihedralAngleDeg": 90,
       "convexityNote": "wing-probe-disagreement"
     },
     {
@@ -51164,12 +51164,12 @@
         "cylinder-radial"
       ],
       "nonManifold": false,
-      "normalAngleRad": 1.570795,
-      "normalAngleDeg": 89.999922,
+      "normalAngleRad": 1.570796,
+      "normalAngleDeg": 90,
       "patchNormalAngleDeg": 89.914541,
       "convexity": "indeterminate",
-      "dihedralAngleRad": 1.570798,
-      "dihedralAngleDeg": 90.000078,
+      "dihedralAngleRad": 1.570796,
+      "dihedralAngleDeg": 90,
       "convexityNote": "wing-probe-disagreement"
     },
     {
@@ -51195,12 +51195,12 @@
         "cylinder-radial"
       ],
       "nonManifold": false,
-      "normalAngleRad": 1.570795,
-      "normalAngleDeg": 89.999922,
+      "normalAngleRad": 1.570796,
+      "normalAngleDeg": 90,
       "patchNormalAngleDeg": 89.914541,
       "convexity": "indeterminate",
-      "dihedralAngleRad": 1.570798,
-      "dihedralAngleDeg": 90.000078,
+      "dihedralAngleRad": 1.570796,
+      "dihedralAngleDeg": 90,
       "convexityNote": "wing-probe-disagreement"
     },
     {
@@ -54202,12 +54202,12 @@
         "tessellation"
       ],
       "nonManifold": false,
-      "normalAngleRad": 1.570798,
-      "normalAngleDeg": 90.000092,
+      "normalAngleRad": 1.570796,
+      "normalAngleDeg": 90,
       "patchNormalAngleDeg": 90.083703,
       "convexity": "convex",
-      "dihedralAngleRad": 1.570795,
-      "dihedralAngleDeg": 89.999908,
+      "dihedralAngleRad": 1.570796,
+      "dihedralAngleDeg": 90,
       "convexityNote": null
     },
     {
@@ -54295,12 +54295,12 @@
         "tessellation"
       ],
       "nonManifold": false,
-      "normalAngleRad": 1.570798,
-      "normalAngleDeg": 90.000095,
+      "normalAngleRad": 1.570796,
+      "normalAngleDeg": 90,
       "patchNormalAngleDeg": 90.082734,
       "convexity": "convex",
-      "dihedralAngleRad": 1.570795,
-      "dihedralAngleDeg": 89.999905,
+      "dihedralAngleRad": 1.570796,
+      "dihedralAngleDeg": 90,
       "convexityNote": null
     },
     {
@@ -54977,12 +54977,12 @@
         "cylinder-radial"
       ],
       "nonManifold": false,
-      "normalAngleRad": 1.57079,
-      "normalAngleDeg": 89.999665,
+      "normalAngleRad": 1.570796,
+      "normalAngleDeg": 90,
       "patchNormalAngleDeg": 88.585141,
       "convexity": "indeterminate",
-      "dihedralAngleRad": 1.570802,
-      "dihedralAngleDeg": 90.000335,
+      "dihedralAngleRad": 1.570796,
+      "dihedralAngleDeg": 90,
       "convexityNote": "wing-probe-disagreement"
     },
     {
@@ -55008,12 +55008,12 @@
         "cylinder-radial"
       ],
       "nonManifold": false,
-      "normalAngleRad": 1.57079,
-      "normalAngleDeg": 89.999661,
+      "normalAngleRad": 1.570796,
+      "normalAngleDeg": 90,
       "patchNormalAngleDeg": 88.584921,
       "convexity": "indeterminate",
-      "dihedralAngleRad": 1.570802,
-      "dihedralAngleDeg": 90.000339,
+      "dihedralAngleRad": 1.570796,
+      "dihedralAngleDeg": 90,
       "convexityNote": "wing-probe-disagreement"
     },
     {
@@ -55039,12 +55039,12 @@
         "cylinder-radial"
       ],
       "nonManifold": false,
-      "normalAngleRad": 1.57079,
-      "normalAngleDeg": 89.999661,
+      "normalAngleRad": 1.570796,
+      "normalAngleDeg": 90,
       "patchNormalAngleDeg": 88.584611,
       "convexity": "indeterminate",
-      "dihedralAngleRad": 1.570802,
-      "dihedralAngleDeg": 90.000339,
+      "dihedralAngleRad": 1.570796,
+      "dihedralAngleDeg": 90,
       "convexityNote": "wing-probe-disagreement"
     },
     {
@@ -55690,12 +55690,12 @@
         "cylinder-radial"
       ],
       "nonManifold": false,
-      "normalAngleRad": 1.570801,
-      "normalAngleDeg": 90.000274,
+      "normalAngleRad": 1.570796,
+      "normalAngleDeg": 90,
       "patchNormalAngleDeg": 177.862217,
       "convexity": "indeterminate",
-      "dihedralAngleRad": 1.570792,
-      "dihedralAngleDeg": 89.999726,
+      "dihedralAngleRad": 1.570796,
+      "dihedralAngleDeg": 90,
       "convexityNote": "wing-probe-disagreement"
     },
     {
@@ -55721,12 +55721,12 @@
         "cylinder-radial"
       ],
       "nonManifold": false,
-      "normalAngleRad": 1.57079,
-      "normalAngleDeg": 89.999633,
+      "normalAngleRad": 1.570796,
+      "normalAngleDeg": 90,
       "patchNormalAngleDeg": 88.436957,
       "convexity": "indeterminate",
-      "dihedralAngleRad": 1.570803,
-      "dihedralAngleDeg": 90.000367,
+      "dihedralAngleRad": 1.570796,
+      "dihedralAngleDeg": 90,
       "convexityNote": "wing-probe-disagreement"
     },
     {
@@ -55814,12 +55814,12 @@
         "cylinder-radial"
       ],
       "nonManifold": false,
-      "normalAngleRad": 1.570801,
-      "normalAngleDeg": 90.000273,
+      "normalAngleRad": 1.570796,
+      "normalAngleDeg": 90,
       "patchNormalAngleDeg": 177.785098,
       "convexity": "indeterminate",
-      "dihedralAngleRad": 1.570792,
-      "dihedralAngleDeg": 89.999727,
+      "dihedralAngleRad": 1.570796,
+      "dihedralAngleDeg": 90,
       "convexityNote": "wing-probe-disagreement"
     },
     {
@@ -55969,12 +55969,12 @@
         "cylinder-radial"
       ],
       "nonManifold": false,
-      "normalAngleRad": 1.570784,
-      "normalAngleDeg": 89.999313,
+      "normalAngleRad": 1.570795,
+      "normalAngleDeg": 89.999931,
       "patchNormalAngleDeg": 177.86209,
       "convexity": "concave",
-      "dihedralAngleRad": 4.712377,
-      "dihedralAngleDeg": 269.999313,
+      "dihedralAngleRad": 4.712388,
+      "dihedralAngleDeg": 269.999931,
       "convexityNote": null
     },
     {
@@ -56000,12 +56000,12 @@
         "cylinder-radial"
       ],
       "nonManifold": false,
-      "normalAngleRad": 1.570784,
-      "normalAngleDeg": 89.999313,
+      "normalAngleRad": 1.570795,
+      "normalAngleDeg": 89.999931,
       "patchNormalAngleDeg": 177.86209,
       "convexity": "concave",
-      "dihedralAngleRad": 4.712377,
-      "dihedralAngleDeg": 269.999313,
+      "dihedralAngleRad": 4.712388,
+      "dihedralAngleDeg": 269.999931,
       "convexityNote": null
     },
     {
@@ -56031,12 +56031,12 @@
         "cylinder-radial"
       ],
       "nonManifold": false,
-      "normalAngleRad": 1.570378,
-      "normalAngleDeg": 89.976015,
+      "normalAngleRad": 1.570796,
+      "normalAngleDeg": 90,
       "patchNormalAngleDeg": 90.013354,
       "convexity": "concave",
-      "dihedralAngleRad": 4.71197,
-      "dihedralAngleDeg": 269.976015,
+      "dihedralAngleRad": 4.712389,
+      "dihedralAngleDeg": 270,
       "convexityNote": null
     },
     {
@@ -56062,12 +56062,12 @@
         "cylinder-radial"
       ],
       "nonManifold": false,
-      "normalAngleRad": 1.570378,
-      "normalAngleDeg": 89.976015,
+      "normalAngleRad": 1.570796,
+      "normalAngleDeg": 90,
       "patchNormalAngleDeg": 90.013354,
       "convexity": "concave",
-      "dihedralAngleRad": 4.71197,
-      "dihedralAngleDeg": 269.976015,
+      "dihedralAngleRad": 4.712389,
+      "dihedralAngleDeg": 270,
       "convexityNote": null
     },
     {
@@ -56093,12 +56093,12 @@
         "cylinder-radial"
       ],
       "nonManifold": false,
-      "normalAngleRad": 0.881829,
-      "normalAngleDeg": 50.525097,
+      "normalAngleRad": 0.881113,
+      "normalAngleDeg": 50.484066,
       "patchNormalAngleDeg": 91.540007,
       "convexity": "convex",
-      "dihedralAngleRad": 2.259763,
-      "dihedralAngleDeg": 129.474903,
+      "dihedralAngleRad": 2.260479,
+      "dihedralAngleDeg": 129.515934,
       "convexityNote": null
     },
     {
@@ -56124,12 +56124,12 @@
         "cylinder-radial"
       ],
       "nonManifold": false,
-      "normalAngleRad": 0.881099,
-      "normalAngleDeg": 50.483259,
+      "normalAngleRad": 0.881113,
+      "normalAngleDeg": 50.484066,
       "patchNormalAngleDeg": 91.540599,
       "convexity": "convex",
-      "dihedralAngleRad": 2.260494,
-      "dihedralAngleDeg": 129.516741,
+      "dihedralAngleRad": 2.260479,
+      "dihedralAngleDeg": 129.515934,
       "convexityNote": null
     },
     {
@@ -56155,12 +56155,12 @@
         "cylinder-radial"
       ],
       "nonManifold": false,
-      "normalAngleRad": 0.880369,
-      "normalAngleDeg": 50.441424,
+      "normalAngleRad": 0.881113,
+      "normalAngleDeg": 50.484066,
       "patchNormalAngleDeg": 91.540599,
       "convexity": "convex",
-      "dihedralAngleRad": 2.261224,
-      "dihedralAngleDeg": 129.558576,
+      "dihedralAngleRad": 2.260479,
+      "dihedralAngleDeg": 129.515934,
       "convexityNote": null
     },
     {
@@ -56186,12 +56186,12 @@
         "cylinder-radial"
       ],
       "nonManifold": false,
-      "normalAngleRad": 1.569837,
-      "normalAngleDeg": 89.945056,
+      "normalAngleRad": 1.570796,
+      "normalAngleDeg": 90,
       "patchNormalAngleDeg": 90.039132,
       "convexity": "concave",
-      "dihedralAngleRad": 4.71143,
-      "dihedralAngleDeg": 269.945056,
+      "dihedralAngleRad": 4.712389,
+      "dihedralAngleDeg": 270,
       "convexityNote": null
     },
     {
@@ -56217,12 +56217,12 @@
         "cylinder-radial"
       ],
       "nonManifold": false,
-      "normalAngleRad": 1.569837,
-      "normalAngleDeg": 89.945056,
+      "normalAngleRad": 1.570796,
+      "normalAngleDeg": 90,
       "patchNormalAngleDeg": 90.039132,
       "convexity": "concave",
-      "dihedralAngleRad": 4.71143,
-      "dihedralAngleDeg": 269.945056,
+      "dihedralAngleRad": 4.712389,
+      "dihedralAngleDeg": 270,
       "convexityNote": null
     },
     {
@@ -56248,12 +56248,12 @@
         "cylinder-radial"
       ],
       "nonManifold": false,
-      "normalAngleRad": 0.882251,
-      "normalAngleDeg": 50.549282,
+      "normalAngleRad": 0.881113,
+      "normalAngleDeg": 50.484069,
       "patchNormalAngleDeg": 91.36321,
       "convexity": "convex",
-      "dihedralAngleRad": 2.259341,
-      "dihedralAngleDeg": 129.450718,
+      "dihedralAngleRad": 2.260479,
+      "dihedralAngleDeg": 129.515931,
       "convexityNote": null
     },
     {
@@ -56279,12 +56279,12 @@
         "cylinder-radial"
       ],
       "nonManifold": false,
-      "normalAngleRad": 0.880957,
-      "normalAngleDeg": 50.475135,
+      "normalAngleRad": 0.881113,
+      "normalAngleDeg": 50.484069,
       "patchNormalAngleDeg": 91.363433,
       "convexity": "convex",
-      "dihedralAngleRad": 2.260635,
-      "dihedralAngleDeg": 129.524865,
+      "dihedralAngleRad": 2.260479,
+      "dihedralAngleDeg": 129.515931,
       "convexityNote": null
     },
     {
@@ -56310,12 +56310,12 @@
         "cylinder-radial"
       ],
       "nonManifold": false,
-      "normalAngleRad": 0.879663,
-      "normalAngleDeg": 50.400997,
+      "normalAngleRad": 0.881113,
+      "normalAngleDeg": 50.484069,
       "patchNormalAngleDeg": 91.363746,
       "convexity": "convex",
-      "dihedralAngleRad": 2.261929,
-      "dihedralAngleDeg": 129.599003,
+      "dihedralAngleRad": 2.260479,
+      "dihedralAngleDeg": 129.515931,
       "convexityNote": null
     },
     {
@@ -56341,8 +56341,8 @@
         "cylinder-radial"
       ],
       "nonManifold": false,
-      "normalAngleRad": 0.00008,
-      "normalAngleDeg": 0.004563,
+      "normalAngleRad": 0.000083,
+      "normalAngleDeg": 0.004751,
       "patchNormalAngleDeg": 40.953581,
       "convexity": "flat",
       "dihedralAngleRad": 3.141593,
@@ -56372,12 +56372,12 @@
         "tessellation"
       ],
       "nonManifold": false,
-      "normalAngleRad": 0.699608,
-      "normalAngleDeg": 40.084565,
+      "normalAngleRad": 0.699603,
+      "normalAngleDeg": 40.084326,
       "patchNormalAngleDeg": 40.087162,
       "convexity": "concave",
-      "dihedralAngleRad": 3.8412,
-      "dihedralAngleDeg": 220.084565,
+      "dihedralAngleRad": 3.841196,
+      "dihedralAngleDeg": 220.084326,
       "convexityNote": null
     },
     {
@@ -56403,12 +56403,12 @@
         "tessellation"
       ],
       "nonManifold": false,
-      "normalAngleRad": 0.9644,
-      "normalAngleDeg": 55.256029,
+      "normalAngleRad": 0.964395,
+      "normalAngleDeg": 55.255791,
       "patchNormalAngleDeg": 55.25605,
       "convexity": "convex",
-      "dihedralAngleRad": 2.177193,
-      "dihedralAngleDeg": 124.743971,
+      "dihedralAngleRad": 2.177197,
+      "dihedralAngleDeg": 124.744209,
       "convexityNote": null
     },
     {
@@ -56434,8 +56434,8 @@
         "cylinder-radial"
       ],
       "nonManifold": false,
-      "normalAngleRad": 0.000073,
-      "normalAngleDeg": 0.004188,
+      "normalAngleRad": 0.000076,
+      "normalAngleDeg": 0.004376,
       "patchNormalAngleDeg": 40.833214,
       "convexity": "flat",
       "dihedralAngleRad": 3.141593,
@@ -56465,12 +56465,12 @@
         "tessellation"
       ],
       "nonManifold": false,
-      "normalAngleRad": 1.584324,
-      "normalAngleDeg": 90.775102,
+      "normalAngleRad": 1.570796,
+      "normalAngleDeg": 90,
       "patchNormalAngleDeg": 90.000929,
       "convexity": "convex",
-      "dihedralAngleRad": 1.557268,
-      "dihedralAngleDeg": 89.224898,
+      "dihedralAngleRad": 1.570796,
+      "dihedralAngleDeg": 90,
       "convexityNote": null
     },
     {
@@ -56496,12 +56496,12 @@
         "tessellation"
       ],
       "nonManifold": false,
-      "normalAngleRad": 1.548858,
-      "normalAngleDeg": 88.743052,
+      "normalAngleRad": 1.570796,
+      "normalAngleDeg": 90,
       "patchNormalAngleDeg": 89.999071,
       "convexity": "indeterminate",
-      "dihedralAngleRad": 1.592734,
-      "dihedralAngleDeg": 91.256948,
+      "dihedralAngleRad": 1.570796,
+      "dihedralAngleDeg": 90,
       "convexityNote": "wing-probe-disagreement"
     },
     {
@@ -56527,12 +56527,12 @@
         "cylinder-radial"
       ],
       "nonManifold": false,
-      "normalAngleRad": 1.570981,
-      "normalAngleDeg": 90.010588,
+      "normalAngleRad": 1.570796,
+      "normalAngleDeg": 90,
       "patchNormalAngleDeg": 93.497675,
       "convexity": "convex",
-      "dihedralAngleRad": 1.570612,
-      "dihedralAngleDeg": 89.989412,
+      "dihedralAngleRad": 1.570796,
+      "dihedralAngleDeg": 90,
       "convexityNote": null
     },
     {
@@ -56558,12 +56558,12 @@
         "cylinder-radial"
       ],
       "nonManifold": false,
-      "normalAngleRad": 1.570981,
-      "normalAngleDeg": 90.010589,
+      "normalAngleRad": 1.570796,
+      "normalAngleDeg": 90,
       "patchNormalAngleDeg": 93.49792,
       "convexity": "convex",
-      "dihedralAngleRad": 1.570612,
-      "dihedralAngleDeg": 89.989411,
+      "dihedralAngleRad": 1.570796,
+      "dihedralAngleDeg": 90,
       "convexityNote": null
     },
     {
@@ -56620,12 +56620,12 @@
         "tessellation"
       ],
       "nonManifold": false,
-      "normalAngleRad": 1.584248,
-      "normalAngleDeg": 90.770743,
+      "normalAngleRad": 1.570796,
+      "normalAngleDeg": 90,
       "patchNormalAngleDeg": 90.000931,
       "convexity": "indeterminate",
-      "dihedralAngleRad": 1.557344,
-      "dihedralAngleDeg": 89.229257,
+      "dihedralAngleRad": 1.570796,
+      "dihedralAngleDeg": 90,
       "convexityNote": "wing-probe-disagreement"
     },
     {
@@ -56651,12 +56651,12 @@
         "tessellation"
       ],
       "nonManifold": false,
-      "normalAngleRad": 1.54916,
-      "normalAngleDeg": 88.760353,
+      "normalAngleRad": 1.570796,
+      "normalAngleDeg": 90,
       "patchNormalAngleDeg": 89.999069,
       "convexity": "indeterminate",
-      "dihedralAngleRad": 1.592432,
-      "dihedralAngleDeg": 91.239647,
+      "dihedralAngleRad": 1.570796,
+      "dihedralAngleDeg": 90,
       "convexityNote": "wing-probe-disagreement"
     },
     {
@@ -56682,12 +56682,12 @@
         "cylinder-radial"
       ],
       "nonManifold": false,
-      "normalAngleRad": 1.570981,
-      "normalAngleDeg": 90.010593,
+      "normalAngleRad": 1.570796,
+      "normalAngleDeg": 90,
       "patchNormalAngleDeg": 93.497848,
       "convexity": "convex",
-      "dihedralAngleRad": 1.570611,
-      "dihedralAngleDeg": 89.989407,
+      "dihedralAngleRad": 1.570796,
+      "dihedralAngleDeg": 90,
       "convexityNote": null
     },
     {
@@ -56713,12 +56713,12 @@
         "cylinder-radial"
       ],
       "nonManifold": false,
-      "normalAngleRad": 1.570981,
-      "normalAngleDeg": 90.010593,
+      "normalAngleRad": 1.570796,
+      "normalAngleDeg": 90,
       "patchNormalAngleDeg": 93.498093,
       "convexity": "convex",
-      "dihedralAngleRad": 1.570611,
-      "dihedralAngleDeg": 89.989407,
+      "dihedralAngleRad": 1.570796,
+      "dihedralAngleDeg": 90,
       "convexityNote": null
     },
     {
@@ -56775,12 +56775,12 @@
         "tessellation"
       ],
       "nonManifold": false,
-      "normalAngleRad": 1.58425,
-      "normalAngleDeg": 90.770855,
+      "normalAngleRad": 1.570796,
+      "normalAngleDeg": 90,
       "patchNormalAngleDeg": 90.000931,
       "convexity": "indeterminate",
-      "dihedralAngleRad": 1.557342,
-      "dihedralAngleDeg": 89.229145,
+      "dihedralAngleRad": 1.570796,
+      "dihedralAngleDeg": 90,
       "convexityNote": "wing-probe-disagreement"
     },
     {
@@ -56806,12 +56806,12 @@
         "tessellation"
       ],
       "nonManifold": false,
-      "normalAngleRad": 1.549216,
-      "normalAngleDeg": 88.763552,
+      "normalAngleRad": 1.570796,
+      "normalAngleDeg": 90,
       "patchNormalAngleDeg": 89.999069,
       "convexity": "indeterminate",
-      "dihedralAngleRad": 1.592376,
-      "dihedralAngleDeg": 91.236448,
+      "dihedralAngleRad": 1.570796,
+      "dihedralAngleDeg": 90,
       "convexityNote": "wing-probe-disagreement"
     },
     {
@@ -56837,12 +56837,12 @@
         "cylinder-radial"
       ],
       "nonManifold": false,
-      "normalAngleRad": 1.570981,
-      "normalAngleDeg": 90.01058,
+      "normalAngleRad": 1.570796,
+      "normalAngleDeg": 90,
       "patchNormalAngleDeg": 93.497059,
       "convexity": "convex",
-      "dihedralAngleRad": 1.570612,
-      "dihedralAngleDeg": 89.98942,
+      "dihedralAngleRad": 1.570796,
+      "dihedralAngleDeg": 90,
       "convexityNote": null
     },
     {
@@ -56868,12 +56868,12 @@
         "cylinder-radial"
       ],
       "nonManifold": false,
-      "normalAngleRad": 1.570981,
-      "normalAngleDeg": 90.010581,
+      "normalAngleRad": 1.570796,
+      "normalAngleDeg": 90,
       "patchNormalAngleDeg": 93.497303,
       "convexity": "convex",
-      "dihedralAngleRad": 1.570612,
-      "dihedralAngleDeg": 89.989419,
+      "dihedralAngleRad": 1.570796,
+      "dihedralAngleDeg": 90,
       "convexityNote": null
     },
     {
@@ -56930,12 +56930,12 @@
         "tessellation"
       ],
       "nonManifold": false,
-      "normalAngleRad": 1.584307,
-      "normalAngleDeg": 90.774105,
+      "normalAngleRad": 1.570796,
+      "normalAngleDeg": 90,
       "patchNormalAngleDeg": 90.00093,
       "convexity": "concave",
-      "dihedralAngleRad": 4.7259,
-      "dihedralAngleDeg": 270.774105,
+      "dihedralAngleRad": 4.712389,
+      "dihedralAngleDeg": 270,
       "convexityNote": null
     },
     {
@@ -56961,12 +56961,12 @@
         "tessellation"
       ],
       "nonManifold": false,
-      "normalAngleRad": 1.548999,
-      "normalAngleDeg": 88.75108,
+      "normalAngleRad": 1.570796,
+      "normalAngleDeg": 90,
       "patchNormalAngleDeg": 89.99907,
       "convexity": "concave",
-      "dihedralAngleRad": 4.690591,
-      "dihedralAngleDeg": 268.75108,
+      "dihedralAngleRad": 4.712389,
+      "dihedralAngleDeg": 270,
       "convexityNote": null
     },
     {
@@ -56992,12 +56992,12 @@
         "cylinder-radial"
       ],
       "nonManifold": false,
-      "normalAngleRad": 1.570981,
-      "normalAngleDeg": 90.010584,
+      "normalAngleRad": 1.570796,
+      "normalAngleDeg": 90,
       "patchNormalAngleDeg": 93.49696,
       "convexity": "convex",
-      "dihedralAngleRad": 1.570612,
-      "dihedralAngleDeg": 89.989416,
+      "dihedralAngleRad": 1.570796,
+      "dihedralAngleDeg": 90,
       "convexityNote": null
     },
     {
@@ -57023,12 +57023,12 @@
         "cylinder-radial"
       ],
       "nonManifold": false,
-      "normalAngleRad": 1.570981,
-      "normalAngleDeg": 90.01058,
+      "normalAngleRad": 1.570796,
+      "normalAngleDeg": 90,
       "patchNormalAngleDeg": 93.497398,
       "convexity": "convex",
-      "dihedralAngleRad": 1.570612,
-      "dihedralAngleDeg": 89.98942,
+      "dihedralAngleRad": 1.570796,
+      "dihedralAngleDeg": 90,
       "convexityNote": null
     },
     {
@@ -57581,12 +57581,12 @@
         "cylinder-radial"
       ],
       "nonManifold": false,
-      "normalAngleRad": 1.570617,
-      "normalAngleDeg": 89.989732,
+      "normalAngleRad": 1.570796,
+      "normalAngleDeg": 90,
       "patchNormalAngleDeg": 86.437918,
       "convexity": "convex",
-      "dihedralAngleRad": 1.570976,
-      "dihedralAngleDeg": 90.010268,
+      "dihedralAngleRad": 1.570796,
+      "dihedralAngleDeg": 90,
       "convexityNote": null
     },
     {
@@ -57612,12 +57612,12 @@
         "cylinder-radial"
       ],
       "nonManifold": false,
-      "normalAngleRad": 1.570617,
-      "normalAngleDeg": 89.989731,
+      "normalAngleRad": 1.570796,
+      "normalAngleDeg": 90,
       "patchNormalAngleDeg": 86.437673,
       "convexity": "convex",
-      "dihedralAngleRad": 1.570976,
-      "dihedralAngleDeg": 90.010269,
+      "dihedralAngleRad": 1.570796,
+      "dihedralAngleDeg": 90,
       "convexityNote": null
     },
     {
@@ -57643,12 +57643,12 @@
         "cylinder-radial"
       ],
       "nonManifold": false,
-      "normalAngleRad": 1.570617,
-      "normalAngleDeg": 89.989728,
+      "normalAngleRad": 1.570796,
+      "normalAngleDeg": 90,
       "patchNormalAngleDeg": 86.437755,
       "convexity": "convex",
-      "dihedralAngleRad": 1.570976,
-      "dihedralAngleDeg": 90.010272,
+      "dihedralAngleRad": 1.570796,
+      "dihedralAngleDeg": 90,
       "convexityNote": null
     },
     {
@@ -57674,12 +57674,12 @@
         "cylinder-radial"
       ],
       "nonManifold": false,
-      "normalAngleRad": 1.570617,
-      "normalAngleDeg": 89.989727,
+      "normalAngleRad": 1.570796,
+      "normalAngleDeg": 90,
       "patchNormalAngleDeg": 86.437509,
       "convexity": "convex",
-      "dihedralAngleRad": 1.570976,
-      "dihedralAngleDeg": 90.010273,
+      "dihedralAngleRad": 1.570796,
+      "dihedralAngleDeg": 90,
       "convexityNote": null
     },
     {
@@ -57705,12 +57705,12 @@
         "cylinder-radial"
       ],
       "nonManifold": false,
-      "normalAngleRad": 1.570617,
-      "normalAngleDeg": 89.98974,
+      "normalAngleRad": 1.570796,
+      "normalAngleDeg": 90,
       "patchNormalAngleDeg": 86.438531,
       "convexity": "convex",
-      "dihedralAngleRad": 1.570975,
-      "dihedralAngleDeg": 90.01026,
+      "dihedralAngleRad": 1.570796,
+      "dihedralAngleDeg": 90,
       "convexityNote": null
     },
     {
@@ -57736,12 +57736,12 @@
         "cylinder-radial"
       ],
       "nonManifold": false,
-      "normalAngleRad": 1.570617,
-      "normalAngleDeg": 89.989739,
+      "normalAngleRad": 1.570796,
+      "normalAngleDeg": 90,
       "patchNormalAngleDeg": 86.438285,
       "convexity": "convex",
-      "dihedralAngleRad": 1.570975,
-      "dihedralAngleDeg": 90.010261,
+      "dihedralAngleRad": 1.570796,
+      "dihedralAngleDeg": 90,
       "convexityNote": null
     },
     {
@@ -57767,12 +57767,12 @@
         "cylinder-radial"
       ],
       "nonManifold": false,
-      "normalAngleRad": 1.570617,
-      "normalAngleDeg": 89.989735,
+      "normalAngleRad": 1.570796,
+      "normalAngleDeg": 90,
       "patchNormalAngleDeg": 86.438664,
       "convexity": "convex",
-      "dihedralAngleRad": 1.570975,
-      "dihedralAngleDeg": 90.010265,
+      "dihedralAngleRad": 1.570796,
+      "dihedralAngleDeg": 90,
       "convexityNote": null
     },
     {
@@ -57798,12 +57798,12 @@
         "cylinder-radial"
       ],
       "nonManifold": false,
-      "normalAngleRad": 1.570617,
-      "normalAngleDeg": 89.98974,
+      "normalAngleRad": 1.570796,
+      "normalAngleDeg": 90,
       "patchNormalAngleDeg": 86.438224,
       "convexity": "convex",
-      "dihedralAngleRad": 1.570975,
-      "dihedralAngleDeg": 90.01026,
+      "dihedralAngleRad": 1.570796,
+      "dihedralAngleDeg": 90,
       "convexityNote": null
     },
     {
@@ -61177,13 +61177,13 @@
         "cylinder-radial"
       ],
       "nonManifold": false,
-      "normalAngleRad": 1.570784,
-      "normalAngleDeg": 89.999317,
+      "normalAngleRad": 1.570795,
+      "normalAngleDeg": 89.999935,
       "patchNormalAngleDeg": 177.784972,
-      "convexity": "indeterminate",
-      "dihedralAngleRad": 1.570808,
-      "dihedralAngleDeg": 90.000683,
-      "convexityNote": "wing-probe-disagreement"
+      "convexity": "concave",
+      "dihedralAngleRad": 4.712388,
+      "dihedralAngleDeg": 269.999935,
+      "convexityNote": null
     },
     {
       "id": "adjacency:face:BRepFace-202|face:BRepFace-203|edge:BRepEdge-521",
@@ -61208,13 +61208,13 @@
         "cylinder-radial"
       ],
       "nonManifold": false,
-      "normalAngleRad": 1.570784,
-      "normalAngleDeg": 89.999317,
+      "normalAngleRad": 1.570795,
+      "normalAngleDeg": 89.999935,
       "patchNormalAngleDeg": 177.784972,
-      "convexity": "indeterminate",
-      "dihedralAngleRad": 1.570808,
-      "dihedralAngleDeg": 90.000683,
-      "convexityNote": "wing-probe-disagreement"
+      "convexity": "concave",
+      "dihedralAngleRad": 4.712388,
+      "dihedralAngleDeg": 269.999935,
+      "convexityNote": null
     },
     {
       "id": "adjacency:face:BRepFace-204|face:BRepFace-205|edge:BRepEdge-523",
@@ -61239,12 +61239,12 @@
         "cylinder-radial"
       ],
       "nonManifold": false,
-      "normalAngleRad": 1.570766,
-      "normalAngleDeg": 89.998261,
+      "normalAngleRad": 1.570796,
+      "normalAngleDeg": 89.999975,
       "patchNormalAngleDeg": 178.179196,
       "convexity": "concave",
-      "dihedralAngleRad": 4.712359,
-      "dihedralAngleDeg": 269.998261,
+      "dihedralAngleRad": 4.712389,
+      "dihedralAngleDeg": 269.999975,
       "convexityNote": null
     },
     {
@@ -61270,12 +61270,12 @@
         "cylinder-radial"
       ],
       "nonManifold": false,
-      "normalAngleRad": 1.570766,
-      "normalAngleDeg": 89.998261,
+      "normalAngleRad": 1.570796,
+      "normalAngleDeg": 89.999975,
       "patchNormalAngleDeg": 178.179196,
       "convexity": "concave",
-      "dihedralAngleRad": 4.712359,
-      "dihedralAngleDeg": 269.998261,
+      "dihedralAngleRad": 4.712389,
+      "dihedralAngleDeg": 269.999975,
       "convexityNote": null
     },
     {
@@ -61301,12 +61301,12 @@
         "cylinder-radial"
       ],
       "nonManifold": false,
-      "normalAngleRad": 1.570767,
-      "normalAngleDeg": 89.998301,
+      "normalAngleRad": 1.570796,
+      "normalAngleDeg": 89.999975,
       "patchNormalAngleDeg": 178.179196,
       "convexity": "concave",
-      "dihedralAngleRad": 4.712359,
-      "dihedralAngleDeg": 269.998301,
+      "dihedralAngleRad": 4.712389,
+      "dihedralAngleDeg": 269.999975,
       "convexityNote": null
     },
     {
@@ -61332,12 +61332,12 @@
         "cylinder-radial"
       ],
       "nonManifold": false,
-      "normalAngleRad": 1.570767,
-      "normalAngleDeg": 89.998301,
+      "normalAngleRad": 1.570796,
+      "normalAngleDeg": 89.999975,
       "patchNormalAngleDeg": 178.179196,
       "convexity": "concave",
-      "dihedralAngleRad": 4.712359,
-      "dihedralAngleDeg": 269.998301,
+      "dihedralAngleRad": 4.712389,
+      "dihedralAngleDeg": 269.999975,
       "convexityNote": null
     },
     {
@@ -61363,13 +61363,13 @@
         "cylinder-radial"
       ],
       "nonManifold": false,
-      "normalAngleRad": 1.570766,
-      "normalAngleDeg": 89.998291,
+      "normalAngleRad": 1.570796,
+      "normalAngleDeg": 89.99998,
       "patchNormalAngleDeg": 178.179856,
-      "convexity": "indeterminate",
-      "dihedralAngleRad": 1.570826,
-      "dihedralAngleDeg": 90.001709,
-      "convexityNote": "wing-probe-disagreement"
+      "convexity": "concave",
+      "dihedralAngleRad": 4.712389,
+      "dihedralAngleDeg": 269.99998,
+      "convexityNote": null
     },
     {
       "id": "adjacency:face:BRepFace-208|face:BRepFace-209|edge:BRepEdge-533",
@@ -61394,13 +61394,13 @@
         "cylinder-radial"
       ],
       "nonManifold": false,
-      "normalAngleRad": 1.570766,
-      "normalAngleDeg": 89.998291,
+      "normalAngleRad": 1.570796,
+      "normalAngleDeg": 89.99998,
       "patchNormalAngleDeg": 178.179856,
-      "convexity": "indeterminate",
-      "dihedralAngleRad": 1.570826,
-      "dihedralAngleDeg": 90.001709,
-      "convexityNote": "wing-probe-disagreement"
+      "convexity": "concave",
+      "dihedralAngleRad": 4.712389,
+      "dihedralAngleDeg": 269.99998,
+      "convexityNote": null
     },
     {
       "id": "adjacency:face:BRepFace-210|face:BRepFace-211|edge:BRepEdge-535",
@@ -61425,13 +61425,13 @@
         "cylinder-radial"
       ],
       "nonManifold": false,
-      "normalAngleRad": 1.568974,
-      "normalAngleDeg": 89.895608,
+      "normalAngleRad": 1.570796,
+      "normalAngleDeg": 90,
       "patchNormalAngleDeg": 178.625711,
-      "convexity": "indeterminate",
-      "dihedralAngleRad": 1.572618,
-      "dihedralAngleDeg": 90.104392,
-      "convexityNote": "wing-probe-disagreement"
+      "convexity": "concave",
+      "dihedralAngleRad": 4.712389,
+      "dihedralAngleDeg": 270,
+      "convexityNote": null
     },
     {
       "id": "adjacency:face:BRepFace-210|face:BRepFace-211|edge:BRepEdge-537",
@@ -61456,13 +61456,13 @@
         "cylinder-radial"
       ],
       "nonManifold": false,
-      "normalAngleRad": 1.568974,
-      "normalAngleDeg": 89.895608,
+      "normalAngleRad": 1.570796,
+      "normalAngleDeg": 90,
       "patchNormalAngleDeg": 178.625711,
-      "convexity": "indeterminate",
-      "dihedralAngleRad": 1.572618,
-      "dihedralAngleDeg": 90.104392,
-      "convexityNote": "wing-probe-disagreement"
+      "convexity": "concave",
+      "dihedralAngleRad": 4.712389,
+      "dihedralAngleDeg": 270,
+      "convexityNote": null
     },
     {
       "id": "adjacency:face:BRepFace-212|face:BRepFace-213|edge:BRepEdge-541",
@@ -61890,8 +61890,8 @@
         "cylinder-radial"
       ],
       "nonManifold": false,
-      "normalAngleRad": 0.000946,
-      "normalAngleDeg": 0.054227,
+      "normalAngleRad": 0.000343,
+      "normalAngleDeg": 0.019671,
       "patchNormalAngleDeg": 70.973348,
       "convexity": "flat",
       "dihedralAngleRad": 3.141593,
@@ -61952,12 +61952,12 @@
         "tessellation"
       ],
       "nonManifold": false,
-      "normalAngleRad": 0.080804,
-      "normalAngleDeg": 4.629731,
+      "normalAngleRad": 0.081276,
+      "normalAngleDeg": 4.656779,
       "patchNormalAngleDeg": 66.263546,
       "convexity": "concave",
-      "dihedralAngleRad": 3.222397,
-      "dihedralAngleDeg": 184.629731,
+      "dihedralAngleRad": 3.222869,
+      "dihedralAngleDeg": 184.656779,
       "convexityNote": null
     },
     {
@@ -61983,12 +61983,12 @@
         "tessellation"
       ],
       "nonManifold": false,
-      "normalAngleRad": 1.570806,
-      "normalAngleDeg": 90.00055,
+      "normalAngleRad": 1.570796,
+      "normalAngleDeg": 90,
       "patchNormalAngleDeg": 90.000662,
       "convexity": "convex",
-      "dihedralAngleRad": 1.570787,
-      "dihedralAngleDeg": 89.99945,
+      "dihedralAngleRad": 1.570796,
+      "dihedralAngleDeg": 90,
       "convexityNote": null
     },
     {
@@ -63471,12 +63471,12 @@
         "tessellation"
       ],
       "nonManifold": false,
-      "normalAngleRad": 1.570798,
-      "normalAngleDeg": 90.000091,
+      "normalAngleRad": 1.570796,
+      "normalAngleDeg": 90,
       "patchNormalAngleDeg": 90.086427,
       "convexity": "convex",
-      "dihedralAngleRad": 1.570795,
-      "dihedralAngleDeg": 89.999909,
+      "dihedralAngleRad": 1.570796,
+      "dihedralAngleDeg": 90,
       "convexityNote": null
     },
     {
@@ -63564,12 +63564,12 @@
         "tessellation"
       ],
       "nonManifold": false,
-      "normalAngleRad": 1.570798,
-      "normalAngleDeg": 90.000094,
+      "normalAngleRad": 1.570796,
+      "normalAngleDeg": 90,
       "patchNormalAngleDeg": 90.085459,
       "convexity": "convex",
-      "dihedralAngleRad": 1.570795,
-      "dihedralAngleDeg": 89.999906,
+      "dihedralAngleRad": 1.570796,
+      "dihedralAngleDeg": 90,
       "convexityNote": null
     },
     {

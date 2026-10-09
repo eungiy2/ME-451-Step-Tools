@@ -8,21 +8,21 @@ as empty graphs.
 
 | Fixture | Schema | Topology | Nodes | Edges | Convexity (convex/concave/flat/indet.) | PMI resolved/missing/ambiguous |
 | --- | --- | --- | ---: | ---: | --- | --- |
-| nist_ctc_01_asme1_ap242-e1.stp | AP242 | occt | 665 | 1678 | 220/4/94/0 | 58/0/0 |
-| nist_ctc_02_asme1_ap242-e2.stp | AP242 | occt | 2997 | 7521 | 439/438/425/108 | 199/84/0 |
-| nist_ctc_03_asme1_ap242-e2.stp | AP242 | occt | 755 | 1994 | 258/7/86/3 | 137/0/0 |
-| nist_ctc_04_asme1_ap242-e1.stp | AP242 | occt | 2289 | 5951 | 479/290/275/64 | 345/4/0 |
+| nist_ctc_01_asme1_ap242-e1.stp | AP242 | occt | 665 | 1678 | 224/8/86/0 | 58/0/0 |
+| nist_ctc_02_asme1_ap242-e2.stp | AP242 | occt | 2997 | 7521 | 485/505/305/115 | 199/84/0 |
+| nist_ctc_03_asme1_ap242-e2.stp | AP242 | occt | 755 | 1994 | 272/7/72/3 | 137/0/0 |
+| nist_ctc_04_asme1_ap242-e1.stp | AP242 | occt | 2289 | 5951 | 471/301/278/58 | 345/4/0 |
 | nist_ctc_05_asme1_ap242-e1.stp | AP242 | occt | 834 | 1862 | 160/110/60/10 | 27/17/0 |
 | nist_ftc_06_asme1_ap242-e2.stp | AP242 | occt | 1075 | 2913 | 196/148/108/24 | 300/41/0 |
-| nist_ftc_07_asme1_ap242-e2.stp | AP242 | occt | 1844 | 4906 | 278/348/129/110 | 390/1/0 |
+| nist_ftc_07_asme1_ap242-e2.stp | AP242 | occt | 1844 | 4906 | 290/361/114/100 | 390/1/0 |
 | nist_ftc_08_asme1_ap242-e1-tg.stp | - | - | - | - | - | SKIPPED: no-renderable-geometry-in-step-file |
-| nist_ftc_08_asme1_ap242-e2.stp | AP242 | occt | 1386 | 3591 | 287/86/192/55 | 258/0/0 |
+| nist_ftc_08_asme1_ap242-e2.stp | AP242 | occt | 1386 | 3591 | 295/102/168/55 | 258/0/0 |
 | nist_ftc_09_asme1_ap242-e1.stp | AP242 | occt | 1056 | 2968 | 292/19/100/43 | 421/0/0 |
-| nist_ftc_10_asme1_ap242-e2.stp | AP242 | occt | 1747 | 4771 | 451/110/184/54 | 473/43/0 |
-| nist_ftc_11_asme1_ap242-e2.stp | AP242 | occt | 243 | 578 | 41/48/12/5 | 21/0/0 |
+| nist_ftc_10_asme1_ap242-e2.stp | AP242 | occt | 1747 | 4771 | 453/106/186/54 | 473/43/0 |
+| nist_ftc_11_asme1_ap242-e2.stp | AP242 | occt | 243 | 578 | 35/47/17/7 | 21/0/0 |
 | nist_stc_06_asme1_ap242-e3.stp | AP242 | occt | 824 | 2044 | 153/69/83/15 | 220/0/0 |
 | nist_stc_07_asme1_ap242-e3.stp | - | - | - | - | - | SKIPPED: Open Cascade WebAssembly failed to initialize. Ensure network connectivity to the CDN. |
-| nist_stc_08_asme1_ap242-e3.stp | AP242 | occt | 1502 | 4143 | 294/94/235/82 | 434/2/0 |
+| nist_stc_08_asme1_ap242-e3.stp | AP242 | occt | 1502 | 4143 | 302/110/211/82 | 434/2/0 |
 | nist_stc_09_asme1_ap242-e3.stp | AP242 | occt | 878 | 2317 | 248/10/46/55 | 260/2/0 |
-| nist_stc_10_asme1_ap242-e2.stp | AP242 | occt | 1377 | 3491 | 232/106/136/89 | 338/15/0 |
-| nist_ctc_01_asme1_ap203.stp | AP203 | occt | 800 | 1919 | 223/62/80/11 | 17/0/0 |
+| nist_stc_10_asme1_ap242-e2.stp | AP242 | occt | 1377 | 3491 | 232/112/136/83 | 338/15/0 |
+| nist_ctc_01_asme1_ap203.stp | AP203 | occt | 800 | 1919 | 223/64/78/11 | 17/0/0 |

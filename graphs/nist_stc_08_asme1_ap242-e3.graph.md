@@ -50,9 +50,9 @@
 
 | Convexity | Count |
 | --- | ---: |
-| concave | 94 |
-| convex | 294 |
-| flat | 235 |
+| concave | 110 |
+| convex | 302 |
+| flat | 211 |
 | indeterminate | 82 |
 
 Non-manifold shared edges: 0
