@@ -1,0 +1,23 @@
+# Normalize line endings in the repository.
+#
+# Text files are stored with LF in git and checked out as LF, so a line-ending
+# change never appears as a whole-file diff. Without this, a file stored with
+# CRLF is silently rewritten by any editor that normalizes endings, which makes
+# a three-line change look like a full-file rewrite.
+# Applied going forward only. Files already stored with CRLF are left as they are
+# so that this change does not rewrite files the exporter task must not touch;
+# `git add --renormalize .` would convert them when you choose to do that.
+* text=auto eol=lf
+
+# Binary assets must never be line-ending normalized or diffed as text.
+*.stp   binary
+*.step  binary
+*.wasm  binary
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.ico   binary
+*.pdf   binary
+*.woff  binary
+*.woff2 binary
