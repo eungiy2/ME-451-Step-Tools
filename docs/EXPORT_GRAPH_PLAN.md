@@ -53,6 +53,40 @@ remain required; "minimum" governs what is carried beyond them.
 - Reuse `pmiTopologyReferences.ts` resolution for PMI-to-topology edges — do not invent a second mapping route.
 - Preserve unresolved/ambiguous associations as explicit attributes — never silently drop or guess them.
 
+## Accepted Limitations
+
+Each of the following is known, measured, and accepted under the constraints above.
+None is to be silently repaired: each stays visible in the exported graph or in the
+fixture index.
+
+- **`ADVANCED_FACE` targets that do not resolve.** 12 distinct `(fixture, entity)`
+  pairs across the corpus are `ADVANCED_FACE` entities that fail to map to a face,
+  10 of them in `nist_ftc_10`. The remaining 62 of 74 distinct unresolved targets
+  are legitimately non-face entities — `TRIMMED_CURVE`, `GEOMETRIC_CURVE_SET`,
+  `CARTESIAN_POINT`, `SHAPE_ASPECT`, `AXIS2_PLACEMENT_3D`,
+  `COMPOSITE_SHAPE_ASPECT`, `PRODUCT_DEFINITION_SHAPE` — for which
+  `target-not-mapped` is correct. The mapping lives in `autoGenerateFaceMapping`,
+  an original file that must not be modified, so the 12 remain `resolution: "missing"`
+  with their reason recorded. Complete mapping coverage is not a requirement: the
+  requirement is that every miss be reported rather than guessed.
+- **Partial arcs of a diagonal-axis bore.** The cylinder axis follows the viewer's
+  coordinate-axis rule. The perpendicularity gate catches a full-ring bore whose
+  axis lies off a coordinate axis and withholds the radius, but a small partial arc
+  of such a bore is not reliably caught. Accepted as a limit of the heuristic.
+- **`nist_stc_07_asme1_ap242-e3.stp` produces no graph.** The OCCT importer fails
+  to initialize for this fixture, and `nist_ftc_08_asme1_ap242-e1-tg.stp` carries
+  no renderable geometry. Both are listed in `graphs/index.json` with a status and
+  reason. They are never exported as empty graphs, because an empty graph reads as
+  success.
+- **`datumOrder` duplicates the `component` edge ordering.** Retained deliberately
+  as a convenience for consumers that do not traverse edges. `hasToleranceModifiers`
+  is likewise retained: it disagrees with `modifiers.length > 0` on 5 of 376
+  geometric tolerances and so carries independent information.
+- **Smallest-eigenvector utilities are off the cylinder path.** The axis now comes
+  from the viewer's rule, so `smallestEigenvector` and `symmetric3Eigenvalues` no
+  longer serve the fit. They remain exported and tested as general linear-algebra
+  helpers.
+
 ## Schema Design Notes (for the graph specification document)
 
 The graph specification document must include:
