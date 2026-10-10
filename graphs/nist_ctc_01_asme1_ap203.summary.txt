@@ -1,0 +1,36 @@
+Graph: nist_ctc_01_asme1_ap203
+  schema=AP203  stableHash=0x9ffee238
+  nodes=199  edges=432  ~38841 tokens
+  Nodes: datum=3, face=139, feature=28, part=1, toleranceValue=14, toleranceZone=14
+  Edges: adjacency=370, appliesTo=14, datumOf=3, defines=14, memberFace=31
+  PMI resolution: resolved=0 missing=17 ambiguous=0
+  Faces: planar/cylindrical/etc via surfaceType; convexity: convex=12 concave=31
+  Features:
+- feat-1 hole (diameter=40mm, memberFaces=1)
+- feat-10 hole (diameter=20mm, memberFaces=1)
+- feat-11 hole (diameter=20mm, memberFaces=1)
+- feat-12 hole (diameter=20mm, memberFaces=1)
+- feat-13 counterbore (diameter=35mm, memberFaces=2)
+- feat-14 hole (diameter=20mm, memberFaces=1)
+- feat-15 hole (diameter=40mm, memberFaces=1)
+- feat-16 hole (diameter=20mm, memberFaces=1)
+- feat-17 hole (diameter=20mm, memberFaces=1)
+- feat-18 hole (diameter=35mm, memberFaces=1)
+- feat-19 hole (diameter=35mm, memberFaces=1)
+- feat-2 hole (diameter=20mm, memberFaces=1)
+- feat-20 hole (diameter=25mm, memberFaces=1)
+- feat-21 hole (diameter=25mm, memberFaces=1)
+- feat-22 hole (diameter=25mm, memberFaces=1)
+- feat-23 hole (diameter=25mm, memberFaces=1)
+- feat-24 hole (diameter=12.5872mm, memberFaces=1)
+- feat-25 hole (diameter=13.7049mm, memberFaces=1)
+- feat-26 hole (diameter=13.6402mm, memberFaces=1)
+- feat-27 hole (diameter=10.5514mm, memberFaces=1)
+- feat-28 hole (diameter=9.78293mm, memberFaces=1)
+- feat-3 hole (diameter=20mm, memberFaces=1)
+- feat-4 hole (diameter=20mm, memberFaces=1)
+- feat-5 hole (diameter=20mm, memberFaces=1)
+- feat-6 hole (diameter=20mm, memberFaces=1)
+- feat-7 hole (diameter=50.1132mm, memberFaces=1)
+- feat-8 counterbore (diameter=35mm, memberFaces=2)
+- feat-9 counterbore (diameter=20mm, memberFaces=2)

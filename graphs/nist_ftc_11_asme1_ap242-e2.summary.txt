@@ -1,0 +1,13 @@
+Graph: nist_ftc_11_asme1_ap242-e2
+  schema=AP242  stableHash=0x6be1bab3
+  nodes=71  edges=138  ~11855 tokens
+  Nodes: datum=2, datumReferenceFrame=1, dimension=6, face=42, feature=5, part=1, toleranceValue=4, toleranceZone=10
+  Edges: adjacency=104, appliesTo=13, datumOf=2, defines=10, drfReferences=2, memberFace=5, usesDRF=2
+  PMI resolution: resolved=0 missing=17 ambiguous=0
+  Faces: planar/cylindrical/etc via surfaceType; convexity: convex=1 concave=5
+  Features:
+- feat-1 hole (diameter=32mm, memberFaces=1)
+- feat-2 hole (diameter=1.36955mm, memberFaces=1)
+- feat-3 hole (diameter=1.49758mm, memberFaces=1)
+- feat-4 hole (diameter=1.81414mm, memberFaces=1)
+- feat-5 hole (diameter=1.8052mm, memberFaces=1)
