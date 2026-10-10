@@ -125,6 +125,49 @@ export function classifyBRepFaces(meshes: any[]): ClassifiedFace[] {
 }
 
 /**
+ * Collects the full text of every STEP entity instance of the given type.
+ *
+ * A non-greedy pattern such as `#\d+\s*=\s*ADVANCED_FACE\s*\(.*?\)` cannot be
+ * used here because STEP entity arguments nest parentheses. On a face like
+ *
+ *   #3148=ADVANCED_FACE('13021|10482904',(#3785),#2463,.T.);
+ *
+ * it stops at the `)` that closes the `FACE_BOUND` list and discards every
+ * argument after it, including the surface reference. The surface type lookup
+ * then never sees the `PLANE` or `CYLINDRICAL_SURFACE` and the face is left
+ * unmapped. This was not a rare edge case: every `ADVANCED_FACE` in the NIST
+ * fixture set was truncated this way.
+ *
+ * This walks the parenthesis depth instead, so nested argument lists are
+ * captured whole.
+ */
+export function collectStepEntityStatements(rawStepText: string, entityType: string): string[] {
+  const statements: string[] = [];
+  const pattern = new RegExp(`#\\d+\\s*=\\s*${entityType}\\s*\\(`, "gi");
+
+  let match: RegExpExecArray | null;
+  while ((match = pattern.exec(rawStepText)) !== null) {
+    const start = match.index;
+    let depth = 1;
+    let index = pattern.lastIndex;
+
+    while (index < rawStepText.length && depth > 0) {
+      const character = rawStepText[index];
+      if (character === "(") depth++;
+      else if (character === ")") depth--;
+      index++;
+    }
+
+    // An unbalanced file leaves depth above zero; take the remainder so a
+    // malformed entity is still visible to the caller rather than silently lost.
+    statements.push(rawStepText.slice(start, index));
+    pattern.lastIndex = index;
+  }
+
+  return statements;
+}
+
+/**
  * Runs an advanced geometric sorting algorithm to dynamically map
  * standard STEP Datum and Tolerance anchors to their actual 3D B-Rep mesh counterparts,
  * resolving parsing order mismatches completely!
@@ -139,6 +182,30 @@ export function autoGenerateFaceMapping(
   const classified = classifyBRepFaces(meshes);
   const shellFaceOrder: string[] = [];
 
+  /**
+   * Faces that belong to a `CLOSED_SHELL`, that is, faces of solid geometry.
+   *
+   * AP242 files declare more `ADVANCED_FACE` entities than OCCT tessellates. The
+   * surplus is held in `OPEN_SHELL` blocks belonging to `SHELL_BASED_SURFACE_MODEL`
+   * operations named `Extract`, `Join`, `Split`, or `Fill`: the constructive
+   * history that produced the solid rather than part of it. Those faces are
+   * drawing annotation, such as a datum target zone or a leader note, and no
+   * mesh is ever tessellated for them.
+   *
+   * Geometric face matching must not consider them. An open-shell face can sit
+   * nearer to a mesh than that mesh's true closed-shell counterpart, and because
+   * the matcher iterates rendered meshes it would then bind the annotation face
+   * to real geometry. In `nist_ftc_10` the open-shell face `#17528`, a plane at
+   * y=31, was matched to `BRepFace-176`, a cone at y=19 that already belonged to
+   * closed-shell face `#10863`. That silently attached a perpendicularity
+   * tolerance to the wrong face.
+   *
+   * Solid geometry therefore outranks annotation: only closed-shell faces take
+   * part in geometric matching. An open-shell face stays unmapped, which is the
+   * correct result, because it has no place on the model.
+   */
+  const solidFaceIds = new Set<string>();
+
   const applyClosedShellFaceOrderMapping = () => {
     if (!rawStepText) return 0;
 
@@ -152,6 +219,7 @@ export function autoGenerateFaceMapping(
       const refs = statement.match(/#\d+/g) || [];
       // The first reference is the CLOSED_SHELL entity id. The rest are shell faces in topological order.
       for (const faceId of refs.slice(1)) {
+        solidFaceIds.add(faceId);
         if (!shellFaceOrder.includes(faceId)) {
           shellFaceOrder.push(faceId);
         }
@@ -596,11 +664,17 @@ export function autoGenerateFaceMapping(
         surfaceType: "plane" | "cylinder";
       }
       const stepFaces: StepFace[] = [];
-      const faceLines = rawStepText.match(/#\d+\s*=\s*ADVANCED_FACE\s*\(.*?\)/gi) || [];
+      const faceLines = collectStepEntityStatements(rawStepText, "ADVANCED_FACE");
+      let annotationFaceCount = 0;
       for (const line of faceLines) {
-        const match = line.match(/#(\d+)\s*=\s*ADVANCED_FACE\s*\((.*)\)/i);
+        const match = line.match(/#(\d+)\s*=\s*ADVANCED_FACE\s*\(([\s\S]*)\)\s*;?\s*$/i);
         if (match) {
           const id = `#${match[1]}`;
+          // Only solid faces may compete for a rendered mesh. See solidFaceIds.
+          if (solidFaceIds.size > 0 && !solidFaceIds.has(id)) {
+            annotationFaceCount++;
+            continue;
+          }
           const params = match[2];
           const refs = params.match(/#\d+/g) || [];
           for (const ref of refs) {
@@ -613,6 +687,11 @@ export function autoGenerateFaceMapping(
             }
           }
         }
+      }
+      if (annotationFaceCount > 0) {
+        console.info(
+          `Face mapping: ${annotationFaceCount} open-shell annotation face(s) excluded from geometric matching`
+        );
       }
 
       const getEntityRefs = (entityId: string): string[] => rawEntityStatements.get(entityId)?.match(/#\d+/g) || [];
@@ -663,6 +742,9 @@ export function autoGenerateFaceMapping(
           if (!match) return [];
 
           const id = `#${match[1]}`;
+          // Annotation faces are excluded here for the same reason as in step 6.
+          if (solidFaceIds.size > 0 && !solidFaceIds.has(id)) return [];
+
           const bounds = getBounds(collectEntityPoints(id));
           return bounds ? [{ id, bounds }] : [];
         });
