@@ -48,7 +48,7 @@ remain required; "minimum" governs what is carried beyond them.
 ## Implementation Constraints (Non-negotiable Rules)
 
 - `COMPACT_PMI_MODE_PLAN.md`, `OCCT_NATIVE_TOPOLOGY_PLAN.md`, `PROJECT_ARCHITECTURE_AND_ROADMAP.md` shall be read first before making any modification.
-- Original files in the directory shall not be modified or deleted. You may create new files if required in `src/utils`, but you shall ask for a permission before proceeding.
+- Changes outside `src/utils/exportGraph.ts` belong on their own branch, one concern per branch. This applies to fixes to existing files as well as to new work: a parser fix and a viewer feature do not belong on the exporter branch.
 - All changes must remain general. Do not add filename-specific or sample-specific topology rules.
 - Reuse `pmiTopologyReferences.ts` resolution for PMI-to-topology edges — do not invent a second mapping route.
 - Preserve unresolved/ambiguous associations as explicit attributes — never silently drop or guess them.

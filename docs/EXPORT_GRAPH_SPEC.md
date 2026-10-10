@@ -929,6 +929,12 @@ closed-shell and geometric routes already covered these faces, but the previous
 behaviour was wrong and would have silently lost surface classification on a file
 whose fallback routes did not happen to apply.
 
+The original exporter task was not permitted to modify files outside
+`src/utils/exportGraph.ts`, which is why several findings in this section are
+recorded rather than fixed. That restriction has since been lifted: changes
+outside the exporter now go on their own branch, one concern per branch. The
+findings below still stand as findings, and each remains open.
+
 ### 9.1 False PMI records in the AP203 control
 
 `nist_ctc_01_asme1_ap203.stp` contains no `DATUM_FEATURE`, `DIMENSIONAL_SIZE`,
@@ -936,7 +942,8 @@ whose fallback routes did not happen to apply.
 parser emits 3 datums and 14 dimensions for it. The parser matches STEP lines
 with regular expressions and this file's `SHAPE_ASPECT` usage trips those
 patterns. The control's purpose is served: it exposed the artifact and, with it,
-the node-ID collision in section 2.0. Fixing it means editing `stepParser.ts`.
+the node-ID collision in section 2.0. Fixing it means editing `stepParser.ts`,
+which is open work now that the exporter-only restriction has been lifted.
 
 ### 9.2 No direct FCF-to-dimension link
 
@@ -944,6 +951,31 @@ The parser exposes no direct link from an FCF to the size callout it annotates,
 which is why section 3.6 recovers the attachment from the shared controlled
 feature. Once the parser does carry that link, the explicit reference already
 takes precedence over the derived one and no exporter change is needed.
+
+### 9.3 Phantom geometric tolerances on relationship wrappers
+
+Across the corpus, 36 `GeometricTolerance` nodes have no `pmi-topology` edge and
+an empty `targetStepEntityIds`. All 36 are records emitted for a
+`GEOMETRIC_TOLERANCE_RELATIONSHIP` composite wrapper rather than for the
+`GEOMETRIC_TOLERANCE` it contains. A wrapper of the form
+
+    #61=GEOMETRIC_TOLERANCE_RELATIONSHIP('composite','',#93,#94);
+    #93=( GEOMETRIC_TOLERANCE('Feature Control Frame (28)',...,#571,#393) ... );
+
+names two child tolerances and no shape aspect of its own, so it has nothing for
+the resolver to match. Every one of these records carries
+`toleranceType: "Geometric Tolerance"`, where a genuine record carries `Position`,
+`Parallelism`, `Surface Profile`, and so on, and the tolerance it duplicates is
+usually already present in the graph as a properly resolved node. In
+`nist_ftc_08` the record for `#61` is a phantom alongside the resolved Position
+tolerance for `#93`.
+
+These are parser artifacts, not missing PMI, and a consumer counting geometric
+tolerances will over-count by 36 across the corpus. The same class of defect as
+section 9.1, and the same fix location: the tolerance parser in `stepParser.ts`
+should not emit a record for a relationship wrapper. Note that correcting it
+changes the emitted record set, so every fixture's node counts and determinism
+baseline shift and must be re-exported.
 
 ## 10. Negative control
 
@@ -958,9 +990,7 @@ patterns. The graph faithfully represents what the parser returned, and the
 control's real value is that it made the artifact visible and surfaced the
 node-ID collision in section 2.0.
 
-Resolving the false positives means changing `stepParser.ts`, which this task is
-not permitted to modify, and which is presentation- and parse-layer work rather
-than exporter work. Recorded here as a finding for that layer: an AP203 file
+Resolving the false positives means changing `stepParser.ts`. An AP203 file
 should yield zero PMI records, and the regexes in `stepParser.ts` are matching
 annotation occurrences that carry no tolerance semantics.
 
