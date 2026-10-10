@@ -93,9 +93,12 @@ fixture index.
   A paren-depth scan replaced a non-greedy entity regex in
   `autoGenerateFaceMapping` on branch `fix/advanced-face-paren-scan`, because the
   old pattern truncated every `ADVANCED_FACE` at the closing parenthesis of its
-  `FACE_BOUND` list. That was a real parsing defect and is corrected, but it is
-  a correctness fix rather than a coverage one: fallback routes already covered
-  these faces, and `nist_ftc_10` moves only from 43 to 36 missing references.
+  `FACE_BOUND` list. Correcting it exposed the binding defect described above,
+  which was also present in the exported graphs: `nist_ftc_10` had four mesh
+  faces each carrying three STEP identities. Only `CLOSED_SHELL` faces take part
+  in geometric matching now, the four multi-identity face nodes are gone, and
+  `nist_ftc_10` moves from 43 to 51 missing references because eight references
+  naming annotation faces are now correctly reported unresolved.
 - **Partial arcs of a diagonal-axis bore.** The cylinder axis follows the viewer's
   coordinate-axis rule. The perpendicularity gate catches a full-ring bore whose
   axis lies off a coordinate axis and withholds the radius, but a small partial arc

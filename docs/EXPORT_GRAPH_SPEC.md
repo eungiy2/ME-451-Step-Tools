@@ -924,10 +924,23 @@ A related parsing defect was corrected on branch `fix/advanced-face-paren-scan`.
 `autoGenerateFaceMapping` scanned faces with a non-greedy pattern that stopped at
 the closing parenthesis of the `FACE_BOUND` list, discarding the surface argument
 for all 3843 `ADVANCED_FACE` entities in the fixture set. A paren-depth scan now
-captures each entity whole. The observable effect is small because the
-closed-shell and geometric routes already covered these faces, but the previous
-behaviour was wrong and would have silently lost surface classification on a file
-whose fallback routes did not happen to apply.
+captures each entity whole.
+
+Correcting the scan exposed a second defect. The geometric matcher iterated
+rendered meshes and considered annotation faces on equal terms with solid ones,
+while never checking that the mesh it was assigning was still unclaimed, so an
+annotation face could bind to a mesh the closed-shell ordinal route had already
+given to a different solid face. This damage was already present in the exported
+graphs: in `nist_ftc_10`, `BRepFace-220`, `-221`, `-222`, and `-225` each carried
+one closed-shell face and two annotation faces.
+
+Only `CLOSED_SHELL` faces now take part in geometric matching. All four
+multi-identity face nodes are gone, and across the corpus no face node carries
+more than one solid identity. `nist_ftc_10` moves from 473 resolved / 43 missing
+to 465 / 51 because eight references naming annotation faces are now reported
+unresolved. That is the correct direction: they were previously bound to real
+geometry that they do not describe, and a tolerance attached to a datum target
+symbol rather than the surface it marks is a manufacturing error.
 
 The original exporter task was not permitted to modify files outside
 `src/utils/exportGraph.ts`, which is why several findings in this section are
