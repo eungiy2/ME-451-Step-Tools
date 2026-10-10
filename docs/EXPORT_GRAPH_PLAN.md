@@ -20,32 +20,35 @@ Extend the program with an exporter that emits the loaded part as a graph G = (V
 - Preserve unresolved/ambiguous associations as explicit attributes — never silently drop or guess them.
 
 ### Serialization:
-- versioned JSON (e.g. { "graphVersion": 1, "source": {...}, "nodes": [...], "edges": [...] }), one file per loaded part, plus a human-readable summary. Keep it deterministic: same STEP file in, byte-identical graph out (modulo a timestamp field).
+- versioned JSON (e.g. { "graphVersion": 1, "source": {...}, "nodes": [...], "edges": [...] }), one file per loaded part, plus a human-readable summary. Keep it deterministic: same STEP file in, byte-identical graph out (modulo a timestamp field). 
 
-## Design Questions to Answer (and defend in report)
+### Design decisions
+- Node-per-face should be the base node and node-per-feature should be the derived node.
+- Separate tolerance "zone" and "values". They should not be mixed.
+- Separate datum reference frame (ordered datum list) without turning the graph into a tree
+- For the concavity/convexivity of cyliderical faces, use the smallest component of the mean absolute normal as the axis direction as the viewer code (viewer already does this in interactionCache.CylinderAxis).
+- The minimum viable graph shall be: the PMI, the faces it controls, and how those faces join.
+- Minimize the structure of the output. Do not have redundancy.
 
-1. **Node-per-face vs. node-per-feature**: which goes in the base graph and which is derived? (The codebase roadmap already plans a feature-recognition layer — Task 2 builds the substrate it would consume.)
+These are settled design decisions, not open options: each is implemented in
+`exportGraph.ts` and its rationale is recorded in `EXPORT_GRAPH_SPEC.md` section 11.
 
-2. **Tolerance zones vs. tolerance values**: How do you represent tolerance *zones* vs. tolerance *values*?
-
-3. **Datum reference frames**: How do you represent a datum reference frame (ordered datum list) without turning the graph into a tree?
-
-4. **Convexity/concavity for cylindrical faces**: What convexity/concavity computation do you use for cylindrical and partial-cylindrical faces (hint: the viewer code already fits cylinders)?
-
-5. **Minimum viable graph**: What is the minimum graph that still lets an LLM answer manufacturing questions? Bigger is not better — every extra attribute is context-window cost in Task 3.
+The minimum viable graph does not reduce the geometric information required
+above. Face adjacency, convexity, dihedral angle, surface type and edge type
+remain required; "minimum" governs what is carried beyond them.
 
 ## Deliverables 
 
 1. **`exportGraph` capability** — in the app (or a script over the same modules)
 2. **Graphs for all NIST AP242 fixtures** — `nist_ctc_01` through `nist_stc_10`, `nist_ftc_06` through `nist_ftc_11`
 3. **Graph specification document** — node/edge schema with rationale and an example snippet per entity type
-4. **One AP203 file as negative control** — geometry only, no PMI (e.g., `nist_ctc_01_asme1_ap203.stp`)
+4. **One AP203 file as negative control** — geometry only, no PMI (e.g. `nist_ctc_01_asme1_ap203.stp`)
 5. **Lint/build passing** — `npm run lint` and `npm run build` must pass
 
 ## Implementation Constraints (Non-negotiable Rules)
 
 - `COMPACT_PMI_MODE_PLAN.md`, `OCCT_NATIVE_TOPOLOGY_PLAN.md`, `PROJECT_ARCHITECTURE_AND_ROADMAP.md` shall be read first before making any modification.
-- Files in this project shall not be modified besides `exportGraph.ts` in `src/utils`.
+- Original files in the directory shall not be modified or deleted. You may create new files if required in `src/utils`, but you shall ask for a permission before proceeding.
 - All changes must remain general. Do not add filename-specific or sample-specific topology rules.
 - Reuse `pmiTopologyReferences.ts` resolution for PMI-to-topology edges — do not invent a second mapping route.
 - Preserve unresolved/ambiguous associations as explicit attributes — never silently drop or guess them.
