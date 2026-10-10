@@ -18,7 +18,7 @@
       "Dimension": 10,
       "Edge": 880,
       "Face": 304,
-      "GeometricTolerance": 33,
+      "GeometricTolerance": 27,
       "Vertex": 582
     },
     "edgeCounts": {
@@ -57587,33 +57587,6 @@
       "ambiguousTargetStepEntityIds": []
     },
     {
-      "id": "gdt:#14131",
-      "kind": "GeometricTolerance",
-      "label": "Geometric Tolerance 14121",
-      "entityId": "#14131",
-      "category": "Location",
-      "targetStepEntityIds": [],
-      "toleranceType": "Geometric Tolerance",
-      "symbol": "GTOL",
-      "toleranceValue": 14121,
-      "toleranceZone": {
-        "form": null,
-        "isDiameter": false,
-        "projectedHeight": null,
-        "value": 14121
-      },
-      "modifiers": [],
-      "isStatisticalTolerance": false,
-      "hasToleranceModifiers": false,
-      "targetName": "Unresolved semantic tolerance target",
-      "attachedDimensionEntityId": null,
-      "datumReferenceFrameLabel": null,
-      "datumReferenceFrameEntityId": null,
-      "datumReferenceOrder": [],
-      "unresolvedTargetStepEntityIds": [],
-      "ambiguousTargetStepEntityIds": []
-    },
-    {
       "id": "gdt:#14218",
       "kind": "GeometricTolerance",
       "label": "Position 0.023",
@@ -57863,33 +57836,6 @@
       "ambiguousTargetStepEntityIds": []
     },
     {
-      "id": "gdt:#14486",
-      "kind": "GeometricTolerance",
-      "label": "Geometric Tolerance 14472",
-      "entityId": "#14486",
-      "category": "Location",
-      "targetStepEntityIds": [],
-      "toleranceType": "Geometric Tolerance",
-      "symbol": "GTOL",
-      "toleranceValue": 14472,
-      "toleranceZone": {
-        "form": null,
-        "isDiameter": false,
-        "projectedHeight": null,
-        "value": 14472
-      },
-      "modifiers": [],
-      "isStatisticalTolerance": false,
-      "hasToleranceModifiers": false,
-      "targetName": "Unresolved semantic tolerance target",
-      "attachedDimensionEntityId": null,
-      "datumReferenceFrameLabel": null,
-      "datumReferenceFrameEntityId": null,
-      "datumReferenceOrder": [],
-      "unresolvedTargetStepEntityIds": [],
-      "ambiguousTargetStepEntityIds": []
-    },
-    {
       "id": "gdt:#14544",
       "kind": "GeometricTolerance",
       "label": "Position 0.04",
@@ -58034,33 +57980,6 @@
       "ambiguousTargetStepEntityIds": []
     },
     {
-      "id": "gdt:#14624",
-      "kind": "GeometricTolerance",
-      "label": "Geometric Tolerance 14614",
-      "entityId": "#14624",
-      "category": "Location",
-      "targetStepEntityIds": [],
-      "toleranceType": "Geometric Tolerance",
-      "symbol": "GTOL",
-      "toleranceValue": 14614,
-      "toleranceZone": {
-        "form": null,
-        "isDiameter": false,
-        "projectedHeight": null,
-        "value": 14614
-      },
-      "modifiers": [],
-      "isStatisticalTolerance": false,
-      "hasToleranceModifiers": false,
-      "targetName": "Unresolved semantic tolerance target",
-      "attachedDimensionEntityId": null,
-      "datumReferenceFrameLabel": null,
-      "datumReferenceFrameEntityId": null,
-      "datumReferenceOrder": [],
-      "unresolvedTargetStepEntityIds": [],
-      "ambiguousTargetStepEntityIds": []
-    },
-    {
       "id": "gdt:#14709",
       "kind": "GeometricTolerance",
       "label": "Position 0.06",
@@ -58141,33 +58060,6 @@
         "B",
         "C"
       ],
-      "unresolvedTargetStepEntityIds": [],
-      "ambiguousTargetStepEntityIds": []
-    },
-    {
-      "id": "gdt:#14723",
-      "kind": "GeometricTolerance",
-      "label": "Geometric Tolerance 14709",
-      "entityId": "#14723",
-      "category": "Location",
-      "targetStepEntityIds": [],
-      "toleranceType": "Geometric Tolerance",
-      "symbol": "GTOL",
-      "toleranceValue": 14709,
-      "toleranceZone": {
-        "form": null,
-        "isDiameter": false,
-        "projectedHeight": null,
-        "value": 14709
-      },
-      "modifiers": [],
-      "isStatisticalTolerance": false,
-      "hasToleranceModifiers": false,
-      "targetName": "Unresolved semantic tolerance target",
-      "attachedDimensionEntityId": null,
-      "datumReferenceFrameLabel": null,
-      "datumReferenceFrameEntityId": null,
-      "datumReferenceOrder": [],
       "unresolvedTargetStepEntityIds": [],
       "ambiguousTargetStepEntityIds": []
     },
@@ -58407,33 +58299,6 @@
       "ambiguousTargetStepEntityIds": []
     },
     {
-      "id": "gdt:#15037",
-      "kind": "GeometricTolerance",
-      "label": "Geometric Tolerance 15026",
-      "entityId": "#15037",
-      "category": "Location",
-      "targetStepEntityIds": [],
-      "toleranceType": "Geometric Tolerance",
-      "symbol": "GTOL",
-      "toleranceValue": 15026,
-      "toleranceZone": {
-        "form": null,
-        "isDiameter": false,
-        "projectedHeight": null,
-        "value": 15026
-      },
-      "modifiers": [],
-      "isStatisticalTolerance": false,
-      "hasToleranceModifiers": false,
-      "targetName": "Unresolved semantic tolerance target",
-      "attachedDimensionEntityId": null,
-      "datumReferenceFrameLabel": null,
-      "datumReferenceFrameEntityId": null,
-      "datumReferenceOrder": [],
-      "unresolvedTargetStepEntityIds": [],
-      "ambiguousTargetStepEntityIds": []
-    },
-    {
       "id": "gdt:#15076",
       "kind": "GeometricTolerance",
       "label": "Surface Profile 0.07",
@@ -58494,33 +58359,6 @@
       "datumReferenceOrder": [
         "A"
       ],
-      "unresolvedTargetStepEntityIds": [],
-      "ambiguousTargetStepEntityIds": []
-    },
-    {
-      "id": "gdt:#15086",
-      "kind": "GeometricTolerance",
-      "label": "Geometric Tolerance 15076",
-      "entityId": "#15086",
-      "category": "Location",
-      "targetStepEntityIds": [],
-      "toleranceType": "Geometric Tolerance",
-      "symbol": "GTOL",
-      "toleranceValue": 15076,
-      "toleranceZone": {
-        "form": null,
-        "isDiameter": false,
-        "projectedHeight": null,
-        "value": 15076
-      },
-      "modifiers": [],
-      "isStatisticalTolerance": false,
-      "hasToleranceModifiers": false,
-      "targetName": "Unresolved semantic tolerance target",
-      "attachedDimensionEntityId": null,
-      "datumReferenceFrameLabel": null,
-      "datumReferenceFrameEntityId": null,
-      "datumReferenceOrder": [],
       "unresolvedTargetStepEntityIds": [],
       "ambiguousTargetStepEntityIds": []
     },

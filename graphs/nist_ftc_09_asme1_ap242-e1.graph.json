@@ -18,7 +18,7 @@
       "Dimension": 20,
       "Edge": 474,
       "Face": 163,
-      "GeometricTolerance": 33,
+      "GeometricTolerance": 31,
       "Vertex": 320
     },
     "edgeCounts": {
@@ -33067,33 +33067,6 @@
       "ambiguousTargetStepEntityIds": []
     },
     {
-      "id": "gdt:#10848",
-      "kind": "GeometricTolerance",
-      "label": "Geometric Tolerance 10836",
-      "entityId": "#10848",
-      "category": "Location",
-      "targetStepEntityIds": [],
-      "toleranceType": "Geometric Tolerance",
-      "symbol": "GTOL",
-      "toleranceValue": 10836,
-      "toleranceZone": {
-        "form": null,
-        "isDiameter": false,
-        "projectedHeight": null,
-        "value": 10836
-      },
-      "modifiers": [],
-      "isStatisticalTolerance": false,
-      "hasToleranceModifiers": false,
-      "targetName": "Unresolved semantic tolerance target",
-      "attachedDimensionEntityId": null,
-      "datumReferenceFrameLabel": null,
-      "datumReferenceFrameEntityId": null,
-      "datumReferenceOrder": [],
-      "unresolvedTargetStepEntityIds": [],
-      "ambiguousTargetStepEntityIds": []
-    },
-    {
       "id": "gdt:#10898",
       "kind": "GeometricTolerance",
       "label": "Position 0.05",
@@ -33164,33 +33137,6 @@
       "datumReferenceOrder": [
         "A"
       ],
-      "unresolvedTargetStepEntityIds": [],
-      "ambiguousTargetStepEntityIds": []
-    },
-    {
-      "id": "gdt:#10910",
-      "kind": "GeometricTolerance",
-      "label": "Geometric Tolerance 10898",
-      "entityId": "#10910",
-      "category": "Location",
-      "targetStepEntityIds": [],
-      "toleranceType": "Geometric Tolerance",
-      "symbol": "GTOL",
-      "toleranceValue": 10898,
-      "toleranceZone": {
-        "form": null,
-        "isDiameter": false,
-        "projectedHeight": null,
-        "value": 10898
-      },
-      "modifiers": [],
-      "isStatisticalTolerance": false,
-      "hasToleranceModifiers": false,
-      "targetName": "Unresolved semantic tolerance target",
-      "attachedDimensionEntityId": null,
-      "datumReferenceFrameLabel": null,
-      "datumReferenceFrameEntityId": null,
-      "datumReferenceOrder": [],
       "unresolvedTargetStepEntityIds": [],
       "ambiguousTargetStepEntityIds": []
     },

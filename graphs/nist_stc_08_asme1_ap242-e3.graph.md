@@ -5,7 +5,7 @@
 - Tessellation: linear 0.02, angular 0.1
 - Units: lengths in mm, angles in deg
 - Mesh winding: outward (signed volume 503600.961923)
-- Nodes: 1502, edges: 4143
+- Nodes: 1498, edges: 4143
 
 ## Node counts
 
@@ -16,7 +16,7 @@
 | Dimension | 7 |
 | Edge | 705 |
 | Face | 270 |
-| GeometricTolerance | 34 |
+| GeometricTolerance | 30 |
 | Vertex | 442 |
 
 ## Edge counts

@@ -2758,6 +2758,15 @@ export function parseStepFile(fileName: string, text: string): StepParseResult {
       const entityTypeLabel = entityTypes.join(" ");
       if (!entityTypes.some((type) => /_TOLERANCE/.test(type))) continue;
       if (entityTypes.some((type) => /TOLERANCE_ZONE|PLUS_MINUS_TOLERANCE|TOLERANCE_VALUE/.test(type))) continue;
+      // GEOMETRIC_TOLERANCE_RELATIONSHIP groups tolerances that apply together,
+      // for example two position tolerances forming one composite frame. It
+      // carries no magnitude and no toleranced shape aspect of its own, so it is
+      // a container rather than a tolerance. It matches /_TOLERANCE/ only because
+      // that substring appears in its name, and treating it as a tolerance
+      // produced a record per relationship: a node with an entity reference read
+      // as its value, no target, and type "Geometric Tolerance", duplicating
+      // tolerances that were already parsed from the children it points at.
+      if (entityTypes.some((type) => /_TOLERANCE_RELATIONSHIP/.test(type))) continue;
 
       const refs = getEntityRefs(entityId);
       const magnitudeRef = refs.find((ref) => /LENGTH_MEASURE_WITH_UNIT|PLANE_ANGLE_MEASURE_WITH_UNIT/i.test(getEntityType(ref)));

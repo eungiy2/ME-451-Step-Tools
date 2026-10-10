@@ -128,7 +128,7 @@
       "Dimension": 7,
       "Edge": 1108,
       "Face": 483,
-      "GeometricTolerance": 9,
+      "GeometricTolerance": 7,
       "Vertex": 662
     },
     "edgeCounts": {
@@ -209,7 +209,7 @@
       "Dimension": 17,
       "Edge": 476,
       "Face": 187,
-      "GeometricTolerance": 32,
+      "GeometricTolerance": 28,
       "Vertex": 310
     },
     "edgeCounts": {
@@ -249,7 +249,7 @@
       "Dimension": 10,
       "Edge": 880,
       "Face": 304,
-      "GeometricTolerance": 33,
+      "GeometricTolerance": 27,
       "Vertex": 582
     },
     "edgeCounts": {
@@ -293,7 +293,7 @@
       "Dimension": 10,
       "Edge": 640,
       "Face": 247,
-      "GeometricTolerance": 39,
+      "GeometricTolerance": 33,
       "Vertex": 400
     },
     "edgeCounts": {
@@ -331,7 +331,7 @@
       "Dimension": 20,
       "Edge": 474,
       "Face": 163,
-      "GeometricTolerance": 33,
+      "GeometricTolerance": 31,
       "Vertex": 320
     },
     "edgeCounts": {
@@ -370,7 +370,7 @@
       "Dimension": 18,
       "Edge": 799,
       "Face": 264,
-      "GeometricTolerance": 43,
+      "GeometricTolerance": 40,
       "Vertex": 560
     },
     "edgeCounts": {
@@ -448,7 +448,7 @@
       "Dimension": 11,
       "Edge": 363,
       "Face": 144,
-      "GeometricTolerance": 29,
+      "GeometricTolerance": 25,
       "Vertex": 240
     },
     "edgeCounts": {
@@ -491,7 +491,7 @@
       "Dimension": 7,
       "Edge": 705,
       "Face": 270,
-      "GeometricTolerance": 34,
+      "GeometricTolerance": 30,
       "Vertex": 442
     },
     "edgeCounts": {
@@ -530,7 +530,7 @@
       "Dimension": 19,
       "Edge": 392,
       "Face": 125,
-      "GeometricTolerance": 29,
+      "GeometricTolerance": 27,
       "Vertex": 271
     },
     "edgeCounts": {
@@ -569,7 +569,7 @@
       "Dimension": 22,
       "Edge": 617,
       "Face": 256,
-      "GeometricTolerance": 40,
+      "GeometricTolerance": 37,
       "Vertex": 388
     },
     "edgeCounts": {

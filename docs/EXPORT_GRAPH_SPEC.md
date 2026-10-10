@@ -984,11 +984,31 @@ usually already present in the graph as a properly resolved node. In
 tolerance for `#93`.
 
 These are parser artifacts, not missing PMI, and a consumer counting geometric
-tolerances will over-count by 36 across the corpus. The same class of defect as
-section 9.1, and the same fix location: the tolerance parser in `stepParser.ts`
-should not emit a record for a relationship wrapper. Note that correcting it
-changes the emitted record set, so every fixture's node counts and determinism
-baseline shift and must be re-exported.
+tolerances would over-count by 36 across the corpus. The same class of defect as
+section 9.1, and the same fix location.
+
+**Resolved** on branch `fix/phantom-geometric-tolerances`. The cause was in
+`buildSfaSemanticTolerances`, which selected entities whose type matched
+`/_TOLERANCE/`. That substring also occurs in `GEOMETRIC_TOLERANCE_RELATIONSHIP`,
+so each relationship produced a record: no magnitude measure, so the magnitude
+fell back to the first number in the parameter string, which was the child
+entity reference (`#93` read as a value of 93); no toleranced shape aspect, so
+`targetStepEntityIds` came out empty; and no recognisable type, so
+`getToleranceDefinition` returned its `Geometric Tolerance` fallback.
+
+The container exclusion applies to the semantic tolerance builder only. The
+dimension parser is a separate path and is unaffected.
+
+The relationships themselves are well-formed AP242. All 42 across the fixture set
+name exactly two real `GEOMETRIC_TOLERANCE` entities, all are `composite`, and
+every child carries a `toleranced_shape_aspect`. Grouping relationships is
+legitimate modelling and the pairing information is retained for a future
+composite-frame renderer; the error was treating the container as a tolerance.
+
+The fix excludes `_TOLERANCE_RELATIONSHIP` from tolerance selection. Across 20
+legitimate tolerance entity types it removes exactly one, and no real tolerance
+is dropped. Verified by `scripts/verifyPhantomTolerances.ts`, which is confirmed
+to fail on the unfixed parser.
 
 ## 10. Negative control
 
