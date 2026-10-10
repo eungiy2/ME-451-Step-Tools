@@ -1,2 +1,28 @@
-node_modules
+# Dependencies
+node_modules/
+
+# Environment files (never commit secrets)
+.env
 .env.*
+!.env.example
+
+# Build output
+dist/
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+tmp/
+*.tmp
+
+# OS files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Editor files
+.vscode/
+.idea/
+*.swp
