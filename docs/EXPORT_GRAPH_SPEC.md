@@ -952,11 +952,55 @@ findings below still stand as findings, and each remains open.
 
 `nist_ctc_01_asme1_ap203.stp` contains no `DATUM_FEATURE`, `DIMENSIONAL_SIZE`,
 `GEOMETRIC_TOLERANCE`, `TOLERANCE_ZONE` or `DATUM_REFERENCE` entity, yet the
-parser emits 3 datums and 14 dimensions for it. The parser matches STEP lines
-with regular expressions and this file's `SHAPE_ASPECT` usage trips those
-patterns. The control's purpose is served: it exposed the artifact and, with it,
-the node-ID collision in section 2.0. Fixing it means editing `stepParser.ts`,
-which is open work now that the exporter-only restriction has been lifted.
+parser emits 3 datums and 14 dimensions for it. The control's purpose is served:
+it exposed the artifact and, with it, the node-ID collision in section 2.0.
+
+**The earlier explanation of the cause was wrong.** It attributed the records to
+regular expressions matching `SHAPE_ASPECT` usage. `SHAPE_ASPECT` appears zero
+times in the file, as do all five PMI entity names. Nothing is being matched
+accidentally.
+
+The records come from a deliberate fallback in `stepParser.ts`. Steps 3 and 4 of
+the assembly reconstruct datums and feature control frames when no semantic
+record was parsed:
+
+    if (parsedDatums.length === 0 && datumAnnotations.length > 0) { ... }
+    if (parsedTolerances.length === 0 && fcfAnnotations.length > 0) { ... }
+
+`datumAnnotations` and `fcfAnnotations` are collected from
+`ANNOTATION_OCCURRENCE('datum', ...)` and `ANNOTATION_OCCURRENCE('fcf', ...)`.
+Every record in the exported AP203 graph is one of these:
+
+    #3417 = ANNOTATION_OCCURRENCE('datum',(#3445),#4135)
+    #3411 = ANNOTATION_OCCURRENCE('fcf',(#3433),#4129)
+
+They are drafting symbols: the drawn triangle and frame that a CAD system
+renders. The datum identifiers are recovered by decoding the letter glyphs in the
+annotation's curve set, and the tolerance records carry `value: 0` and
+`category: "Dimension"` because no magnitude exists to read.
+
+So the fallback is not regex confusion. It is a presentation-to-semantic
+promotion: drawing symbols promoted to PMI records because the file has no
+semantic PMI, with no tolerance values to attach.
+
+This is a design decision rather than an oversight, and the code comments say so.
+That makes the fix a judgement call rather than a clear defect, so it is
+recorded here rather than changed. The options are:
+
+1. Keep the fallback. The AP203 file genuinely shows a datum triangle attached
+   to a face and a position frame on a hole; a viewer that shows nothing would
+   look broken to someone who opened the drawing.
+2. Emit the records but mark them as presentation-derived, so a consumer can
+   distinguish a real tolerance from a reconstructed symbol. This needs a flag
+   on `ParsedStepTolerance` and `ParsedStepDatum`, and a matching attribute in
+   the graph, so it is a schema change.
+3. Drop the fallback, so an AP203 file yields zero PMI records as the negative
+   control intends.
+
+Option 2 is the most honest and costs a graph schema addition. Option 3 matches
+the control's stated purpose but changes viewer behaviour on AP203 files. Until
+one is chosen, a consumer counting PMI in the AP203 graph is counting drawing
+symbols, and 14 of those dimensions assert a tolerance value of zero.
 
 ### 9.2 No direct FCF-to-dimension link
 
