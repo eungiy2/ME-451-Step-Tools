@@ -18,7 +18,7 @@ as empty graphs.
 | nist_ftc_08_asme1_ap242-e1-tg.stp | - | - | - | - | - | SKIPPED: no-renderable-geometry-in-step-file |
 | nist_ftc_08_asme1_ap242-e2.stp | AP242 | occt | 1386 | 3591 | 295/102/168/55 | 258/0/0 |
 | nist_ftc_09_asme1_ap242-e1.stp | AP242 | occt | 1056 | 2968 | 292/19/100/43 | 421/0/0 |
-| nist_ftc_10_asme1_ap242-e2.stp | AP242 | occt | 1747 | 4771 | 453/106/186/54 | 473/43/0 |
+| nist_ftc_10_asme1_ap242-e2.stp | AP242 | occt | 1747 | 4771 | 453/106/186/54 | 465/51/0 |
 | nist_ftc_11_asme1_ap242-e2.stp | AP242 | occt | 243 | 578 | 35/47/17/7 | 21/0/0 |
 | nist_stc_06_asme1_ap242-e3.stp | AP242 | occt | 824 | 2044 | 153/69/83/15 | 220/0/0 |
 | nist_stc_07_asme1_ap242-e3.stp | - | - | - | - | - | SKIPPED: Open Cascade WebAssembly failed to initialize. Ensure network connectivity to the CDN. |

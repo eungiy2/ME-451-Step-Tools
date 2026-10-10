@@ -383,8 +383,8 @@
       "pmi-topology": 516
     },
     "pmiReferenceResolutionCounts": {
-      "missing": 43,
-      "resolved": 473
+      "missing": 51,
+      "resolved": 465
     },
     "adjacencyConvexityCounts": {
       "concave": 106,

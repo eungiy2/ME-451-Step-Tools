@@ -51,8 +51,8 @@
       "indeterminate": 54
     },
     "pmiReferenceResolutionCounts": {
-      "missing": 43,
-      "resolved": 473
+      "missing": 51,
+      "resolved": 465
     },
     "nonManifoldEdgeCount": 0,
     "indeterminateConvexityCount": 54,
@@ -10877,9 +10877,7 @@
       "runtimeId": "BRepFace-220",
       "nativeIndex": 220,
       "stepEntityIds": [
-        "#12219",
-        "#13981",
-        "#15536"
+        "#12219"
       ],
       "surfaceType": "cylinder",
       "area": 302.378293,
@@ -10930,9 +10928,7 @@
       "runtimeId": "BRepFace-221",
       "nativeIndex": 221,
       "stepEntityIds": [
-        "#12298",
-        "#16483",
-        "#17269"
+        "#12298"
       ],
       "surfaceType": "cylinder",
       "area": 206.975144,
@@ -10983,9 +10979,7 @@
       "runtimeId": "BRepFace-222",
       "nativeIndex": 222,
       "stepEntityIds": [
-        "#12333",
-        "#15721",
-        "#16531"
+        "#12333"
       ],
       "surfaceType": "cylinder",
       "area": 237.582944,
@@ -11130,9 +11124,7 @@
       "runtimeId": "BRepFace-225",
       "nativeIndex": 225,
       "stepEntityIds": [
-        "#13144",
-        "#14750",
-        "#15512"
+        "#13144"
       ],
       "surfaceType": "cylinder",
       "area": 271.777756,
@@ -52452,7 +52444,10 @@
         "slotRadiusNominal": null,
         "slotRadiusModel": null
       },
-      "unresolvedTargetStepEntityIds": [],
+      "unresolvedTargetStepEntityIds": [
+        "#13981",
+        "#14750"
+      ],
       "ambiguousTargetStepEntityIds": []
     },
     {
@@ -52706,7 +52701,10 @@
         "slotRadiusNominal": null,
         "slotRadiusModel": null
       },
-      "unresolvedTargetStepEntityIds": [],
+      "unresolvedTargetStepEntityIds": [
+        "#15721",
+        "#16483"
+      ],
       "ambiguousTargetStepEntityIds": []
     },
     {
@@ -53841,7 +53839,10 @@
         "F",
         "G"
       ],
-      "unresolvedTargetStepEntityIds": [],
+      "unresolvedTargetStepEntityIds": [
+        "#13981",
+        "#14750"
+      ],
       "ambiguousTargetStepEntityIds": []
     },
     {
@@ -54086,7 +54087,10 @@
         "K",
         "L"
       ],
-      "unresolvedTargetStepEntityIds": [],
+      "unresolvedTargetStepEntityIds": [
+        "#15721",
+        "#16483"
+      ],
       "ambiguousTargetStepEntityIds": []
     },
     {
@@ -104868,33 +104872,33 @@
       "stepTopologySignature": null
     },
     {
-      "id": "pmi-topology:dimension:#20052|#13981|BRepFace-220|2",
+      "id": "pmi-topology:dimension:#20052|#13981|unresolved|2",
       "kind": "pmi-topology",
       "source": "dimension:#20052",
-      "target": "face:BRepFace-220",
+      "target": null,
       "entityKind": "face",
       "targetStepEntityId": "#13981",
-      "resolution": "resolved",
-      "resolutionReason": "unique-stable-signature",
-      "runtimeId": "BRepFace-220",
+      "resolution": "missing",
+      "resolutionReason": "target-not-mapped",
+      "runtimeId": null,
       "candidateRuntimeIds": [],
       "candidateTopologySignatures": [],
-      "topologySignature": "occt:v1:face:b9865397f0e1e2bf",
+      "topologySignature": null,
       "stepTopologySignature": null
     },
     {
-      "id": "pmi-topology:dimension:#20052|#14750|BRepFace-225|3",
+      "id": "pmi-topology:dimension:#20052|#14750|unresolved|3",
       "kind": "pmi-topology",
       "source": "dimension:#20052",
-      "target": "face:BRepFace-225",
+      "target": null,
       "entityKind": "face",
       "targetStepEntityId": "#14750",
-      "resolution": "resolved",
-      "resolutionReason": "unique-stable-signature",
-      "runtimeId": "BRepFace-225",
+      "resolution": "missing",
+      "resolutionReason": "target-not-mapped",
+      "runtimeId": null,
       "candidateRuntimeIds": [],
       "candidateTopologySignatures": [],
-      "topologySignature": "occt:v1:face:95fabd85c0640d08",
+      "topologySignature": null,
       "stepTopologySignature": null
     },
     {
@@ -105258,33 +105262,33 @@
       "stepTopologySignature": null
     },
     {
-      "id": "pmi-topology:dimension:#20406|#15721|BRepFace-222|2",
+      "id": "pmi-topology:dimension:#20406|#15721|unresolved|2",
       "kind": "pmi-topology",
       "source": "dimension:#20406",
-      "target": "face:BRepFace-222",
+      "target": null,
       "entityKind": "face",
       "targetStepEntityId": "#15721",
-      "resolution": "resolved",
-      "resolutionReason": "unique-stable-signature",
-      "runtimeId": "BRepFace-222",
+      "resolution": "missing",
+      "resolutionReason": "target-not-mapped",
+      "runtimeId": null,
       "candidateRuntimeIds": [],
       "candidateTopologySignatures": [],
-      "topologySignature": "occt:v1:face:96097a915be6969c",
+      "topologySignature": null,
       "stepTopologySignature": null
     },
     {
-      "id": "pmi-topology:dimension:#20406|#16483|BRepFace-221|3",
+      "id": "pmi-topology:dimension:#20406|#16483|unresolved|3",
       "kind": "pmi-topology",
       "source": "dimension:#20406",
-      "target": "face:BRepFace-221",
+      "target": null,
       "entityKind": "face",
       "targetStepEntityId": "#16483",
-      "resolution": "resolved",
-      "resolutionReason": "unique-stable-signature",
-      "runtimeId": "BRepFace-221",
+      "resolution": "missing",
+      "resolutionReason": "target-not-mapped",
+      "runtimeId": null,
       "candidateRuntimeIds": [],
       "candidateTopologySignatures": [],
-      "topologySignature": "occt:v1:face:0072e27b055b7644",
+      "topologySignature": null,
       "stepTopologySignature": null
     },
     {
@@ -107238,33 +107242,33 @@
       "stepTopologySignature": null
     },
     {
-      "id": "pmi-topology:gdt:#19248|#13981|BRepFace-220|2",
+      "id": "pmi-topology:gdt:#19248|#13981|unresolved|2",
       "kind": "pmi-topology",
       "source": "gdt:#19248",
-      "target": "face:BRepFace-220",
+      "target": null,
       "entityKind": "face",
       "targetStepEntityId": "#13981",
-      "resolution": "resolved",
-      "resolutionReason": "unique-stable-signature",
-      "runtimeId": "BRepFace-220",
+      "resolution": "missing",
+      "resolutionReason": "target-not-mapped",
+      "runtimeId": null,
       "candidateRuntimeIds": [],
       "candidateTopologySignatures": [],
-      "topologySignature": "occt:v1:face:b9865397f0e1e2bf",
+      "topologySignature": null,
       "stepTopologySignature": null
     },
     {
-      "id": "pmi-topology:gdt:#19248|#14750|BRepFace-225|3",
+      "id": "pmi-topology:gdt:#19248|#14750|unresolved|3",
       "kind": "pmi-topology",
       "source": "gdt:#19248",
-      "target": "face:BRepFace-225",
+      "target": null,
       "entityKind": "face",
       "targetStepEntityId": "#14750",
-      "resolution": "resolved",
-      "resolutionReason": "unique-stable-signature",
-      "runtimeId": "BRepFace-225",
+      "resolution": "missing",
+      "resolutionReason": "target-not-mapped",
+      "runtimeId": null,
       "candidateRuntimeIds": [],
       "candidateTopologySignatures": [],
-      "topologySignature": "occt:v1:face:95fabd85c0640d08",
+      "topologySignature": null,
       "stepTopologySignature": null
     },
     {
@@ -107658,33 +107662,33 @@
       "stepTopologySignature": null
     },
     {
-      "id": "pmi-topology:gdt:#19460|#15721|BRepFace-222|2",
+      "id": "pmi-topology:gdt:#19460|#15721|unresolved|2",
       "kind": "pmi-topology",
       "source": "gdt:#19460",
-      "target": "face:BRepFace-222",
+      "target": null,
       "entityKind": "face",
       "targetStepEntityId": "#15721",
-      "resolution": "resolved",
-      "resolutionReason": "unique-stable-signature",
-      "runtimeId": "BRepFace-222",
+      "resolution": "missing",
+      "resolutionReason": "target-not-mapped",
+      "runtimeId": null,
       "candidateRuntimeIds": [],
       "candidateTopologySignatures": [],
-      "topologySignature": "occt:v1:face:96097a915be6969c",
+      "topologySignature": null,
       "stepTopologySignature": null
     },
     {
-      "id": "pmi-topology:gdt:#19460|#16483|BRepFace-221|3",
+      "id": "pmi-topology:gdt:#19460|#16483|unresolved|3",
       "kind": "pmi-topology",
       "source": "gdt:#19460",
-      "target": "face:BRepFace-221",
+      "target": null,
       "entityKind": "face",
       "targetStepEntityId": "#16483",
-      "resolution": "resolved",
-      "resolutionReason": "unique-stable-signature",
-      "runtimeId": "BRepFace-221",
+      "resolution": "missing",
+      "resolutionReason": "target-not-mapped",
+      "runtimeId": null,
       "candidateRuntimeIds": [],
       "candidateTopologySignatures": [],
-      "topologySignature": "occt:v1:face:0072e27b055b7644",
+      "topologySignature": null,
       "stepTopologySignature": null
     },
     {

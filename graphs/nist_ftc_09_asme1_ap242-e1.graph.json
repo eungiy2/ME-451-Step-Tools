@@ -7846,9 +7846,7 @@
       "label": "BRepFace-158 (plane)",
       "runtimeId": "BRepFace-158",
       "nativeIndex": 158,
-      "stepEntityIds": [
-        "#6064"
-      ],
+      "stepEntityIds": [],
       "surfaceType": "plane",
       "area": 25.8064,
       "centroid": [

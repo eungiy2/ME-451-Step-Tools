@@ -67,10 +67,10 @@ Indeterminate convexity decisions: 54
 
 | Resolution | Count |
 | --- | ---: |
-| missing | 43 |
-| resolved | 473 |
+| missing | 51 |
+| resolved | 465 |
 
-## Unresolved PMI targets (17 nodes)
+## Unresolved PMI targets (21 nodes)
 
 | Node | Unresolved STEP targets |
 | --- | --- |
@@ -80,11 +80,15 @@ Indeterminate convexity decisions: 54
 | Datum Target K | #17481 |
 | Datum Target L | #17559 |
 | Datum Target L | #17528 |
+| Critical diameter target (#12219, #13144, #13981, #14750) | #13981, #14750 |
 | Critical diameter target (#15616, #15592) | #15592, #15616 |
+| Critical diameter target (#12333, #12298, #15721, #16483) | #15721, #16483 |
 | Critical diameter target (#17342, #17318) | #17318, #17342 |
 | Surface Profile 1.5 | #12 |
 | Surface Profile 1.5 | #17450, #17481, #17528, #17559, #17612, #17679 |
 | Perpendicularity 0.25 | #17450, #17481, #17528, #17559, #17612, #17679 |
+| Position 0.8 | #13981, #14750 |
+| Position 0.8 | #15721, #16483 |
 | Position 0.8 | #17742, #17763 |
 | Position 0.8 | #17781, #17799 |
 | Position 0.8 | #17817, #17835 |
