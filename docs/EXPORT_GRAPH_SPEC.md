@@ -885,6 +885,50 @@ what states that H and J are established simultaneously.
 Two defects were found that cannot be fixed here, because the plan permits
 changes only to `src/utils/exportGraph.ts`.
 
+### 9.0 Unresolved `ADVANCED_FACE` targets are expected, not a gap
+
+73 distinct unresolved target entities appear across the fixture set. 62 are
+non-face entities for which `target-not-mapped` is the correct answer. The
+remaining 11 are `ADVANCED_FACE`, and a consumer should not read those as
+missing model topology either.
+
+Every one is an open-shell face. The AP242 fixtures declare more `ADVANCED_FACE`
+entities than OCCT tessellates, and the surplus is precisely the faces held in
+`OPEN_SHELL` blocks. In `nist_ftc_10` the file declares 282 faces and the solid
+renders 264; the 18-face difference is 12 `OPEN_SHELL` entities, which is more
+than the surplus because some open-shell faces duplicate `CLOSED_SHELL` faces.
+
+Those shells belong to `SHELL_BASED_SURFACE_MODEL` entities named `Extract`,
+`Join`, `Split`, and `Fill`: the constructive-solid history that produced the
+solid, not the solid. `applyClosedShellFaceOrderMapping` assigns face ordinals
+from `CLOSED_SHELL` only, and the geometric fallback in `autoGenerateFaceMapping`
+iterates over rendered faces, so a face that was never tessellated is never
+considered. No geometry is lost. The `CLOSED_SHELL` holds the entire solid and
+OCCT renders all of it.
+
+The faces are presentation. In `nist_ctc_02`, `#3148` is a single `PLANE` face in
+`OPEN_SHELL('Fill.1')` consumed by
+`GEOMETRIC_ITEM_SPECIFIC_USAGE('', 'DATUM TARGET', ...)` and
+`GEOMETRIC_ITEM_SPECIFIC_USAGE('', 'NOTE', ...)`, and it also appears inside a
+`COMPLEX_TRIANGULATED_SURFACE_SET('note', ...)`. It is a datum target zone and a
+leader note: drawing annotation with no place on the model.
+
+A PMI record naming such a face is naming presentation geometry.
+`resolution: "missing"` with `target: null` is the correct representation. Do not
+extend the mapping to reach open-shell faces, and do not let a consumer assign
+these to the nearest rendered face: the datum target is not on the solid, and a
+tolerance attached to it would be a manufacturing error rather than a cosmetic
+one. The same reasoning applies to the 62 non-face targets.
+
+A related parsing defect was corrected on branch `fix/advanced-face-paren-scan`.
+`autoGenerateFaceMapping` scanned faces with a non-greedy pattern that stopped at
+the closing parenthesis of the `FACE_BOUND` list, discarding the surface argument
+for all 3843 `ADVANCED_FACE` entities in the fixture set. A paren-depth scan now
+captures each entity whole. The observable effect is small because the
+closed-shell and geometric routes already covered these faces, but the previous
+behaviour was wrong and would have silently lost surface classification on a file
+whose fallback routes did not happen to apply.
+
 ### 9.1 False PMI records in the AP203 control
 
 `nist_ctc_01_asme1_ap203.stp` contains no `DATUM_FEATURE`, `DIMENSIONAL_SIZE`,

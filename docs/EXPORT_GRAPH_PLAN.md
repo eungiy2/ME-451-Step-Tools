@@ -65,10 +65,37 @@ fixture index.
   are legitimately non-face entities — `TRIMMED_CURVE`, `GEOMETRIC_CURVE_SET`,
   `CARTESIAN_POINT`, `SHAPE_ASPECT`, `AXIS2_PLACEMENT_3D`,
   `COMPOSITE_SHAPE_ASPECT`, `PRODUCT_DEFINITION_SHAPE` — for which
-  `target-not-mapped` is correct. The mapping lives in `autoGenerateFaceMapping`,
-  an original file that must not be modified, so the 12 remain `resolution: "missing"`
-  with their reason recorded. Complete mapping coverage is not a requirement: the
-  requirement is that every miss be reported rather than guessed.
+  `target-not-mapped` is correct. Complete mapping coverage is not a requirement:
+  the requirement is that every miss be reported rather than guessed.
+
+  **The 12 `ADVANCED_FACE` misses are also correct, and must not be "fixed."**
+  Every one of them is an open-shell face, not a face of the solid. Across the
+  fixture set the AP242 files declare more `ADVANCED_FACE` entities than OCCT
+  renders, and the difference is exactly the faces in `OPEN_SHELL` blocks:
+  `nist_ftc_10` declares 282 faces against 264 rendered, the 18-face gap being
+  12 `OPEN_SHELL` entities. Those shells belong to `SHELL_BASED_SURFACE_MODEL`
+  operations named `Extract`, `Join`, `Split`, and `Fill` — the constructive
+  history that built the solid, not the solid itself. `applyClosedShellFaceOrderMapping`
+  walks `CLOSED_SHELL` only, which is why these faces get no ordinal assignment,
+  and the geometric fallback iterates over rendered faces only, so a face that was
+  never tessellated is never a candidate. No geometry is lost: the `CLOSED_SHELL`
+  carries the whole solid and OCCT renders all of it.
+
+  These faces are drawing annotation. In `nist_ctc_02`, face `#3148` is a single
+  `PLANE` in an `OPEN_SHELL('Fill.1')` used by
+  `GEOMETRIC_ITEM_SPECIFIC_USAGE('', 'DATUM TARGET', ...)` and
+  `GEOMETRIC_ITEM_SPECIFIC_USAGE('', 'NOTE', ...)` — a datum target zone and a
+  leader note. A PMI target pointing at it is pointing at presentation, so
+  `target-not-mapped` is the right answer. Do not extend the mapper to reach
+  open-shell faces, and do not add a fallback that assigns them to a nearby
+  rendered face.
+
+  A paren-depth scan replaced a non-greedy entity regex in
+  `autoGenerateFaceMapping` on branch `fix/advanced-face-paren-scan`, because the
+  old pattern truncated every `ADVANCED_FACE` at the closing parenthesis of its
+  `FACE_BOUND` list. That was a real parsing defect and is corrected, but it is
+  a correctness fix rather than a coverage one: fallback routes already covered
+  these faces, and `nist_ftc_10` moves only from 43 to 36 missing references.
 - **Partial arcs of a diagonal-axis bore.** The cylinder axis follows the viewer's
   coordinate-axis rule. The perpendicularity gate catches a full-ring bore whose
   axis lies off a coordinate axis and withholds the radius, but a small partial arc
