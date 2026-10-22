@@ -95,16 +95,24 @@ ground truth everything else derives from. Rationale:
   4. validate residual: `maxDeviation/radius ≤ 0.12` and normal–radial
      alignment `≥ 0.55`.
 
-**Fit data-source priority (determinism):**
+**Fit data-source priority (determinism), kernel-first:**
 
-1. **Analytical STEP** `CYLINDRICAL_SURFACE` origin/axis/radius, already parsed
+1. **OCCT kernel analytic** — the exact `gp_Pln` / `gp_Cyl` / `gp_Cone` /
+   `gp_Sphere` / `gp_Torus` parameters, the face-level convexity, and the
+   per-adjacency dihedral are all computed **inside the OCCT kernel**
+   (`WriteNativeTopology` in `native/occt-topology-wrapper/`) and shipped as
+   `face.analytic`, `face.convexity`, `face.centroid_point`/`_normal`, and
+   per-edge `midpoint` / `normals` / `contacts`. This is the authoritative
+   source whenever the native wrapper is present.
+2. **Analytical STEP** `CYLINDRICAL_SURFACE` origin/axis/radius, already parsed
    (`stepParser.ts:1288–1392`, `getCylinderSurfaceFrame` at `stepParser.ts:3519`)
-   and mapped to faces (`geometryClassifier.ts:593–616`).
-2. **Native OCCT** `surface_type` + centroid/bounds from
-   `NormalizedOcctFaceTopology` (`occtTopologyPayload.ts:89–99`).
-3. **Viewer-style tessellation fit** (`getCylinderFaceCircleSnap` logic) as
-   fallback only when 1 and 2 are unavailable (exercise one AP203/AP242 file in
-   tessellation-fallback mode to prove the path).
+   and mapped to faces (`geometryClassifier.ts:593–616`) — retained as a
+   cross-source for PMI association and debugging.
+3. **Viewer-style tessellation fit** (`getCylinderFaceCircleSnap` logic, kept in
+   `src/utils/cylinderFit.ts`) as the fallback only when the kernel analytic
+   data is absent (tessellation mode / old wrapper). The Node scripts verify
+   the fallback path, and `npm run verify:graph:kernel` verifies the kernel
+   path with a synthetic wrapper payload.
 
 **Convexity of the face itself (boss vs hole):** anchor the existing `isInner`
 test (`geometryClassifier.ts:70–92` — mean `(triangleCenter−faceCenter)·n̂`)
@@ -117,31 +125,33 @@ faceConvexity = sign( mean over samples p of (p − foot(p)) · n̂ )
 ```
 
 **Dihedral on a shared edge (the required adjacency attribute):** for each edge
-with incident faces `f1, f2`:
+with incident faces `f1, f2`, the **OCCT kernel** evaluates everything at the
+exact edge-curve midpoint `m` (`BRepAdaptor_Curve::Value`):
 
-1. Take the shared-edge midpoint `m` (OCCT edge positions, or the middle
-   `signature_points` sample — `native-topology-export.cpp:307–317`).
-2. Outward unit normals `n1, n2` at `m`:
-   - plane → its constant outward normal;
-   - cylinder/partial-cylinder → `nO = normalize(m − foot(m))` from the fitted
-     axis — this is exactly why the cylinder fit matters: a curved face has no
-     constant normal, and the fitted axis yields an exact mid-edge outward
-     normal with no tessellation noise.
-3. `γ = acos(clamp(n1·n2, −1, 1))`.
-4. Interior-side probe: `p = m − τ·n1` (slightly inside the solid from face 1).
-   Edge is **convex** iff `(p − m)·n2 < 0` (still inside face 2), else
-   **concave**. This test needs only per-face consistent outward orientation —
-   no global edge-tangent orientation, no loop-direction bookkeeping.
-5. Dihedral angle: `δ = π − γ` (convex) or `π + γ` (concave). Emit
-   `convexity: "convex" | "concave" | "ambiguous"` and `dihedralDeg`.
+1. Outward unit normals `n1, n2` at `m` via each face's pcurve on the edge
+   (`BRep_Tool::CurveOnSurface` → `GeomLProp_SLProps`), flipped by face
+   orientation so they point away from the material (projection fallback when
+   the pcurve is unavailable).
+2. `γ = acos(clamp(n1·n2, −1, 1))`.
+3. Interior-side probe: `p = centroid1 − τ·n̂1` (slightly inside the solid from
+   face 1; `centroid1` is the surface point nearest the kernel-computed face
+   center of gravity, `τ` scales with the face bounding diagonal). The edge is
+   **convex** iff `(p − m)·n2 < 0` (still inside face 2), else **concave**.
+   The test needs only per-face consistent outward orientation — no global
+   edge-tangent orientation, no loop-direction bookkeeping.
+4. Dihedral angle: `δ = π − γ` (convex) or `π + γ` (concave). Emit
+   `convexity` + `dihedralDeg` per incident-face pair (`edge.contacts`, with
+   `face_i` the smaller `BRepFace-*` id).
 
-Partial-cylindrical faces need no special case: the circle fit handles an arc
-segment (the same least-squares solve), and the two straight wall edges use the
-fitted mid-edge normal in the identical formula.
+Partial-cylindrical and other curved faces need no special case: the kernel
+returns the true surface normal at the edge midpoint instead of a fitted/radial
+approximation, so curved mid-edge normals are exact.
 
-Implementation: extract the fit into a shared util (e.g.
-`src/utils/cylinderFit.ts`) consumed by both the viewer (behavior unchanged)
-and the exporter; put the dihedral math in `src/utils/convexity.ts`.
+Fallback implementation (tessellation mode / old wrapper): the identical
+formula runs in TypeScript in `src/utils/convexity.ts`
+(`computeAdjacencyDihedral`) over the fitted cylinder/plane normals from
+`src/utils/cylinderFit.ts`, retaining the pre-kernel behavior so the Node
+scripts stay byte-deterministic offline.
 
 ### 6. Tolerance zones vs tolerance values
 

@@ -62,6 +62,10 @@ export interface ExportGraphResult {
     fileSize: number;
     schema: string;
     topologySource: string;
+    /** True when this graph's geometric attributes (analytic surface
+     *  parameters, convexity, adjacency dihedral) were computed inside the
+     *  OCCT kernel rather than by the TypeScript tessellation fallback. */
+    kernelGeometry: boolean;
     stableHash: string;
     nodeCount: number;
     edgeCount: number;
@@ -100,6 +104,125 @@ const canonicalNumber = (value: unknown, digits = 6): number | undefined => {
 
 const uniqueStrings = (values: string[]) =>
   values.filter((value, index, all) => all.indexOf(value) === index).sort();
+
+const toCanonicalPoint = (v: Vec3) => ({
+  x: canonicalNumber(v.x),
+  y: canonicalNumber(v.y),
+  z: canonicalNumber(v.z),
+});
+
+/* ------------------------------------------------------------------ */
+/* Kernel graph attributes (OCCT-calculated geometry).                 */
+/*                                                                    */
+/* The OCCT wrapper (`native-topology-export.cpp`) now computes the    */
+/* exact analytic surface parameters, the outward normals at edge      */
+/* midpoints, the face-level convexity, and the per-contact dihedral   */
+/* classification inside the OCCT kernel. These helpers parse that     */
+/* payload. The fitted/TS fallbacks below remain for tessellation      */
+/* reconstruction mode and for old wrappers without the attributes.    */
+/* ------------------------------------------------------------------ */
+
+interface KernelPlane { normal: Vec3; point: Vec3; }
+interface KernelCylinder { axis: Vec3; center: Vec3; radius: number; }
+interface KernelCone { axis: Vec3; apex: Vec3; semiAngleDeg: number; radius?: number; }
+interface KernelSphere { center: Vec3; radius: number; }
+interface KernelTorus { center: Vec3; axis: Vec3; majorRadius: number; minorRadius: number; }
+
+interface KernelAnalytic {
+  plane?: KernelPlane;
+  cylinder?: KernelCylinder;
+  cone?: KernelCone;
+  sphere?: KernelSphere;
+  torus?: KernelTorus;
+}
+
+interface KernelContact {
+  faceAId: string;
+  faceBId: string;
+  convexity: "convex" | "concave";
+  dihedralDeg: number;
+}
+
+/** Reads a 3-component vector from a plain array or a `{x,y,z}` object. */
+const readVec3 = (values: unknown): Vec3 | undefined => {
+  if (values && typeof values === "object" && !Array.isArray(values)) {
+    const candidate = values as Record<string, unknown>;
+    if (typeof candidate.x === "number" && typeof candidate.y === "number" && typeof candidate.z === "number") {
+      return { x: candidate.x, y: candidate.y, z: candidate.z };
+    }
+  }
+  if (!Array.isArray(values) || values.length < 3) return undefined;
+  const x = Number(values[0]);
+  const y = Number(values[1]);
+  const z = Number(values[2]);
+  if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) return undefined;
+  return { x, y, z };
+};
+
+const normalizeUnit = (values: Vec3 | undefined): Vec3 | undefined => {
+  if (!values) return undefined;
+  const length = vec3Length(values);
+  if (!Number.isFinite(length) || length <= 1e-12) return undefined;
+  return { x: values.x / length, y: values.y / length, z: values.z / length };
+};
+
+const normalizeConvexityLabel = (value: unknown): ConvexityLabel | undefined => {
+  const text = String(value || "");
+  if (text === "convex" || text === "concave" || text === "unknown") return text;
+  return undefined;
+};
+
+/**
+ * Parses the kernel `mesh.analytic` payload (exact OCCT surface primitive
+ * parameters) into typed vectors. Returns undefined when the mesh carries no
+ * kernel analytic data (tessellation fallback or old wrapper).
+ */
+const parseKernelAnalytic = (mesh: any): KernelAnalytic | undefined => {
+  const raw = mesh?.analytic;
+  if (!raw || typeof raw !== "object") return undefined;
+  const analytic: KernelAnalytic = {};
+  if (raw.plane) {
+    const normal = normalizeUnit(readVec3(raw.plane.normal));
+    const point = readVec3(raw.plane.point);
+    if (normal && point) analytic.plane = { normal, point };
+  } else if (raw.cylinder) {
+    const axis = normalizeUnit(readVec3(raw.cylinder.axis));
+    const center = readVec3(raw.cylinder.center);
+    const radius = Number(raw.cylinder.radius);
+    if (axis && center && Number.isFinite(radius) && radius > 0) {
+      analytic.cylinder = { axis, center, radius };
+    }
+  } else if (raw.cone) {
+    const axis = normalizeUnit(readVec3(raw.cone.axis));
+    const apex = readVec3(raw.cone.apex);
+    const semiAngleDeg = Number(raw.cone.semiAngleDeg);
+    if (axis && apex && Number.isFinite(semiAngleDeg)) {
+      const radius = Number(raw.cone.radius);
+      analytic.cone = {
+        axis,
+        apex,
+        semiAngleDeg,
+        ...(Number.isFinite(radius) && radius > 0 ? { radius } : {}),
+      };
+    }
+  } else if (raw.sphere) {
+    const center = readVec3(raw.sphere.center);
+    const radius = Number(raw.sphere.radius);
+    if (center && Number.isFinite(radius) && radius > 0) {
+      analytic.sphere = { center, radius };
+    }
+  } else if (raw.torus) {
+    const center = readVec3(raw.torus.center);
+    const axis = normalizeUnit(readVec3(raw.torus.axis));
+    const majorRadius = Number(raw.torus.majorRadius);
+    const minorRadius = Number(raw.torus.minorRadius);
+    if (center && axis && Number.isFinite(majorRadius) && majorRadius > 0 &&
+        Number.isFinite(minorRadius) && minorRadius > 0) {
+      analytic.torus = { center, axis, majorRadius, minorRadius };
+    }
+  }
+  return Object.keys(analytic).length > 0 ? analytic : undefined;
+};
 
 const normalizeSurfaceType = (surfaceType: unknown): string => {
   const type = String(surfaceType || "").toLowerCase();
@@ -255,12 +378,38 @@ export function buildFaceNodes(
     const normals = mesh.normals;
     const centroid = vertexCentroid(positions);
     const size = faceSize(positions);
+    const kernelAnalytic = parseKernelAnalytic(mesh);
+    const kernelConvexity = normalizeConvexityLabel(mesh.kernelConvexity);
     let surfaceType = normalizeSurfaceType(mesh.surfaceType);
     let constantNormal: Vec3 | undefined;
     let cylinderFit: CylinderFit | undefined;
     let convexity: ConvexityLabel | undefined;
+    const geometrySource: "occt" | "ts" = kernelAnalytic ? "occt" : "ts";
 
-    if (surfaceType === "plane") {
+    if (kernelAnalytic?.plane) {
+      // Exact OCCT plane: normal + point from the kernel surface primitive.
+      surfaceType = "plane";
+      constantNormal = kernelAnalytic.plane.normal;
+    } else if (kernelAnalytic?.cylinder) {
+      // Exact OCCT cylinder: axis/center/radius from `gp_Cyl`.
+      surfaceType = "cylinder";
+      cylinderFit = {
+        axis: kernelAnalytic.cylinder.axis,
+        center: kernelAnalytic.cylinder.center,
+        radius: kernelAnalytic.cylinder.radius,
+        maxDeviation: 0,
+        relativeDeviation: 0,
+        valid: true,
+      };
+      convexity = kernelConvexity ?? computeFaceConvexity({ positions, normals, fit: cylinderFit });
+    } else if (kernelAnalytic?.cone || kernelAnalytic?.sphere || kernelAnalytic?.torus) {
+      // Exact OCCT analytic surfaces that the tessellation fallback could not
+      // classify; the kernel also supplies the face-level convexity.
+      surfaceType = kernelAnalytic.cone ? "cone"
+        : kernelAnalytic.sphere ? "sphere"
+          : "torus";
+      convexity = kernelConvexity;
+    } else if (surfaceType === "plane") {
       constantNormal = computeAreaWeightedNormal(positions, indices);
     } else if (surfaceType === "cylinder") {
       cylinderFit = fitCylinder({ positions, indices, normals });
@@ -285,35 +434,46 @@ export function buildFaceNodes(
     }
 
     const analytic: Record<string, unknown> | undefined =
-      surfaceType === "plane" && constantNormal
-        ? { plane: {
-            normal: {
-              x: canonicalNumber(constantNormal.x),
-              y: canonicalNumber(constantNormal.y),
-              z: canonicalNumber(constantNormal.z),
-            },
-            point: {
-              x: canonicalNumber(centroid.x),
-              y: canonicalNumber(centroid.y),
-              z: canonicalNumber(centroid.z),
-            },
-          } }
-        : surfaceType === "cylinder" && cylinderFit
+      kernelAnalytic?.plane
+        ? { plane: { normal: toCanonicalPoint(constantNormal!), point: toCanonicalPoint(kernelAnalytic.plane.point) } }
+        : kernelAnalytic?.cylinder && cylinderFit
           ? { cylinder: {
-              axis: {
-                x: canonicalNumber(cylinderFit.axis.x),
-                y: canonicalNumber(cylinderFit.axis.y),
-                z: canonicalNumber(cylinderFit.axis.z),
-              },
-              center: {
-                x: canonicalNumber(cylinderFit.center.x),
-                y: canonicalNumber(cylinderFit.center.y),
-                z: canonicalNumber(cylinderFit.center.z),
-              },
+              axis: toCanonicalPoint(cylinderFit.axis),
+              center: toCanonicalPoint(cylinderFit.center),
               radius: canonicalNumber(cylinderFit.radius),
               lengthMm: axialExtentOf(positions, cylinderFit),
             } }
-          : undefined;
+          : kernelAnalytic?.cone
+            ? { cone: {
+                axis: toCanonicalPoint(kernelAnalytic.cone.axis),
+                apex: toCanonicalPoint(kernelAnalytic.cone.apex),
+                semiAngleDeg: canonicalNumber(kernelAnalytic.cone.semiAngleDeg),
+                ...(kernelAnalytic.cone.radius !== undefined
+                  ? { radius: canonicalNumber(kernelAnalytic.cone.radius) }
+                  : {}),
+              } }
+            : kernelAnalytic?.sphere
+              ? { sphere: { center: toCanonicalPoint(kernelAnalytic.sphere.center), radius: canonicalNumber(kernelAnalytic.sphere.radius) } }
+              : kernelAnalytic?.torus
+                ? { torus: {
+                    center: toCanonicalPoint(kernelAnalytic.torus.center),
+                    axis: toCanonicalPoint(kernelAnalytic.torus.axis),
+                    majorRadius: canonicalNumber(kernelAnalytic.torus.majorRadius),
+                    minorRadius: canonicalNumber(kernelAnalytic.torus.minorRadius),
+                  } }
+                : surfaceType === "plane" && constantNormal
+                  ? { plane: {
+                      normal: toCanonicalPoint(constantNormal),
+                      point: toCanonicalPoint(mesh.kernelCentroidPoint ? readVec3(mesh.kernelCentroidPoint)! : centroid),
+                    } }
+                  : surfaceType === "cylinder" && cylinderFit
+                    ? { cylinder: {
+                        axis: toCanonicalPoint(cylinderFit.axis),
+                        center: toCanonicalPoint(cylinderFit.center),
+                        radius: canonicalNumber(cylinderFit.radius),
+                        lengthMm: axialExtentOf(positions, cylinderFit),
+                      } }
+                    : undefined;
 
     const stepped = reverseMapping.get(id);
     const descriptor: FaceDescriptor = {
@@ -339,6 +499,7 @@ export function buildFaceNodes(
       ),
       ...(convexity ? { convexity } : {}),
       ...(analytic ? { analytic } : {}),
+      ...(geometrySource === "occt" ? { geometrySource } : {}),
       ...(stableId ? { stableId } : {}),
       ...(stepped ? { stepped: stepped[0] } : {}),
     };
@@ -363,10 +524,17 @@ export function buildAdjacencyEdges(
     const faceIds = uniqueStrings(rawFaceIds.map(String));
     if (faceIds.length < 2) return;
 
-    const midpoint = edgeMidpoint(edge.positions);
+    const midpoint = readVec3(edge.midpoint) || edgeMidpoint(edge.positions);
     const edgeType = resolveEdgeCurveType(edge);
     const sharedEdgeId = edge.id || edge.name || `BRepEdge-${index}`;
     const sharedEdgeStableId = edge.topologySignature;
+
+    const kernelContacts = Array.isArray(edge.contacts) ? (edge.contacts as KernelContact[]) : [];
+    const contactByPair = new Map<string, KernelContact>();
+    kernelContacts.forEach((contact) => {
+      contactByPair.set(`${contact.faceAId}|${contact.faceBId}`, contact);
+      contactByPair.set(`${contact.faceBId}|${contact.faceAId}`, contact);
+    });
 
     for (let i = 0; i < faceIds.length; i++) {
       for (let j = i + 1; j < faceIds.length; j++) {
@@ -374,9 +542,19 @@ export function buildAdjacencyEdges(
         const b = faceIds[j];
         const faceA = descriptors.get(a);
         const faceB = descriptors.get(b);
-        const dihedral: DihedralResult = faceA && faceB
-          ? computeDihedralSafe(faceA, faceB, midpoint)
-          : { convexity: "unknown" };
+        const kernelContact = contactByPair.get(`${a}|${b}`);
+        // The OCCT kernel pre-classified every incident-face pair (exact
+        // normals at the exact edge midpoint and an in-kernel interior
+        // probe); use that result directly and keep the TS math only as the
+        // tessellation-fallback path.
+        const dihedral: DihedralResult = kernelContact
+          ? {
+              convexity: kernelContact.convexity === "convex" ? "convex" : "concave",
+              dihedralDeg: kernelContact.dihedralDeg,
+            }
+          : faceA && faceB
+            ? computeDihedralSafe(faceA, faceB, midpoint)
+            : { convexity: "unknown" };
 
         result.push({
           nodeType: "adjacency",
@@ -390,6 +568,7 @@ export function buildAdjacencyEdges(
             : {}),
           sharedEdgeId,
           ...(compactStableId(sharedEdgeStableId) ? { sharedEdgeStableId: compactStableId(sharedEdgeStableId) } : {}),
+          ...(kernelContact ? { geometrySource: "occt" } : faceA && faceB ? { geometrySource: "ts" } : {}),
         });
       }
     }
@@ -878,6 +1057,13 @@ export function exportGraph(input: GraphExporterInput): ExportGraphResult {
   const { nodes: featureNodes, featureCounts, memberEdges } = buildFeatureNodes(descriptors);
   const { nodes: pmiNodes, edges: pmiEdges } = buildPmiNodes(parsed);
 
+  // True when all adjacency classifications on this run came from the OCCT
+  // kernel (exact normals + in-kernel dihedral/probe) rather than the
+  // TypeScript tessellation fallback.
+  const kernelGeometry =
+    adjacencyEdges.length > 0
+    && adjacencyEdges.every((edge) => edge.geometrySource === "occt");
+
   const dimensions = parsed.dimensions || { width: 0, length: 0, estimatedThickness: 0 };
   const envelopeMm = meshEnvelopeMm(meshList) || {
     x: canonicalNumber(dimensions.width),
@@ -918,6 +1104,7 @@ export function exportGraph(input: GraphExporterInput): ExportGraphResult {
       fileSize: parsed.fileSize,
       schema,
       topologySource: (occtResult as any)?.geometryTopologySource || "unknown",
+      kernelGeometry,
       stableHash,
       nodeCount: nodes.length,
       edgeCount: edges.length,

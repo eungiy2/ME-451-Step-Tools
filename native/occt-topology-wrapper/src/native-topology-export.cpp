@@ -3,6 +3,7 @@
 #include "native-topology-export.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <map>
 #include <set>
 #include <string>
@@ -17,8 +18,11 @@
 #include <BRep_Tool.hxx>
 #include <GCPnts_AbscissaPoint.hxx>
 #include <GCPnts_TangentialDeflection.hxx>
+#include <Geom2d_Curve.hxx>
 #include <GeomAbs_CurveType.hxx>
 #include <GeomAbs_SurfaceType.hxx>
+#include <GeomAPI_ProjectPointOnSurf.hxx>
+#include <GeomLProp_SLProps.hxx>
 #include <GProp_GProps.hxx>
 #include <Precision.hxx>
 #include <Standard_Failure.hxx>
@@ -32,6 +36,10 @@
 #include <TopTools_IndexedDataMapOfShapeListOfShape.hxx>
 #include <TopTools_IndexedMapOfShape.hxx>
 #include <TopTools_ListIteratorOfListOfShape.hxx>
+
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 
 namespace
 {
@@ -148,6 +156,13 @@ void WritePoint (emscripten::val& output, const gp_Pnt& point)
     output.set (2, point.Z ());
 }
 
+void WriteDirection (emscripten::val& output, const gp_Dir& direction)
+{
+    output.set (0, direction.X ());
+    output.set (1, direction.Y ());
+    output.set (2, direction.Z ());
+}
+
 void WriteBounds (emscripten::val& output, const Bnd_Box& bounds)
 {
     if (bounds.IsVoid ()) {
@@ -161,6 +176,304 @@ void WriteBounds (emscripten::val& output, const Bnd_Box& bounds)
     output.set (3, xMax);
     output.set (4, yMax);
     output.set (5, zMax);
+}
+
+/**
+ * Outward unit normal of `face` at surface parameters (u, v). The surface
+ * normal is flipped when the face is REVERSED so the result always points away
+ * from the material of the solid that owns the face.
+ */
+bool OutwardNormalAt (
+    const TopoDS_Face& face,
+    const Standard_Real u,
+    const Standard_Real v,
+    gp_Dir& normal
+)
+{
+    const Handle(Geom_Surface)& surface = BRep_Tool::Surface (face);
+    if (surface.IsNull ()) {
+        return false;
+    }
+    try {
+        GeomLProp_SLProps props (surface, u, v, 2, Precision::Confusion ());
+        if (!props.IsNormalDefined ()) {
+            return false;
+        }
+        gp_Vec surfaceNormal = props.Normal ();
+        if (surfaceNormal.Magnitude () <= Precision::Confusion ()) {
+            return false;
+        }
+        if (face.Orientation () == TopAbs_REVERSED) {
+            surfaceNormal.Reverse ();
+        }
+        normal = gp_Dir (surfaceNormal.X (), surfaceNormal.Y (), surfaceNormal.Z ());
+        return true;
+    } catch (const Standard_Failure&) {
+        return false;
+    }
+}
+
+/**
+ * Projects `reference` onto the face's natural surface and returns the nearest
+ * surface point together with the corresponding surface parameters.
+ */
+bool NearestSurfacePoint (
+    const Handle(Geom_Surface)& surface,
+    const gp_Pnt& reference,
+    gp_Pnt& nearest,
+    Standard_Real& u,
+    Standard_Real& v
+)
+{
+    if (surface.IsNull ()) {
+        return false;
+    }
+    try {
+        GeomAPI_ProjectPointOnSurf projection (reference, surface);
+        if (!projection.IsDone () || projection.NbPoints () < 1) {
+            return false;
+        }
+        nearest = projection.NearestPoint ();
+        u = projection.LowerDistanceParameter ();
+        v = projection.UpperDistanceParameter ();
+        return true;
+    } catch (const Standard_Failure&) {
+        return false;
+    }
+}
+
+/**
+ * Kernel face-level convexity for analyically curved faces. For a cylinder the
+ * face is `convex` (boss) when its outward normal points away from the axis
+ * and `concave` (bore) when it points toward the axis; for a sphere the same
+ * test is anchored on the sphere center. The sign is constant over the whole
+ * connected surface, so the classification is sampled over the bounding-box
+ * corners projected onto the surface. Mirrors the thresholds of the former
+ * tessellation-side fit (`> 0.05` convex, `< -0.05` concave).
+ */
+std::string FaceConvexityLabel (const TopoDS_Face& face)
+{
+    try {
+        BRepAdaptor_Surface surface (face, false);
+        const GeomAbs_SurfaceType type = surface.GetType ();
+        gp_XYZ axisDirection (0.0, 0.0, 1.0);
+        gp_Pnt center;
+        Standard_Boolean radialFromCenter = Standard_False;
+        if (type == GeomAbs_Cylinder) {
+            const gp_Cyl& cylinder = surface.Cylinder ();
+            axisDirection = cylinder.Axis ().Direction ().XYZ ();
+            center = cylinder.Location ();
+        } else if (type == GeomAbs_Sphere) {
+            center = surface.Sphere ().Location ();
+            radialFromCenter = Standard_True;
+        } else {
+            return "unknown";
+        }
+
+        Bnd_Box bounds;
+        BRepBndLib::Add (face, bounds, false);
+        if (bounds.IsVoid ()) {
+            return "unknown";
+        }
+        Standard_Real xMin, yMin, zMin, xMax, yMax, zMax;
+        bounds.Get (xMin, yMin, zMin, xMax, yMax, zMax);
+        const Standard_Real probeCoordinates[8][3] = {
+            { xMin, yMin, zMin }, { xMax, yMin, zMin }, { xMin, yMax, zMin },
+            { xMin, yMin, zMax }, { xMax, yMax, zMin }, { xMax, yMin, zMax },
+            { xMin, yMax, zMax }, { xMax, yMax, zMax }
+        };
+
+        const Handle(Geom_Surface)& surfaceHandle = BRep_Tool::Surface (face);
+        Standard_Real dotSum = 0.0;
+        Standard_Integer samples = 0;
+        for (Standard_Integer probeIndex = 0; probeIndex < 8; probeIndex++) {
+            gp_Pnt nearest;
+            Standard_Real u, v;
+            if (!NearestSurfacePoint (
+                    surfaceHandle,
+                    gp_Pnt (probeCoordinates[probeIndex][0],
+                        probeCoordinates[probeIndex][1],
+                        probeCoordinates[probeIndex][2]),
+                    nearest,
+                    u,
+                    v
+                )) {
+                continue;
+            }
+            gp_Dir outward;
+            if (!OutwardNormalAt (face, u, v, outward)) {
+                continue;
+            }
+            const gp_XYZ offset = nearest.XYZ () - center.XYZ ();
+            const gp_XYZ radialVector = radialFromCenter
+                ? gp_XYZ (offset)
+                : gp_XYZ (offset - axisDirection * offset.Dot (axisDirection));
+            if (radialVector.Modulus () <= Precision::Confusion ()) {
+                continue;
+            }
+            dotSum += outward.XYZ ().Dot (radialVector / radialVector.Modulus ());
+            samples++;
+        }
+        if (samples == 0) {
+            return "unknown";
+        }
+        const Standard_Real mean =
+            dotSum / static_cast<Standard_Real> (samples);
+        if (mean > 0.05) {
+            return "convex";
+        }
+        if (mean < -0.05) {
+            return "concave";
+        }
+        return "unknown";
+    } catch (const Standard_Failure&) {
+        return "unknown";
+    }
+}
+
+/**
+ * Exact analytic parameters of the face's underlying surface primitive. Only
+ * the single key matching the analytic type is present (plane / cylinder /
+ * cone / sphere / torus); synthetic surfaces produce no `analytic`.
+ */
+emscripten::val BuildAnalyticSurface (const TopoDS_Face& face)
+{
+    emscripten::val analytic (emscripten::val::object ());
+    try {
+        BRepAdaptor_Surface surface (face, false);
+        switch (surface.GetType ()) {
+            case GeomAbs_Plane: {
+                const gp_Pln& plane = surface.Plane ();
+                emscripten::val params (emscripten::val::object ());
+                emscripten::val normalValue (emscripten::val::array ());
+                emscripten::val pointValue (emscripten::val::array ());
+                WriteDirection (normalValue, plane.Axis ().Direction ());
+                WritePoint (pointValue, plane.Location ());
+                params.set ("normal", normalValue);
+                params.set ("point", pointValue);
+                analytic.set ("plane", params);
+                break;
+            }
+            case GeomAbs_Cylinder: {
+                const gp_Cyl& cylinder = surface.Cylinder ();
+                emscripten::val params (emscripten::val::object ());
+                emscripten::val axisValue (emscripten::val::array ());
+                emscripten::val centerValue (emscripten::val::array ());
+                WriteDirection (axisValue, cylinder.Axis ().Direction ());
+                WritePoint (centerValue, cylinder.Location ());
+                params.set ("axis", axisValue);
+                params.set ("center", centerValue);
+                params.set ("radius", cylinder.Radius ());
+                analytic.set ("cylinder", params);
+                break;
+            }
+            case GeomAbs_Cone: {
+                const gp_Cone& cone = surface.Cone ();
+                emscripten::val params (emscripten::val::object ());
+                emscripten::val axisValue (emscripten::val::array ());
+                emscripten::val apexValue (emscripten::val::array ());
+                WriteDirection (axisValue, cone.Axis ().Direction ());
+                WritePoint (apexValue, cone.Apex ());
+                params.set ("axis", axisValue);
+                params.set ("apex", apexValue);
+                params.set ("semiAngleDeg", cone.SemiAngle () * 180.0 / M_PI);
+                params.set ("radius", cone.RefRadius ());
+                analytic.set ("cone", params);
+                break;
+            }
+            case GeomAbs_Sphere: {
+                const gp_Sphere& sphere = surface.Sphere ();
+                emscripten::val params (emscripten::val::object ());
+                emscripten::val centerValue (emscripten::val::array ());
+                WritePoint (centerValue, sphere.Location ());
+                params.set ("center", centerValue);
+                params.set ("radius", sphere.Radius ());
+                analytic.set ("sphere", params);
+                break;
+            }
+            case GeomAbs_Torus: {
+                const gp_Torus& torus = surface.Torus ();
+                emscripten::val params (emscripten::val::object ());
+                emscripten::val centerValue (emscripten::val::array ());
+                emscripten::val axisValue (emscripten::val::array ());
+                WritePoint (centerValue, torus.Location ());
+                WriteDirection (axisValue, torus.Axis ().Direction ());
+                params.set ("center", centerValue);
+                params.set ("axis", axisValue);
+                params.set ("majorRadius", torus.MajorRadius ());
+                params.set ("minorRadius", torus.MinorRadius ());
+                analytic.set ("torus", params);
+                break;
+            }
+            default:
+                break;
+        }
+    } catch (const Standard_Failure&) {
+    }
+    return analytic;
+}
+
+/**
+ * Midpoint of the edge's 3D curve (parametric midpoint; falls back to the
+ * average of the discretized points when the curve parameters are infinite).
+ */
+gp_Pnt EdgeMidpoint (
+    const TopoDS_Edge& edge,
+    const std::vector<gp_Pnt>& discretized
+)
+{
+    try {
+        BRepAdaptor_Curve curve (edge);
+        const Standard_Real firstParameter = curve.FirstParameter ();
+        const Standard_Real lastParameter = curve.LastParameter ();
+        if (!Precision::IsInfinite (firstParameter) &&
+            !Precision::IsInfinite (lastParameter)) {
+            return curve.Value ((firstParameter + lastParameter) * 0.5);
+        }
+    } catch (const Standard_Failure&) {
+    }
+    if (discretized.empty ()) {
+        return gp_Pnt (0.0, 0.0, 0.0);
+    }
+    gp_XYZ sum;
+    for (std::size_t pointIndex = 0; pointIndex < discretized.size (); pointIndex++) {
+        sum += discretized[pointIndex].XYZ ();
+    }
+    return gp_Pnt (sum / static_cast<Standard_Real> (discretized.size ()));
+}
+
+/**
+ * Outward unit normal of `face` at the edge midpoint. Uses the edge's pcurve
+ * on the face (exact surface parameter at the curve midpoint) and falls back
+ * to projecting the 3D midpoint onto the face surface.
+ */
+bool EdgeMidpointFaceNormal (
+    const TopoDS_Edge& edge,
+    const TopoDS_Face& face,
+    const gp_Pnt& midpoint,
+    gp_Dir& normal
+)
+{
+    try {
+        Handle(Geom2d_Curve) pcurve;
+        Standard_Real firstParameter;
+        Standard_Real lastParameter;
+        BRep_Tool::CurveOnSurface (edge, face, pcurve, firstParameter, lastParameter);
+        if (!pcurve.IsNull () &&
+            !Precision::IsInfinite (firstParameter) &&
+            !Precision::IsInfinite (lastParameter)) {
+            const gp_Pnt2d uv = pcurve->Value ((firstParameter + lastParameter) * 0.5);
+            return OutwardNormalAt (face, uv.X (), uv.Y (), normal);
+        }
+    } catch (const Standard_Failure&) {
+    }
+    const Handle(Geom_Surface)& surface = BRep_Tool::Surface (face);
+    gp_Pnt nearest;
+    Standard_Real u, v;
+    if (!NearestSurfacePoint (surface, midpoint, nearest, u, v)) {
+        return false;
+    }
+    return OutwardNormalAt (face, u, v, normal);
 }
 
 }
@@ -181,6 +494,10 @@ void WriteNativeTopology (
     TopTools_IndexedDataMapOfShapeListOfShape edgeFaces;
     TopExp::MapShapesAndAncestors (shape, TopAbs_EDGE, TopAbs_FACE, edgeFaces);
 
+    std::map<Standard_Integer, double> faceDiagonalByIndex;
+    std::map<Standard_Integer, gp_Pnt> faceCentroidPointByIndex;
+    std::map<Standard_Integer, gp_Dir> faceCentroidNormalByIndex;
+
     emscripten::val faceDescriptors (emscripten::val::array ());
     for (Standard_Integer faceIndex = 1; faceIndex <= faceMap.Extent (); faceIndex++) {
         const TopoDS_Face& face = TopoDS::Face (faceMap.FindKey (faceIndex));
@@ -195,13 +512,15 @@ void WriteNativeTopology (
         }
         faceObject.set ("surface_type", surfaceType);
 
+        gp_Pnt centroid = gp_Pnt (0.0, 0.0, 0.0);
         try {
             GProp_GProps properties;
             BRepGProp::SurfaceProperties (face, properties);
+            centroid = properties.CentreOfMass ();
             faceObject.set ("area", properties.Mass ());
-            emscripten::val centroid (emscripten::val::array ());
-            WritePoint (centroid, properties.CentreOfMass ());
-            faceObject.set ("centroid", centroid);
+            emscripten::val centroidValue (emscripten::val::array ());
+            WritePoint (centroidValue, centroid);
+            faceObject.set ("centroid", centroidValue);
         } catch (const Standard_Failure&) {
         }
 
@@ -211,8 +530,55 @@ void WriteNativeTopology (
             emscripten::val boundsValues (emscripten::val::array ());
             WriteBounds (boundsValues, bounds);
             faceObject.set ("bounds", boundsValues);
+            if (!bounds.IsVoid ()) {
+                Standard_Real xMin, yMin, zMin, xMax, yMax, zMax;
+                bounds.Get (xMin, yMin, zMin, xMax, yMax, zMax);
+                const gp_XYZ extents (
+                    xMax - xMin,
+                    yMax - yMin,
+                    zMax - zMin
+                );
+                const double diagonal = std::sqrt (
+                    extents.Dot (extents)
+                );
+                if (diagonal > Precision::Confusion ()) {
+                    faceDiagonalByIndex[faceIndex] = diagonal;
+                }
+            }
         } catch (const Standard_Failure&) {
         }
+
+        // Kernel graph attributes.
+        faceObject.set ("convexity", FaceConvexityLabel (face));
+
+        const Handle(Geom_Surface)& faceSurface = BRep_Tool::Surface (face);
+        gp_Pnt nearestCentroidPoint;
+        Standard_Real centroidU, centroidV;
+        if (NearestSurfacePoint (
+                faceSurface,
+                centroid,
+                nearestCentroidPoint,
+                centroidU,
+                centroidV
+            )) {
+            emscripten::val centroidPointValue (emscripten::val::array ());
+            WritePoint (centroidPointValue, nearestCentroidPoint);
+            faceObject.set ("centroid_point", centroidPointValue);
+            faceCentroidPointByIndex[faceIndex] = nearestCentroidPoint;
+
+            gp_Dir centroidNormal;
+            if (OutwardNormalAt (face, centroidU, centroidV, centroidNormal)) {
+                emscripten::val centroidNormalValue (emscripten::val::array ());
+                WriteDirection (centroidNormalValue, centroidNormal);
+                faceObject.set ("centroid_normal", centroidNormalValue);
+                faceCentroidNormalByIndex[faceIndex] = centroidNormal;
+            }
+        }
+
+        // Exact analytic surface parameters (empty object for synthetic
+        // surfaces such as B-splines).
+        faceObject.set ("analytic", BuildAnalyticSurface (face));
+
         faceDescriptors.set (faceIndex - 1, faceObject);
     }
 
@@ -255,19 +621,23 @@ void WriteNativeTopology (
             }
         }
 
-        emscripten::val faceIndices (emscripten::val::array ());
-        std::set<Standard_Integer> writtenFaceIndices;
-        Standard_Integer faceOutputIndex = 0;
+        std::vector<Standard_Integer> writtenFaceIndices;
+        std::set<Standard_Integer> seenFaceIndices;
         if (edgeFaces.Contains (edge)) {
             const TopTools_ListOfShape& owningFaces = edgeFaces.FindFromKey (edge);
             for (TopTools_ListIteratorOfListOfShape iterator (owningFaces);
                  iterator.More ();
                  iterator.Next ()) {
                 const Standard_Integer faceIndex = faceMap.FindIndex (iterator.Value ()) - 1;
-                if (faceIndex >= 0 && writtenFaceIndices.insert (faceIndex).second) {
-                    faceIndices.set (faceOutputIndex++, faceIndex);
+                if (faceIndex >= 0 && seenFaceIndices.insert (faceIndex).second) {
+                    writtenFaceIndices.push_back (faceIndex);
                 }
             }
+        }
+
+        emscripten::val faceIndices (emscripten::val::array ());
+        for (std::size_t faceIndex = 0; faceIndex < writtenFaceIndices.size (); faceIndex++) {
+            faceIndices.set (faceIndex, writtenFaceIndices[faceIndex]);
         }
 
         emscripten::val vertexIndices (emscripten::val::array ());
@@ -318,6 +688,98 @@ void WriteNativeTopology (
             }
         } catch (const Standard_Failure&) {
         }
+
+        // Kernel graph attributes for the exporter.
+        const gp_Pnt midpoint = EdgeMidpoint (edge, points);
+        emscripten::val midpointValue (emscripten::val::array ());
+        WritePoint (midpointValue, midpoint);
+        edgeObject.set ("midpoint", midpointValue);
+
+        struct IncidentFaceNormal
+        {
+            Standard_Integer faceIndex;
+            gp_Dir normal;
+        };
+        std::vector<IncidentFaceNormal> incidentNormals;
+        for (std::size_t faceIndex = 0; faceIndex < writtenFaceIndices.size (); faceIndex++) {
+            const Standard_Integer localFaceIndex = writtenFaceIndices[faceIndex];
+            const TopoDS_Face& face = TopoDS::Face (faceMap.FindKey (localFaceIndex + 1));
+            gp_Dir outward;
+            if (EdgeMidpointFaceNormal (edge, face, midpoint, outward)) {
+                incidentNormals.push_back ({ localFaceIndex, outward });
+            }
+        }
+
+        emscripten::val normalsValue (emscripten::val::array ());
+        for (std::size_t faceIndex = 0; faceIndex < writtenFaceIndices.size (); faceIndex++) {
+            const Standard_Integer localFaceIndex = writtenFaceIndices[faceIndex];
+            Standard_Integer normalMatch = -1;
+            for (std::size_t candidate = 0; candidate < incidentNormals.size (); candidate++) {
+                if (incidentNormals[candidate].faceIndex == localFaceIndex) {
+                    normalMatch = static_cast<Standard_Integer> (candidate);
+                    break;
+                }
+            }
+            if (normalMatch >= 0) {
+                emscripten::val normalValue (emscripten::val::array ());
+                WriteDirection (normalValue, incidentNormals[normalMatch].normal);
+                normalsValue.set (faceIndex, normalValue);
+            } else {
+                normalsValue.set (faceIndex, emscripten::val::null ());
+            }
+        }
+        edgeObject.set ("normals", normalsValue);
+
+        emscripten::val contacts (emscripten::val::array ());
+        Standard_Integer contactIndex = 0;
+        for (std::size_t i = 0; i + 1 < incidentNormals.size (); i++) {
+            const IncidentFaceNormal& first = incidentNormals[i];
+            for (std::size_t j = i + 1; j < incidentNormals.size (); j++) {
+                const IncidentFaceNormal& second = incidentNormals[j];
+
+                // Face 1 is the lexicographically-smaller BRepFace id so the
+                // classification matches the exporter's sorted face-pair order.
+                bool faceOneIsFirst = first.faceIndex < second.faceIndex;
+                const gp_Dir& n1 =
+                    faceOneIsFirst ? first.normal : second.normal;
+                const gp_Dir& n2 =
+                    faceOneIsFirst ? second.normal : first.normal;
+                const Standard_Integer faceOneIndex =
+                    faceOneIsFirst ? first.faceIndex : second.faceIndex;
+                const Standard_Integer faceTwoIndex =
+                    faceOneIsFirst ? second.faceIndex : first.faceIndex;
+
+                const auto centroidPointIt =
+                    faceCentroidPointByIndex.find (faceOneIndex + 1);
+                const auto centroidNormalIt =
+                    faceCentroidNormalByIndex.find (faceOneIndex + 1);
+                const auto diagonalIt =
+                    faceDiagonalByIndex.find (faceOneIndex + 1);
+                if (centroidPointIt == faceCentroidPointByIndex.end () ||
+                    centroidNormalIt == faceCentroidNormalByIndex.end () ||
+                    diagonalIt == faceDiagonalByIndex.end ()) {
+                    continue;
+                }
+
+                const double gamma = acos (std::max (-1.0, std::min (1.0, n1.Dot (n2))));
+                const double tau = std::max (1.0e-7, diagonalIt->second * 1.0e-3);
+                const gp_XYZ probe =
+                    centroidPointIt->second.XYZ () -
+                    centroidNormalIt->second.XYZ () * tau;
+                const double side = (probe - midpoint.XYZ ()).Dot (n2.XYZ ());
+                const bool convex = side < 0.0;
+                const double dihedralDeg =
+                    (convex ? M_PI - gamma : M_PI + gamma) * 180.0 / M_PI;
+
+                emscripten::val contact (emscripten::val::object ());
+                contact.set ("face_i", faceOneIndex);
+                contact.set ("face_j", faceTwoIndex);
+                contact.set ("convexity", convex ? "convex" : "concave");
+                contact.set ("dihedral_deg", dihedralDeg);
+                contacts.set (contactIndex++, contact);
+            }
+        }
+        edgeObject.set ("contacts", contacts);
 
         edgeObject.set ("index", outputEdgeIndex);
         edgeObject.set ("positions", positions);

@@ -11,6 +11,7 @@
     "export:graphs": "tsx scripts/exportGraphs.ts",
     "graph:budget": "tsx scripts/tokenBudgetReport.ts",
     "verify:graph": "tsx scripts/verifyGraphExporter.ts",
+    "verify:graph:kernel": "tsx scripts/verifyGraphKernelAttributes.ts",
     "verify:convexity": "tsx scripts/verifyCylinderFitConvexity.ts",
     "lint": "tsc --noEmit"
   },

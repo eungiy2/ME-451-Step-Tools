@@ -254,6 +254,39 @@ Raw reports are outside the repository:
 - `C:\occt-topology\topology-browser-benchmark.json`
 - `C:\occt-topology\topology-browser-benchmark-run2.json`
 
+## Kernel Graph Attributes Checkpoint
+
+The graph exporter now consumes geometric attributes computed **inside the OCCT
+kernel** rather than re-deriving them from tessellation. The wrapper's
+`WriteNativeTopology` emits, in addition to the topology records:
+
+- `brep_face_descriptors[].analytic` — exact `gp_Pln` / `gp_Cyl` / `gp_Cone` /
+  `gp_Sphere` / `gp_Torus` parameters from `BRepAdaptor_Surface`.
+- `brep_face_descriptors[].convexity` — in-kernel face-level
+  convex/concave/unknown (`FaceConvexityLabel`, `GeomLProp_SLProps` normals vs.
+  the axis/center radial direction).
+- `brep_face_descriptors[].centroid_point` / `.centroid_normal` — the surface
+  point nearest the face center of gravity and its outward normal
+  (`GeomAPI_ProjectPointOnSurf`).
+- `brep_edges[].midpoint`, `.normals` — exact edge-curve midpoint and per-face
+  outward normals there (`BRep_Tool::CurveOnSurface` pcurves with a projection
+  fallback).
+- `brep_edges[].contacts` — per incident-face pair the kernel convexity and
+  interior dihedral angle in degrees, from the same probe formula the graph
+  spec defines but with exact kernel values.
+
+`src/utils/occtTopologyPayload.ts`, `src/utils/stepOcctParser.ts`, and
+`src/utils/graphExporter.ts` validate, pass through, and consume these
+attributes. The exporter reports `source.kernelGeometry: true` when every
+adjacency classification came from the kernel (`geometrySource: "occt"`).
+`scripts/verifyGraphKernelAttributes.ts` (`npm run verify:graph:kernel`)
+verifies both the payload normalization and the exporter consumption paths
+against a synthetic wrapper payload and the real cube fixture.
+
+Rebuild the wrapper (see Resume Commands) before relying on kernel-derived
+graph values in the app; without a rebuilt wrapper the exporter degrades to the
+TS tessellation fallback exactly as before.
+
 ## Active Increment
 
 Improve STEP-to-native association confidence without changing rendering:
@@ -307,6 +340,20 @@ Verify persistent PMI topology references:
 ```powershell
 npx tsx scripts/verifyPmiTopologyReferences.ts `
   B:\out\Release\occt-import-js.js
+```
+
+Verify kernel graph attributes end-to-end (payload normalization + exporter
+consumption, no wrapper required):
+
+```powershell
+npm run verify:graph:kernel
+```
+
+Re-export graphs from the rebuilt wrapper so every fixture's graph carries
+kernel-derived geometry (`kernelGeometry: true`):
+
+```powershell
+npm run export:graphs
 ```
 
 Run the cube browser interaction verification:

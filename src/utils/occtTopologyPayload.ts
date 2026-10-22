@@ -9,6 +9,46 @@ export interface OcctNativeVertexPayload {
   position: ArrayLike<number>;
 }
 
+/**
+ * Exact analytic parameters of an OCCT surface primitive, computed in the
+ * kernel via `BRepAdaptor_Surface::Plane()/Cylinder()/Cone()/Sphere()/Torus()`.
+ * Exactly one key is present; synthetic surfaces (B-splines, offsets, ...)
+ * provide no `analytic` entry.
+ */
+export interface OcctAnalyticSurfacePayload {
+  plane?: { normal: ArrayLike<number>; point: ArrayLike<number> };
+  cylinder?: { axis: ArrayLike<number>; center: ArrayLike<number>; radius: number };
+  cone?: { axis: ArrayLike<number>; apex: ArrayLike<number>; semiAngleDeg: number; radius?: number };
+  sphere?: { center: ArrayLike<number>; radius: number };
+  torus?: { center: ArrayLike<number>; axis: ArrayLike<number>; majorRadius: number; minorRadius: number };
+}
+
+/**
+ * Normalized, validated analytic surface parameters with typed vector math
+ * values (instead of raw `ArrayLike<number>` payload arrays).
+ */
+export interface NormalizedOcctFaceAnalytic {
+  plane?: { normal: OcctTopologyPoint; point: OcctTopologyPoint };
+  cylinder?: { axis: OcctTopologyPoint; center: OcctTopologyPoint; radius: number };
+  cone?: { axis: OcctTopologyPoint; apex: OcctTopologyPoint; semiAngleDeg: number; radius?: number };
+  sphere?: { center: OcctTopologyPoint; radius: number };
+  torus?: { center: OcctTopologyPoint; axis: OcctTopologyPoint; majorRadius: number; minorRadius: number };
+}
+
+/**
+ * Kernel-computed adjacency classification for one incident-face pair of an
+ * edge. `face_i`/`face_j` are local face indices (the lexicographically-smaller
+ * `BRepFace-*` id is always `face_i`, matching the exporter's sorted pair
+ * order). `dihedral_deg` is the interior dihedral angle measured through the
+ * solid.
+ */
+export interface OcctNativeContactPayload {
+  face_i: number;
+  face_j: number;
+  convexity: "convex" | "concave";
+  dihedral_deg: number;
+}
+
 export interface OcctNativeEdgePayload {
   index: number;
   positions: ArrayLike<number>;
@@ -18,6 +58,12 @@ export interface OcctNativeEdgePayload {
   curve_length?: number;
   signature_points?: ArrayLike<ArrayLike<number>>;
   closed?: boolean;
+  /** Kernel edge-curve midpoint (3 coordinates). */
+  midpoint?: ArrayLike<number>;
+  /** Per-incident-face outward unit normal at the edge midpoint, aligned with
+   *  `face_indices`; a null entry means the normal could not be evaluated. */
+  normals?: ArrayLike<ArrayLike<number> | null>;
+  contacts?: ArrayLike<OcctNativeContactPayload>;
 }
 
 export interface OcctNativeFaceDescriptorPayload {
@@ -26,6 +72,14 @@ export interface OcctNativeFaceDescriptorPayload {
   area?: number;
   centroid?: ArrayLike<number>;
   bounds?: ArrayLike<number>;
+  /** Exact analytic surface parameters (see `OcctAnalyticSurfacePayload`). */
+  analytic?: OcctAnalyticSurfacePayload;
+  /** Kernel face-level convexity ("convex" | "concave" | "unknown"). */
+  convexity?: string;
+  /** Surface point nearest the face center of gravity (3 coordinates). */
+  centroid_point?: ArrayLike<number>;
+  /** Outward unit normal at `centroid_point` (3 coordinates). */
+  centroid_normal?: ArrayLike<number>;
 }
 
 export interface OcctNativeLoopPayload {
@@ -75,6 +129,21 @@ export interface NormalizedOcctEdge {
   closed: boolean;
   topologySource: "occt";
   topologySignature: string;
+  /** Kernel edge-curve midpoint. */
+  midpoint?: OcctTopologyPoint;
+  /** Kernel outward unit normals at the edge midpoint, aligned with
+   *  `parentFaceIndices`; null entries mean the kernel could not evaluate the
+   *  normal for that face. */
+  faceNormals?: Array<OcctTopologyPoint | null>;
+  /** Kernel adjacency classification per incident-face pair. */
+  contacts?: NormalizedOcctContact[];
+}
+
+export interface NormalizedOcctContact {
+  faceAId: string;
+  faceBId: string;
+  convexity: "convex" | "concave";
+  dihedralDeg: number;
 }
 
 export interface NormalizedOcctLoop {
@@ -96,6 +165,14 @@ export interface NormalizedOcctFaceTopology {
   loopIds: string[];
   edgeIds: string[];
   topologySignature: string;
+  /** Exact analytic surface parameters from the kernel. */
+  analytic?: NormalizedOcctFaceAnalytic;
+  /** Kernel face-level convexity ("convex" | "concave" | "unknown"). */
+  convexity?: string;
+  /** Surface point nearest the face center of gravity. */
+  centroidPoint?: OcctTopologyPoint;
+  /** Outward unit normal at `centroidPoint`. */
+  centroidNormal?: OcctTopologyPoint;
 }
 
 export interface NormalizedOcctMeshTopology {
@@ -104,6 +181,9 @@ export interface NormalizedOcctMeshTopology {
   edges: NormalizedOcctEdge[];
   loops: NormalizedOcctLoop[];
   nextOffsets: OcctTopologyOffsets;
+  /** True when this mesh's payload carried the kernel graph attributes
+   *  (analytic surface parameters, edge midpoint/normals/contacts). */
+  kernelGraphAttributes: boolean;
 }
 
 export const EMPTY_OCCT_TOPOLOGY_OFFSETS: OcctTopologyOffsets = {
@@ -209,6 +289,148 @@ const requireReferencedIndices = (
   }
   return index;
 });
+
+const requireOptionalFinitePoint = (
+  values: ArrayLike<number> | undefined,
+  label: string
+): OcctTopologyPoint | undefined => {
+  if (values === undefined || values === null || values.length === 0) return undefined;
+  return requirePoint(values, label);
+};
+
+const requireOptionalDirection = (
+  values: ArrayLike<number> | undefined,
+  label: string
+): OcctTopologyPoint | undefined => {
+  const point = requireOptionalFinitePoint(values, label);
+  if (!point) return undefined;
+  const length = Math.hypot(point.x, point.y, point.z);
+  if (length <= 1e-12) {
+    throw new Error(`Invalid OCCT topology ${label}: zero-length direction`);
+  }
+  return { x: point.x / length, y: point.y / length, z: point.z / length };
+};
+
+const requireConvexityLabel = (value: unknown, label: string): string | undefined => {
+  if (value === undefined || value === null || value === "") return undefined;
+  const text = String(value);
+  if (text === "convex" || text === "concave" || text === "unknown") return text;
+  throw new Error(`Invalid OCCT topology ${label}: unrecognized convexity "${text}"`);
+};
+
+const requireAnalytic = (
+  raw: unknown,
+  label: string
+): NormalizedOcctFaceAnalytic | undefined => {
+  if (!raw || typeof raw !== "object") return undefined;
+  const analytic = raw as Record<string, unknown>;
+  const result: NormalizedOcctFaceAnalytic = {};
+
+  if (analytic.plane) {
+    const plane = analytic.plane as { normal?: ArrayLike<number>; point?: ArrayLike<number> };
+    result.plane = {
+      normal: requireOptionalDirection(plane.normal, `${label} analytic plane normal`),
+      point: requireOptionalFinitePoint(plane.point, `${label} analytic plane point`),
+    };
+  } else if (analytic.cylinder) {
+    const cylinder = analytic.cylinder as {
+      axis?: ArrayLike<number>;
+      center?: ArrayLike<number>;
+      radius?: unknown;
+    };
+    const radius = Number(cylinder.radius);
+    if (!Number.isFinite(radius) || radius <= 0) {
+      throw new Error(`Invalid OCCT topology ${label} analytic cylinder radius: ${cylinder.radius}`);
+    }
+    result.cylinder = {
+      axis: requireOptionalDirection(cylinder.axis, `${label} analytic cylinder axis`),
+      center: requireOptionalFinitePoint(cylinder.center, `${label} analytic cylinder center`),
+      radius,
+    };
+  } else if (analytic.cone) {
+    const cone = analytic.cone as {
+      axis?: ArrayLike<number>;
+      apex?: ArrayLike<number>;
+      semiAngleDeg?: unknown;
+      radius?: unknown;
+    };
+    const semiAngleDeg = Number(cone.semiAngleDeg);
+    if (!Number.isFinite(semiAngleDeg)) {
+      throw new Error(`Invalid OCCT topology ${label} analytic cone semi-angle`);
+    }
+    const radius = Number(cone.radius);
+    result.cone = {
+      axis: requireOptionalDirection(cone.axis, `${label} analytic cone axis`),
+      apex: requireOptionalFinitePoint(cone.apex, `${label} analytic cone apex`),
+      semiAngleDeg,
+      ...(Number.isFinite(radius) && radius > 0 ? { radius } : {}),
+    };
+  } else if (analytic.sphere) {
+    const sphere = analytic.sphere as { center?: ArrayLike<number>; radius?: unknown };
+    const radius = Number(sphere.radius);
+    if (!Number.isFinite(radius) || radius <= 0) {
+      throw new Error(`Invalid OCCT topology ${label} analytic sphere radius: ${sphere.radius}`);
+    }
+    result.sphere = {
+      center: requireOptionalFinitePoint(sphere.center, `${label} analytic sphere center`),
+      radius,
+    };
+  } else if (analytic.torus) {
+    const torus = analytic.torus as {
+      center?: ArrayLike<number>;
+      axis?: ArrayLike<number>;
+      majorRadius?: unknown;
+      minorRadius?: unknown;
+    };
+    const majorRadius = Number(torus.majorRadius);
+    const minorRadius = Number(torus.minorRadius);
+    if (!Number.isFinite(majorRadius) || majorRadius <= 0 ||
+        !Number.isFinite(minorRadius) || minorRadius <= 0) {
+      throw new Error(`Invalid OCCT topology ${label} analytic torus radii`);
+    }
+    result.torus = {
+      center: requireOptionalFinitePoint(torus.center, `${label} analytic torus center`),
+      axis: requireOptionalDirection(torus.axis, `${label} analytic torus axis`),
+      majorRadius,
+      minorRadius,
+    };
+  }
+
+  return Object.keys(result).length > 0 ? result : undefined;
+};
+
+const requireContact = (
+  contact: unknown,
+  validFaceIndices: Set<number>,
+  label: string
+): { faceI: number; faceJ: number; convexity: "convex" | "concave"; dihedralDeg: number } => {
+  if (!contact || typeof contact !== "object") {
+    throw new Error(`Invalid OCCT topology ${label}: contact is not an object`);
+  }
+  const raw = contact as Record<string, unknown>;
+  const faceI = requireNonNegativeInteger(Number(raw.face_i), `${label} face_i`);
+  const faceJ = requireNonNegativeInteger(Number(raw.face_j), `${label} face_j`);
+  if (!validFaceIndices.has(faceI) || !validFaceIndices.has(faceJ)) {
+    throw new Error(`Invalid OCCT topology ${label}: contact references missing face index`);
+  }
+  if (faceI >= faceJ) {
+    throw new Error(`Invalid OCCT topology ${label}: contact faces must be ordered (i < j)`);
+  }
+  const convexity = String(raw.convexity);
+  if (convexity !== "convex" && convexity !== "concave") {
+    throw new Error(`Invalid OCCT topology ${label}: unrecognized contact convexity "${convexity}"`);
+  }
+  const dihedralDeg = Number(raw.dihedral_deg);
+  if (!Number.isFinite(dihedralDeg)) {
+    throw new Error(`Invalid OCCT topology ${label}: contact dihedral must be finite`);
+  }
+  return {
+    faceI,
+    faceJ,
+    convexity: convexity,
+    dihedralDeg,
+  };
+};
 
 export const hasNativeOcctTopology = (mesh: unknown): mesh is OcctNativeMeshPayload => {
   if (!mesh || typeof mesh !== "object") return false;
@@ -376,6 +598,32 @@ export function normalizeOcctMeshTopology(
       "edge",
       `${draft.geometrySignature}|${edgeVertices.map((vertex) => vertex.topologySignature).sort().join("|")}`
     );
+    const midpoint = requireOptionalFinitePoint(
+      edge.midpoint,
+      `edge ${edge.index} midpoint`
+    );
+    const faceNormals = edge.normals
+      ? toArray(edge.normals).map((normal, index) =>
+          normal
+            ? requireOptionalDirection(normal, `edge ${edge.index} normal ${index}`)
+            : null
+        )
+      : undefined;
+    const contacts = edge.contacts
+      ? toArray(edge.contacts).map((contact, index) => {
+          const required = requireContact(
+            contact,
+            localFaceIndices,
+            `edge ${edge.index} contact ${index}`
+          );
+          return {
+            faceAId: `BRepFace-${offsets.face + required.faceI}`,
+            faceBId: `BRepFace-${offsets.face + required.faceJ}`,
+            convexity: required.convexity,
+            dihedralDeg: required.dihedralDeg,
+          };
+        })
+      : undefined;
     const normalized = {
       id: draft.id,
       name: `B-Rep Edge #${offsets.edge + draft.order + 1}`,
@@ -389,7 +637,10 @@ export function normalizeOcctMeshTopology(
       curveLength: draft.curveLength,
       closed: edge.closed === true,
       topologySource: "occt" as const,
-      topologySignature
+      topologySignature,
+      ...(midpoint ? { midpoint } : {}),
+      ...(faceNormals ? { faceNormals } : {}),
+      ...(contacts && contacts.length > 0 ? { contacts } : {}),
     };
     edgeByNativeIndex.set(edge.index, normalized);
     return normalized;
@@ -413,6 +664,35 @@ export function normalizeOcctMeshTopology(
     }
     return bounds as [number, number, number, number, number, number];
   };
+  const analyticKeyFromPayload = (analytic: OcctAnalyticSurfacePayload | undefined): string => {
+    if (!analytic) return "unknown-analytic";
+    const keyPart = (values: ArrayLike<number> | undefined) =>
+      values ? toArray(values).map(canonicalNumber).join(",") : "-";
+    const parts: string[] = [];
+    if (analytic.plane) {
+      parts.push(`plane:n=${keyPart(analytic.plane.normal)};p=${keyPart(analytic.plane.point)}`);
+    }
+    if (analytic.cylinder) {
+      parts.push(
+        `cylinder:a=${keyPart(analytic.cylinder.axis)};c=${keyPart(analytic.cylinder.center)};r=${canonicalNumber(analytic.cylinder.radius)}`
+      );
+    }
+    if (analytic.cone) {
+      parts.push(
+        `cone:a=${keyPart(analytic.cone.axis)};x=${keyPart(analytic.cone.apex)};ang=${canonicalNumber(analytic.cone.semiAngleDeg)}${analytic.cone.radius !== undefined ? `;r=${canonicalNumber(analytic.cone.radius)}` : ""}`
+      );
+    }
+    if (analytic.sphere) {
+      parts.push(`sphere:c=${keyPart(analytic.sphere.center)};r=${canonicalNumber(analytic.sphere.radius)}`);
+    }
+    if (analytic.torus) {
+      parts.push(
+        `torus:c=${keyPart(analytic.torus.center)};a=${keyPart(analytic.torus.axis)};R=${canonicalNumber(analytic.torus.majorRadius)};r=${canonicalNumber(analytic.torus.minorRadius)}`
+      );
+    }
+    return parts.length > 0 ? parts.join("|") : "no-analytic";
+  };
+
   const faceDescriptorKeyByIndex = new Map<number, string>();
   for (let faceIndex = 0; faceIndex < faceCount; faceIndex++) {
     const descriptor = faceDescriptorByIndex.get(faceIndex);
@@ -422,7 +702,9 @@ export function normalizeOcctMeshTopology(
       descriptor?.surface_type || "other",
       Number.isFinite(descriptor?.area) ? canonicalNumber(Number(descriptor?.area)) : "unknown-area",
       centroid ? pointKey(centroid) : "unknown-centroid",
-      bounds ? bounds.map(canonicalNumber).join(",") : "unknown-bounds"
+      bounds ? bounds.map(canonicalNumber).join(",") : "unknown-bounds",
+      requireConvexityLabel(descriptor?.convexity, `face ${faceIndex} convexity`) ?? "unknown-convexity",
+      analyticKeyFromPayload(descriptor?.analytic),
     ].join("|"));
   }
 
@@ -461,6 +743,7 @@ export function normalizeOcctMeshTopology(
       .filter((edgeId, index, all) => all.indexOf(edgeId) === index);
     const centroid = getOptionalPoint(descriptor?.centroid, `face ${localFaceIndex} centroid`);
     const bounds = getOptionalBounds(descriptor?.bounds, `face ${localFaceIndex} bounds`);
+    const convexity = requireConvexityLabel(descriptor?.convexity, `face ${localFaceIndex} convexity`);
     return {
       id: `BRepFace-${offsets.face + localFaceIndex}`,
       nativeIndex: localFaceIndex,
@@ -468,6 +751,16 @@ export function normalizeOcctMeshTopology(
       area: Number.isFinite(descriptor?.area) ? Number(descriptor?.area) : undefined,
       centroid,
       bounds,
+      analytic: requireAnalytic(descriptor?.analytic, `face ${localFaceIndex} analytic`),
+      ...(convexity ? { convexity } : {}),
+      centroidPoint: getOptionalPoint(
+        descriptor?.centroid_point,
+        `face ${localFaceIndex} centroid point`
+      ),
+      centroidNormal: requireOptionalDirection(
+        descriptor?.centroid_normal,
+        `face ${localFaceIndex} centroid normal`
+      ),
       loopIds: faceLoops.map((loop) => loop.id),
       edgeIds,
       topologySignature: hashSignature(
@@ -485,6 +778,12 @@ export function normalizeOcctMeshTopology(
     vertices,
     edges,
     loops,
+    kernelGraphAttributes:
+      rawEdges.length > 0
+      && rawEdges.every(
+        (edge) => Array.isArray(edge.midpoint) && edge.midpoint.length === 3
+      )
+      && rawFaceDescriptors.length === faceCount,
     nextOffsets: {
       face: offsets.face + faceCount,
       edge: offsets.edge + edges.length,

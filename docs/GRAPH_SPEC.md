@@ -37,7 +37,7 @@ defined by `docs/EXPORT_GRAPH_PLAN.md`. One JSON file per loaded part.
 | type | layer | description |
 |---|---|---|
 | `part` | base | one per graph; material, envelope mm, feature counts, PMI resolution summary |
-| `face` | base | one per B-Rep face; surface type, area, face-level convexity, analytic params, stable id |
+| `face` | base | one per B-Rep face; surface type, area, face-level convexity, exact OCCT kernel analytic parameters where the surface is analytic, stable id |
 | `datum` | PMI | datum letter (plane / cylinder axis / median plane / point / multiface) |
 | `datumReferenceFrame` | PMI | ordered datum list; `constraints: [3,2,1]` derived by data type |
 | `commonDatum` | PMI | shared group node for `A-B` compound datums |
@@ -50,7 +50,7 @@ defined by `docs/EXPORT_GRAPH_PLAN.md`. One JSON file per loaded part.
 
 | type | source → target | attributes |
 |---|---|---|
-| `adjacency` | face → face | `edgeType` (line/circle/ellipse/other), `convexity` (convex/concave/unknown), `dihedralDeg`, `sharedEdgeId`, `sharedEdgeStableId` |
+| `adjacency` | face → face | `edgeType` (line/circle/ellipse/other), `convexity` (convex/concave/unknown), `dihedralDeg`, `sharedEdgeId`, `sharedEdgeStableId`; `geometrySource: "occt"` when the OCCT kernel classified the pair |
 | `appliesTo` | toleranceValue / dimension / datum → face/edge or `#stepId` | `resolution`, `resolutionReason`, `candidateRuntimeIds` |
 | `datumOf` | datum → face/edge | same resolution contract as `appliesTo` |
 | `defines` | toleranceValue / dimension → toleranceZone | — |
@@ -63,33 +63,50 @@ PMI attach edges repeat the outcome from `pmiTopologyReferences.ts`
 are preserved as edges to the STEP entity id (e.g. `appliesTo → #553` with
 `resolution: "missing"`), never silently dropped or guessed.
 
-## Convexity of cylindrical and partial-cylindrical faces
+## Convexity, dihedral, and analytic surface parameters
 
-Reuses the viewer's cylinder fit (`src/utils/cylinderFit.ts`, ported from
-`CadCanvas3D.getCylinderFaceCircleSnap`): axis estimated from pairwise vertex
-normal cross products, then an algebraic least-squares circle fit in the plane
-perpendicular to the axis; validated with relative radial deviation ≤ 0.12 and
-normal–radial alignment ≥ 0.55.
+These geometric attributes are computed **inside the OCCT kernel** by the
+custom native wrapper (`native/occt-topology-wrapper/`). The TypeScript math in
+`src/utils/cylinderFit.ts` / `src/utils/convexity.ts` remains only as the
+explicit tessellation-reconstruction fallback.
 
-- **Face-level (`face.convexity`)** — anchor the classic `(p − center)·n̂`
-  radial-dot test (`geometryClassifier.ts`) on the **fitted axis** instead of
-  the mesh centroid: `faceConvexity = sign(mean (p − foot(p)) · n̂)`.
-  `convex` = boss/outer cylinder, `concave` = bore/hole.
-- **Adjacency (`adjacency.convexity` + `dihedralDeg`)** — outward unit normals
-  of both faces are evaluated at the shared-edge midpoint (a cylinder's
-  normal = ± radial from the fitted axis). The material side of face 2 is
-  probed with a point pulled a fraction of the face size inside the solid from
-  face 1's centroid (`p = centroid1 − τ·n̂1`), which classifies convex/concave
-  without depending on edge-tangent or loop orientation. Interior dihedral =
-  `π − γ` (convex) or `π + γ` (concave), `γ = acos(n̂1·n̂2)`.
+Kernel-computed payload consumed by the exporter:
 
-Partial-cylindrical faces need no special case: the circle fit handles an arc
-segment, and wall edges use the same fitted mid-edge normal.
+- **Exact surface parameters** (`face.analytic` — `BRepAdaptor_Surface` gives
+  the `gp_Pln`/`gp_Cyl`/`gp_Cone`/`gp_Sphere`/`gp_Torus` primitive directly):
+  `plane` (normal+point), `cylinder` (axis+center+radius), `cone`
+  (axis+apex+semi-angle+reference radius), `sphere` (center+radius), `torus`
+  (center+axis+major/minor radius). Cone/sphere/torus faces are classified
+  exactly; the tessellation fallback could not distinguish them.
+- **Face-level convexity** (`face.convexity`) — in-kernel
+  `FaceConvexityLabel`: sample the face bounding-box corners projected onto the
+  surface (`GeomAPI_ProjectPointOnSurf`) and take
+  `sign(outward normal · radial)`; `convex` = boss/outer cylinder,
+  `concave` = bore/hole, thresholds ±0.05 (same as the TS fallback).
+- **Adjacency (`adjacency.convexity` + `dihedralDeg`)** — per edge the kernel
+  evaluates outward unit normals of both incident faces at the exact edge-curve
+  midpoint (`BRep_Tool::CurveOnSurface` pcurves with a projection fallback),
+  then classifies the pair with the interior-side probe formula
+  (`p = centroid1 − τ·n̂1`, `side = (p − m)·n2`, convex iff `side < 0`), giving
+  `δ = π − γ` (convex) / `π + γ` (concave) from exact `γ = acos(n̂1·n̂2)`.
+  Results ship per edge as `contacts` (`{face_i, face_j, convexity,
+  dihedral_deg}`), in the exporter's sorted face-pair order (`face_i` is the
+  smaller `BRepFace-*` id).
+- **Face-1 reference data** (`face.centroid_point` + `face.centroid_normal`) —
+  the surface point nearest the face center of gravity and its outward unit
+  normal, used for the probe.
 
-Fit data-source priority: analytical STEP `CYLINDRICAL_SURFACE` axis/radius →
-OCCT `surface_type` → tessellation fit. The Node export scripts run the
-standard tessellation wrapper offline (`scripts/occtNode.ts`); pass a
-Node-importable native wrapper path to opt into native topology.
+Exporter consumption: `face.analytic` and `face.convexity` override the TS
+fits; adjacency edges use `edge.contacts` directly. Kernel-derived faces and
+adjacencies carry `geometrySource: "occt"`; the `source` block reports
+`kernelGeometry: true` when every adjacency on the run was kernel-derived.
+
+Data-source agreement: with the native wrapper present, the graph's geometry is
+kernel-exact — no tessellation noise in normals, edge midpoints, or fits. The
+Node export scripts use the standard tessellation wrapper offline by default
+(`scripts/occtNode.ts`); pass a Node-importable native wrapper path to opt into
+kernel geometry. `npm run verify:graph:kernel` exercises both kernel
+consumption paths with a synthetic wrapper payload plus the real cube fixture.
 
 ## PMI: tolerance values vs zones
 
@@ -179,8 +196,10 @@ counts (the part envelope comes from the meshes).
   must be backfilled from part metadata for L4/L5.
 - **Tessellation-mode fallback** (default in the Node scripts) has no native
   stable signatures or analytical `surface_type`, so PMI references resolve to
-  `missing` (preserved explicitly) and face surface types come from the
-  auto-classifier. Use native topology for full resolution.
+  `missing` (preserved explicitly), face surface types come from the
+  auto-classifier, and convexity/dihedral come from the TypeScript fits
+  (`source.kernelGeometry: false`). Use the rebuilt native wrapper for full
+  kernel-derived geometry (`npm run verify:graph:kernel`).
 - **Feature recognition is best-effort geometry** in v1 (`provenance:
   "geometry"`): coaxial concave cylinders are grouped into `hole` /
   `counterbore`. Requires NIST documented ground-truth spot-checks before

@@ -212,6 +212,13 @@ export async function parseStepWithOcct(
               nativeBounds: face.bounds,
               nativeLoopIds: face.loopIds,
               nativeEdgeIds: face.edgeIds,
+              // Kernel graph attributes (exact analytic surface parameters,
+              // face convexity, and the surface point/normal nearest the
+              // center of gravity) consumed by the graph exporter.
+              kernelConvexity: face.convexity,
+              analytic: face.analytic,
+              kernelCentroidPoint: face.centroidPoint,
+              kernelCentroidNormal: face.centroidNormal,
             });
           });
 

@@ -12,6 +12,42 @@ records directly from OCCT topology:
 
 The payload matches `src/utils/occtTopologyPayload.ts`.
 
+## Kernel graph attributes
+
+The wrapper additionally computes, inside the OCCT kernel, the exact geometric
+values the graph exporter consumes (no tessellation math on the TypeScript
+side):
+
+- **`brep_face_descriptors[].analytic`** — exact analytic surface parameters
+  from the kernel surface primitive (`BRepAdaptor_Surface::Plane()/Cylinder()/
+  Cone()/Sphere()/Torus()`): plane normal+point, cylinder axis+center+radius,
+  cone axis+apex+semi-angle+reference radius, sphere center+radius, torus
+  center+axis+major/minor radius.
+- **`brep_face_descriptors[].convexity`** — face-level `convex`/`concave`/
+  `unknown` computed in-kernel: outward surface normal vs. the axis/center
+  radial direction (`GeomLProp_SLProps` normals oriented by face
+  orientation).
+- **`brep_face_descriptors[].centroid_point` / `.centroid_normal`** — the
+  surface point nearest the face center of gravity (`GeomAPI_ProjectPointOnSurf`)
+  and the outward unit normal there (used for the interior-side probe in the
+  dihedral classification).
+- **`brep_edges[].midpoint`** — the edge 3D curve midpoint
+  (`BRepAdaptor_Curve::Value` at the parametric midpoint).
+- **`brep_edges[].normals`** — per-incident-face outward unit normal at the
+  edge midpoint, aligned with `face_indices`. Exact surface parameters come
+  from the edge's pcurve on each face (`BRep_Tool::CurveOnSurface`), with a
+  projection fallback.
+- **`brep_edges[].contacts`** — for every incident-face pair
+  `{face_i, face_j, convexity, dihedral_deg}`: the adjacency
+  convexity/concave-by-dihedral classification and the interior dihedral angle
+  in degrees, computed in-kernel with the same probe formula the graph spec
+  defines (`docs/GRAPH_SPEC.md`), but from exact kernel values. `face_i` is the
+  lexicographically-smaller `BRepFace-*` id, matching the exporter's sorted
+  face-pair order.
+
+Face/edge types, analytic values, and normals are all deterministic for a given
+input shape, which keeps exported graphs byte-identical across reloads.
+
 ## Prepare
 
 Clone `occt-import-js` at tag `0.0.23` with its OCCT submodule, then run:
