@@ -94,8 +94,38 @@ for (const nodeType of ["datum", "datumReferenceFrame", "toleranceValue", "toler
 assert.equal(graph.source.schema, "AP203");
 assert.equal(graph.nodes.filter((n) => n.nodeType === "part").length, 1);
 
+// Kernel path gate: when a native wrapper carries the kernel graph attributes
+// (analytic faces, edge contacts), the graph geometry MUST be kernel-derived.
+// A wrapper built before the kernel attributes — or the tessellation fallback —
+// must report `kernelGeometry: false` instead. The exporter never mixes
+// sources silently.
+const meshesCarryKernelAnalytic = (occtResult.meshes as any[]).some(
+  (mesh) => Boolean(mesh?.analytic) && typeof mesh.analytic === "object"
+);
+if (topologySource === "occt" && meshesCarryKernelAnalytic) {
+  assert.equal(
+    graph.source.kernelGeometry,
+    true,
+    "native wrapper with kernel attributes must produce a kernel-derived graph"
+  );
+  assert.equal(
+    graph.edges
+      .filter((edge) => edge.nodeType === "adjacency")
+      .every((edge) => edge.geometrySource === "occt"),
+    true,
+    "native wrapper with kernel attributes must classify every adjacency in-kernel"
+  );
+} else {
+  assert.equal(
+    graph.source.kernelGeometry,
+    false,
+    "legacy native wrapper or tessellation fallback must report kernelGeometry: false"
+  );
+}
+
 console.log(
   `Graph exporter verified on ${baseName}: ` +
   `${graph.source.nodeCount} nodes / ${graph.source.edgeCount} edges, ` +
-  `12 convex cube adjacencies, no PMI, deterministic.`
+  `12 convex cube adjacencies, no PMI, deterministic (` +
+  `kernelGeometry: ${graph.source.kernelGeometry}).`
 );
