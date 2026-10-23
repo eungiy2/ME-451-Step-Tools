@@ -1,28 +1,40 @@
 Graph: nist_ftc_06_asme1_ap242-e2
-  schema=AP242  stableHash=0x23a81459
-  nodes=328  edges=832  ~64999 tokens
-  Nodes: datum=10, datumReferenceFrame=12, dimension=17, face=187, feature=20, part=1, toleranceValue=32, toleranceZone=49
-  Edges: adjacency=470, appliesTo=188, datumOf=20, defines=49, drfReferences=27, memberFace=53, usesDRF=25
-  PMI resolution: resolved=0 missing=257 ambiguous=0
-  Faces: planar/cylindrical/etc via surfaceType; convexity: convex=35 concave=53
+  schema=AP242  stableHash=0x8bd53656
+  nodes=340  edges=850  ~75152 tokens
+  Nodes: datum=10, datumReferenceFrame=12, dimension=17, face=187, feature=32, part=1, toleranceValue=32, toleranceZone=49
+  Edges: adjacency=476, appliesTo=188, datumOf=20, defines=49, drfReferences=27, memberFace=65, usesDRF=25
+  PMI resolution: resolved=222 missing=35 ambiguous=0
+  Faces: planar/cylindrical/etc via surfaceType; convexity: convex=27 concave=69
   Features:
-- feat-1 hole (diameter=25.4385mm, memberFaces=1)
-- feat-10 hole (diameter=6.35002mm, memberFaces=1)
-- feat-11 hole (diameter=6.35mm, memberFaces=2)
-- feat-12 hole (diameter=7.03428mm, memberFaces=1)
-- feat-13 hole (diameter=6.52195mm, memberFaces=1)
-- feat-14 hole (diameter=8.39148mm, memberFaces=1)
-- feat-15 hole (diameter=9.13662mm, memberFaces=1)
-- feat-16 hole (diameter=9.09345mm, memberFaces=1)
-- feat-17 counterbore (diameter=7.1374mm, memberFaces=4)
-- feat-18 counterbore (diameter=7.1374mm, memberFaces=4)
-- feat-19 counterbore (diameter=7.1374mm, memberFaces=4)
+- feat-1 hole (diameter=6.35mm, memberFaces=2)
+- feat-10 hole (diameter=6.35mm, memberFaces=1)
+- feat-11 hole (diameter=6.35mm, memberFaces=1)
+- feat-12 hole (diameter=6.35mm, memberFaces=1)
+- feat-13 hole (diameter=6.35mm, memberFaces=1)
+- feat-14 hole (diameter=6.35mm, memberFaces=1)
+- feat-15 hole (diameter=6.35mm, memberFaces=1)
+- feat-16 hole (diameter=6.35mm, memberFaces=1)
+- feat-17 hole (diameter=6.35mm, memberFaces=1)
+- feat-18 hole (diameter=6.35mm, memberFaces=1)
+- feat-19 hole (diameter=6.35mm, memberFaces=1)
 - feat-2 hole (diameter=6.35mm, memberFaces=2)
-- feat-20 counterbore (diameter=7.1374mm, memberFaces=4)
-- feat-3 hole (diameter=6.35mm, memberFaces=2)
+- feat-20 hole (diameter=6.35mm, memberFaces=1)
+- feat-21 hole (diameter=6.35mm, memberFaces=1)
+- feat-22 hole (diameter=6.35mm, memberFaces=1)
+- feat-23 hole (diameter=6.35mm, memberFaces=2)
+- feat-24 hole (diameter=7.03428mm, memberFaces=1)
+- feat-25 hole (diameter=6.52195mm, memberFaces=1)
+- feat-26 hole (diameter=8.39148mm, memberFaces=1)
+- feat-27 hole (diameter=9.13662mm, memberFaces=1)
+- feat-28 hole (diameter=9.09345mm, memberFaces=1)
+- feat-29 counterbore (diameter=7.1374mm, memberFaces=4)
+- feat-3 counterbore (diameter=10.541mm, memberFaces=4)
+- feat-30 counterbore (diameter=7.1374mm, memberFaces=4)
+- feat-31 counterbore (diameter=7.1374mm, memberFaces=4)
+- feat-32 counterbore (diameter=7.1374mm, memberFaces=4)
 - feat-4 counterbore (diameter=10.541mm, memberFaces=4)
 - feat-5 counterbore (diameter=10.541mm, memberFaces=4)
 - feat-6 counterbore (diameter=10.541mm, memberFaces=4)
-- feat-7 counterbore (diameter=10.541mm, memberFaces=4)
+- feat-7 counterbore (diameter=14.2875mm, memberFaces=4)
 - feat-8 counterbore (diameter=14.2875mm, memberFaces=4)
-- feat-9 counterbore (diameter=14.2875mm, memberFaces=4)
+- feat-9 hole (diameter=6.35mm, memberFaces=1)

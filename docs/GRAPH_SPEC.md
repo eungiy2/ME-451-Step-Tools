@@ -12,12 +12,14 @@ defined by `docs/EXPORT_GRAPH_PLAN.md`. One JSON file per loaded part.
   npm run export:graphs            # writes graphs/*.graph.json + *.summary.txt
   npm run graph:budget             # writes graphs/token-budget.csv + .json
   npm run verify:graph             # cube end-to-end + determinism + negative control
+  npm run verify:graph:kernel      # kernel payload + exporter consumption (no wrapper needed)
   npm run verify:convexity        # pure-geometry cylinder/dihedral checks
   ```
   Node scripts use the local `occt-import-js` wasm (tessellation fallback)
-  offline; pass an explicit Node-importable native wrapper path
-  (`argv[2]` or `OCCT_WRAPPER_PATH`) to opt into native topology + stable
-  signatures.
+  offline. To opt into kernel geometry, point them at the published Node ESM
+  wrapper (`argv[2]` or `OCCT_WRAPPER_PATH`):
+  `npx tsx scripts/exportGraphs.ts public/occt-native/occt-import-js.node.mjs`.
+  Graphs exported that way report `source.kernelGeometry: true`.
 
 ## Conventions
 
@@ -165,14 +167,15 @@ incoming-edge walk, not subtree matching. Compound datums (`A-B`) collapse to a
 NIST AP242 fixtures are 0.39–6.0 MB raw STEP (~110k–1.7M tokens). The exported
 graphs are measured, not estimated: `npm run graph:budget` writes
 `graphs/token-budget.csv` + `.json` (heuristic ~3.5 chars/token on the compact
-serialization). The overall corpus reduces **~10x**; per fixture 2.8x–47x.
+serialization). The current corpus (16 fixtures, native OCCT wrapper,
+`source.kernelGeometry: true`) reduces **~8x** overall; per fixture 2.3x–38.8x.
 
 | fixture | nodes | edges | raw tokens | graph tokens |
 |---|---|---|---|---|
-| ctc_01 ap242 | 177 | 418 | ~113k | ~36k |
-| ftc_06 ap242 | 328 | 832 | ~563k | ~65k |
-| ftc_07 ap242 | 459 | 1090 | ~422k | ~88k |
-| corpus total | — | — | ~10.8M | ~1.09M |
+| ctc_01 ap242 | 187 | 426 | ~113k | ~42k |
+| ftc_06 ap242 | 340 | 850 | ~563k | ~75k |
+| ftc_07 ap242 | 463 | 1291 | ~422k | ~120k |
+| corpus total | — | — | ~10.8M | ~1.34M |
 
 The earlier draft budget (~3–8k tokens) assumed a hand-curated node/edge count;
 the measured serialized graph is larger because every adjacency edge carries

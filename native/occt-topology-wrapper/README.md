@@ -82,6 +82,38 @@ upstream checkout and build directory outside the application repository:
   -Parallel 2
 ```
 
+Linux/WSL builds use the same CMake target with the Emscripten SDK on PATH:
+
+```bash
+source "$HOME/emsdk/emsdk_env.sh"
+emcmake cmake -B build-wasm -G Ninja -DEMSCRIPTEN=1 -DCMAKE_BUILD_TYPE=Release .
+cmake --build build-wasm --parallel
+```
+
+`occt-import-js@0.0.23` pins OCCT to commit `d2abb6d844231cb8f29be6894440874a4700e4a5`
+(submodule `occt/`). If `git.dev.opencascade.org` is unreachable, fetch the exact
+pinned-commit tarball from the official GitHub mirror instead:
+
+```bash
+curl -sL -o occt.tar.gz "https://github.com/Open-Cascade-SAS/OCCT/archive/d2abb6d844231cb8f29be6894440874a4700e4a5.tar.gz"
+mkdir occt && tar -xzf occt.tar.gz -C occt --strip-components=1
+```
+
+## Publish
+
+Two link variants of the same object set are published because the application
+repo's `package.json` is `"type": "module"`, which makes a classic UMD wrapper
+unenforceable for `import()` in Node:
+
+| file | build flags | used by |
+|---|---|---|
+| `occt-import-js.js` + `.wasm` | default (browser global via `<script>`) | app browser loader |
+| `occt-import-js.node.mjs` + `.node.wasm` | `-sEXPORT_ES6=1 -sENVIRONMENT=node -sUSE_ES6_IMPORT_META=1` | CLI verification / bulk export |
+
+Both are emitted into `public/occt-native/`. Without the `.node.mjs` variant,
+`verifyGraphExporter <wrapper>` and `exportGraphs` cannot load the wrapper in
+Node and will silently fall back to the tessellation wrapper.
+
 ## Verify Native Geometry
 
 After the wrapper builds, verify it against the upstream cube fixture:

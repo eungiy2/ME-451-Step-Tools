@@ -4,11 +4,12 @@
     "fileName": "nist_ftc_11_asme1_ap242-e2",
     "fileSize": 1946454,
     "schema": "AP242",
-    "topologySource": "tessellation",
-    "stableHash": "0x6be1bab3",
-    "nodeCount": 71,
-    "edgeCount": 138,
-    "estimatedTokens": 11855
+    "topologySource": "occt",
+    "kernelGeometry": false,
+    "stableHash": "0xfef8d38d",
+    "nodeCount": 72,
+    "edgeCount": 141,
+    "estimatedTokens": 14255
   },
   "nodes": [
     {
@@ -110,28 +111,30 @@
       "nodeType": "face",
       "id": "BRepFace-0",
       "surfaceType": "plane",
-      "areaMm2": 1397.2,
+      "areaMm2": 1397.53,
       "analytic": {
         "plane": {
           "normal": {
-            "x": 0.00000101453,
-            "y": 5.22045e-7,
+            "x": 0,
+            "y": 0,
             "z": 1
           },
           "point": {
-            "x": -3.29479,
-            "y": -0.0737893,
-            "z": 0.429799
+            "x": 28.563,
+            "y": 0,
+            "z": 0.43
           }
         }
       },
+      "geometrySource": "occt",
+      "stableId": "occt:v1:face:9a698198bedcfa92",
       "stepped": "#1192"
     },
     {
       "nodeType": "face",
       "id": "BRepFace-1",
       "surfaceType": "plane",
-      "areaMm2": 2312.04,
+      "areaMm2": 2313,
       "analytic": {
         "plane": {
           "normal": {
@@ -140,19 +143,21 @@
             "z": -1
           },
           "point": {
-            "x": 0,
+            "x": 16,
             "y": 0,
             "z": -1.5
           }
         }
       },
+      "geometrySource": "occt",
+      "stableId": "occt:v1:face:45e523ca0ec16d21",
       "stepped": "#1193"
     },
     {
       "nodeType": "face",
       "id": "BRepFace-10",
       "surfaceType": "plane",
-      "areaMm2": 0.246893,
+      "areaMm2": 0.251382,
       "analytic": {
         "plane": {
           "normal": {
@@ -161,36 +166,40 @@
             "z": 0
           },
           "point": {
-            "x": -23.283,
+            "x": -22.0859,
             "y": -5.90998,
-            "z": 0.376562
+            "z": 0.325
           }
         }
       },
+      "geometrySource": "occt",
+      "stableId": "occt:v1:face:6288bcac2704ecad",
       "stepped": "#1202"
     },
     {
       "nodeType": "face",
       "id": "BRepFace-11",
       "surfaceType": "cylinder",
-      "areaMm2": 0.188311,
+      "areaMm2": 0.155681,
       "convexity": "concave",
       "analytic": {
         "cylinder": {
           "axis": {
-            "x": 0.484198,
-            "y": 0.235862,
-            "z": 0.842569
+            "x": 0,
+            "y": 0,
+            "z": 1
           },
           "center": {
-            "x": -18.1804,
-            "y": -2.20295,
-            "z": 11.0644
+            "x": -24.48,
+            "y": -5.26806,
+            "z": 0.325
           },
-          "radius": 0.684777,
-          "lengthMm": 0.330598
+          "radius": 0.641925,
+          "lengthMm": 0.105
         }
       },
+      "geometrySource": "occt",
+      "stableId": "occt:v1:face:6b1d1a65762418b3",
       "stepped": "#1203"
     },
     {
@@ -206,26 +215,47 @@
             "z": 0
           },
           "point": {
-            "x": -23.8233,
-            "y": -3.78644,
-            "z": 0.375937
+            "x": -24.9159,
+            "y": -4.79676,
+            "z": 0.325
           }
         }
       },
+      "geometrySource": "occt",
+      "stableId": "occt:v1:face:710565dae2f09c17",
       "stepped": "#1204"
     },
     {
       "nodeType": "face",
       "id": "BRepFace-13",
-      "surfaceType": "curved",
-      "areaMm2": 0.0191218,
+      "surfaceType": "cylinder",
+      "areaMm2": 0.0207404,
+      "convexity": "convex",
+      "analytic": {
+        "cylinder": {
+          "axis": {
+            "x": 0,
+            "y": 0,
+            "z": 1
+          },
+          "center": {
+            "x": -22.7862,
+            "y": -2.71619,
+            "z": 0.325
+          },
+          "radius": 0.0816224,
+          "lengthMm": 0.1025
+        }
+      },
+      "geometrySource": "occt",
+      "stableId": "occt:v1:face:9186b3ab45ab68ca",
       "stepped": "#1205"
     },
     {
       "nodeType": "face",
       "id": "BRepFace-14",
       "surfaceType": "plane",
-      "areaMm2": 0.232991,
+      "areaMm2": 0.235798,
       "analytic": {
         "plane": {
           "normal": {
@@ -234,12 +264,14 @@
             "z": 0
           },
           "point": {
-            "x": -23.9158,
+            "x": -22.793,
             "y": -2.63485,
-            "z": 0.376875
+            "z": 0.325
           }
         }
       },
+      "geometrySource": "occt",
+      "stableId": "occt:v1:face:34301c935c2ef0df",
       "stepped": "#1206"
     },
     {
@@ -256,18 +288,20 @@
           },
           "point": {
             "x": -25.0387,
-            "y": -2.32656,
-            "z": 0.3775
+            "y": -2.63485,
+            "z": 0.325
           }
         }
       },
+      "geometrySource": "occt",
+      "stableId": "occt:v1:face:4964f1319f6dfda9",
       "stepped": "#1207"
     },
     {
       "nodeType": "face",
       "id": "BRepFace-16",
       "surfaceType": "plane",
-      "areaMm2": 0.234517,
+      "areaMm2": 0.237343,
       "analytic": {
         "plane": {
           "normal": {
@@ -276,36 +310,40 @@
             "z": 0
           },
           "point": {
-            "x": -23.9085,
+            "x": -25.0387,
             "y": -2.01827,
-            "z": 0.376875
+            "z": 0.325
           }
         }
       },
+      "geometrySource": "occt",
+      "stableId": "occt:v1:face:8f726e1eb24f7620",
       "stepped": "#1208"
     },
     {
       "nodeType": "face",
       "id": "BRepFace-17",
       "surfaceType": "cylinder",
-      "areaMm2": 0.218841,
+      "areaMm2": 0.175048,
       "convexity": "concave",
       "analytic": {
         "cylinder": {
           "axis": {
-            "x": -0.537358,
-            "y": -0.237151,
-            "z": 0.809324
+            "x": 0,
+            "y": 0,
+            "z": 1
           },
           "center": {
-            "x": -15.8343,
-            "y": 0.358655,
-            "z": -10.4082
+            "x": -22.7783,
+            "y": -2.71062,
+            "z": 0.325
           },
-          "radius": 0.748792,
-          "lengthMm": 0.384093
+          "radius": 0.692351,
+          "lengthMm": 0.105
         }
       },
+      "geometrySource": "occt",
+      "stableId": "occt:v1:face:2d44de54c461d804",
       "stepped": "#1209"
     },
     {
@@ -321,26 +359,47 @@
             "z": 0
           },
           "point": {
-            "x": -23.3584,
-            "y": -4.18297,
-            "z": 0.37625
+            "x": -22.3457,
+            "y": -3.25116,
+            "z": 0.325
           }
         }
       },
+      "geometrySource": "occt",
+      "stableId": "occt:v1:face:014cf630c1eeaca4",
       "stepped": "#1210"
     },
     {
       "nodeType": "face",
       "id": "BRepFace-19",
-      "surfaceType": "curved",
-      "areaMm2": 0.0250962,
+      "surfaceType": "cylinder",
+      "areaMm2": 0.0261194,
+      "convexity": "convex",
+      "analytic": {
+        "cylinder": {
+          "axis": {
+            "x": 0,
+            "y": 0,
+            "z": 1
+          },
+          "center": {
+            "x": -24.2992,
+            "y": -5.19298,
+            "z": 0.325
+          },
+          "radius": 0.106274,
+          "lengthMm": 0.1025
+        }
+      },
+      "geometrySource": "occt",
+      "stableId": "occt:v1:face:1547a74ccee2cd4c",
       "stepped": "#1211"
     },
     {
       "nodeType": "face",
       "id": "BRepFace-2",
       "surfaceType": "cylinder",
-      "areaMm2": 296.85,
+      "areaMm2": 296.881,
       "convexity": "convex",
       "analytic": {
         "cylinder": {
@@ -350,35 +409,39 @@
             "z": -1
           },
           "center": {
-            "x": 1.82997e-9,
-            "y": 3.12807e-15,
+            "x": 0,
+            "y": 0,
             "z": 0
           },
           "radius": 31.5,
           "lengthMm": 1.5
         }
       },
+      "geometrySource": "occt",
+      "stableId": "occt:v1:face:726a4a71041ea09e",
       "stepped": "#1194"
     },
     {
       "nodeType": "face",
       "id": "BRepFace-20",
       "surfaceType": "plane",
-      "areaMm2": 5.67693,
+      "areaMm2": 5.74035,
       "analytic": {
         "plane": {
           "normal": {
             "x": 0,
             "y": 0,
-            "z": 1
+            "z": -1
           },
           "point": {
-            "x": -23.5827,
-            "y": -3.97482,
+            "x": -24.48,
+            "y": -5.26806,
             "z": 0.325
           }
         }
       },
+      "geometrySource": "occt",
+      "stableId": "occt:v1:face:b97eea5230608931",
       "stepped": "#1212"
     },
     {
@@ -389,97 +452,75 @@
       "analytic": {
         "plane": {
           "normal": {
-            "x": 1,
+            "x": -1,
             "y": 0,
             "z": 0
           },
           "point": {
             "x": -25.0387,
-            "y": -1.31407,
-            "z": 0.3775
+            "y": -1.00578,
+            "z": 0.325
           }
         }
       },
+      "geometrySource": "occt",
+      "stableId": "occt:v1:face:ce882ebb517f2432",
       "stepped": "#1213"
     },
     {
       "nodeType": "face",
       "id": "BRepFace-22",
       "surfaceType": "plane",
-      "areaMm2": 0.220658,
+      "areaMm2": 0.223316,
       "analytic": {
         "plane": {
           "normal": {
             "x": 0,
-            "y": 1,
+            "y": -1,
             "z": 0
           },
           "point": {
-            "x": -23.9753,
+            "x": -25.0387,
             "y": -1.62237,
-            "z": 0.376875
+            "z": 0.325
           }
         }
       },
+      "geometrySource": "occt",
+      "stableId": "occt:v1:face:dc8dae26b082eef3",
       "stepped": "#1214"
     },
     {
       "nodeType": "face",
       "id": "BRepFace-23",
-      "surfaceType": "curved",
-      "areaMm2": 0.141387,
+      "surfaceType": "cylinder",
+      "areaMm2": 0.131359,
+      "convexity": "concave",
+      "analytic": {
+        "cylinder": {
+          "axis": {
+            "x": 0,
+            "y": 0,
+            "z": 1
+          },
+          "center": {
+            "x": -22.9119,
+            "y": -0.796433,
+            "z": 0.325
+          },
+          "radius": 0.825933,
+          "lengthMm": 0.105
+        }
+      },
+      "geometrySource": "occt",
+      "stableId": "occt:v1:face:c930186f3ce3077a",
       "stepped": "#1215"
     },
     {
       "nodeType": "face",
       "id": "BRepFace-24",
       "surfaceType": "plane",
-      "areaMm2": 0.304833,
-      "analytic": {
-        "plane": {
-          "normal": {
-            "x": -1,
-            "y": 0,
-            "z": 0
-          },
-          "point": {
-            "x": -22.0859,
-            "y": 0.699678,
-            "z": 0.375937
-          }
-        }
-      },
-      "stepped": "#1216"
-    },
-    {
-      "nodeType": "face",
-      "id": "BRepFace-25",
-      "surfaceType": "cylinder",
-      "areaMm2": 0.277321,
-      "convexity": "concave",
-      "analytic": {
-        "cylinder": {
-          "axis": {
-            "x": -0.0295118,
-            "y": -0.305128,
-            "z": 0.951854
-          },
-          "center": {
-            "x": -22.9651,
-            "y": 2.13058,
-            "z": -0.0290406
-          },
-          "radius": 0.907069,
-          "lengthMm": 0.353826
-        }
-      },
-      "stepped": "#1217"
-    },
-    {
-      "nodeType": "face",
-      "id": "BRepFace-26",
-      "surfaceType": "plane",
-      "areaMm2": 0.193056,
+      "areaMm2": 0.314183,
       "analytic": {
         "plane": {
           "normal": {
@@ -488,26 +529,47 @@
             "z": 0
           },
           "point": {
-            "x": -23.8621,
-            "y": 1.24827,
-            "z": 0.375937
+            "x": -22.0859,
+            "y": -0.796433,
+            "z": 0.325
           }
         }
       },
-      "stepped": "#1218"
+      "geometrySource": "occt",
+      "stableId": "occt:v1:face:43d0537decff8006",
+      "stepped": "#1216"
     },
     {
       "nodeType": "face",
-      "id": "BRepFace-27",
-      "surfaceType": "curved",
-      "areaMm2": 0.142133,
-      "stepped": "#1219"
+      "id": "BRepFace-25",
+      "surfaceType": "cylinder",
+      "areaMm2": 0.257289,
+      "convexity": "concave",
+      "analytic": {
+        "cylinder": {
+          "axis": {
+            "x": 0,
+            "y": 0,
+            "z": 1
+          },
+          "center": {
+            "x": -22.974,
+            "y": 2.05437,
+            "z": 0.325
+          },
+          "radius": 0.899273,
+          "lengthMm": 0.105
+        }
+      },
+      "geometrySource": "occt",
+      "stableId": "occt:v1:face:2cc52b3988e27dc8",
+      "stepped": "#1217"
     },
     {
       "nodeType": "face",
-      "id": "BRepFace-28",
+      "id": "BRepFace-26",
       "surfaceType": "plane",
-      "areaMm2": 0.318512,
+      "areaMm2": 0.198978,
       "analytic": {
         "plane": {
           "normal": {
@@ -516,12 +578,63 @@
             "z": 0
           },
           "point": {
-            "x": -24.4164,
-            "y": 1.86769,
-            "z": 0.376562
+            "x": -23.8621,
+            "y": 2.19579,
+            "z": 0.325
           }
         }
       },
+      "geometrySource": "occt",
+      "stableId": "occt:v1:face:fd4343b608a6072c",
+      "stepped": "#1218"
+    },
+    {
+      "nodeType": "face",
+      "id": "BRepFace-27",
+      "surfaceType": "cylinder",
+      "areaMm2": 0.0917243,
+      "convexity": "convex",
+      "analytic": {
+        "cylinder": {
+          "axis": {
+            "x": 0,
+            "y": 0,
+            "z": 1
+          },
+          "center": {
+            "x": -24.1397,
+            "y": 0.300757,
+            "z": 0.325
+          },
+          "radius": 0.277633,
+          "lengthMm": 0.1025
+        }
+      },
+      "geometrySource": "occt",
+      "stableId": "occt:v1:face:7a3cbf6f9e54f175",
+      "stepped": "#1219"
+    },
+    {
+      "nodeType": "face",
+      "id": "BRepFace-28",
+      "surfaceType": "plane",
+      "areaMm2": 0.324303,
+      "analytic": {
+        "plane": {
+          "normal": {
+            "x": 1,
+            "y": 0,
+            "z": 0
+          },
+          "point": {
+            "x": -24.4164,
+            "y": 0.323392,
+            "z": 0.325
+          }
+        }
+      },
+      "geometrySource": "occt",
+      "stableId": "occt:v1:face:98b170e74037199a",
       "stepped": "#1220"
     },
     {
@@ -533,23 +646,44 @@
         "plane": {
           "normal": {
             "x": 0,
-            "y": 1,
+            "y": -1,
             "z": 0
           },
           "point": {
-            "x": -23.2512,
+            "x": -24.4164,
             "y": 3.41199,
-            "z": 0.3775
+            "z": 0.325
           }
         }
       },
+      "geometrySource": "occt",
+      "stableId": "occt:v1:face:c8625fd49f598421",
       "stepped": "#1221"
     },
     {
       "nodeType": "face",
       "id": "BRepFace-3",
-      "surfaceType": "curved",
-      "areaMm2": 788.464,
+      "surfaceType": "torus",
+      "areaMm2": 797.485,
+      "convexity": "unknown",
+      "analytic": {
+        "torus": {
+          "center": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "axis": {
+            "x": 0,
+            "y": 0,
+            "z": -1
+          },
+          "majorRadius": 30,
+          "minorRadius": 1.5
+        }
+      },
+      "geometrySource": "occt",
+      "stableId": "occt:v1:face:6db2739d4a3e32cd",
       "stepped": "#1195"
     },
     {
@@ -560,17 +694,19 @@
       "analytic": {
         "plane": {
           "normal": {
-            "x": -1,
+            "x": 1,
             "y": 0,
             "z": 0
           },
           "point": {
             "x": -22.0859,
-            "y": 3.71735,
-            "z": 0.3775
+            "y": 3.41199,
+            "z": 0.325
           }
         }
       },
+      "geometrySource": "occt",
+      "stableId": "occt:v1:face:fd7ed73552bda89d",
       "stepped": "#1222"
     },
     {
@@ -582,16 +718,18 @@
         "plane": {
           "normal": {
             "x": 0,
-            "y": -1,
+            "y": 1,
             "z": 0
           },
           "point": {
-            "x": -23.2512,
+            "x": -22.0859,
             "y": 4.02272,
-            "z": 0.3775
+            "z": 0.325
           }
         }
       },
+      "geometrySource": "occt",
+      "stableId": "occt:v1:face:59820c245393453e",
       "stepped": "#1223"
     },
     {
@@ -602,90 +740,49 @@
       "analytic": {
         "plane": {
           "normal": {
-            "x": -1,
+            "x": 1,
             "y": 0,
             "z": 0
           },
           "point": {
             "x": -24.4164,
-            "y": 4.65355,
-            "z": 0.3775
+            "y": 4.02272,
+            "z": 0.325
           }
         }
       },
+      "geometrySource": "occt",
+      "stableId": "occt:v1:face:369452fbbca71a27",
       "stepped": "#1224"
     },
     {
       "nodeType": "face",
       "id": "BRepFace-33",
       "surfaceType": "plane",
-      "areaMm2": 0.0653358,
+      "areaMm2": 0.0653359,
       "analytic": {
         "plane": {
           "normal": {
             "x": 0,
-            "y": -1,
+            "y": 1,
             "z": 0
           },
           "point": {
-            "x": -24.7276,
+            "x": -24.4164,
             "y": 5.28439,
-            "z": 0.3775
+            "z": 0.325
           }
         }
       },
+      "geometrySource": "occt",
+      "stableId": "occt:v1:face:cda1490cffe45f9f",
       "stepped": "#1225"
     },
     {
       "nodeType": "face",
       "id": "BRepFace-34",
       "surfaceType": "plane",
-      "areaMm2": 0.522901,
-      "analytic": {
-        "plane": {
-          "normal": {
-            "x": 1,
-            "y": 0,
-            "z": 0
-          },
-          "point": {
-            "x": -25.0387,
-            "y": 2.76438,
-            "z": 0.376875
-          }
-        }
-      },
-      "stepped": "#1226"
-    },
-    {
-      "nodeType": "face",
-      "id": "BRepFace-35",
-      "surfaceType": "cylinder",
-      "areaMm2": 0.326946,
-      "convexity": "concave",
-      "analytic": {
-        "cylinder": {
-          "axis": {
-            "x": -0.0501264,
-            "y": 0.482852,
-            "z": 0.874266
-          },
-          "center": {
-            "x": -24.0681,
-            "y": -0.457374,
-            "z": -1.12735
-          },
-          "radius": 0.902599,
-          "lengthMm": 0.563118
-        }
-      },
-      "stepped": "#1227"
-    },
-    {
-      "nodeType": "face",
-      "id": "BRepFace-36",
-      "surfaceType": "plane",
-      "areaMm2": 0.181527,
+      "areaMm2": 0.529201,
       "analytic": {
         "plane": {
           "normal": {
@@ -694,26 +791,47 @@
             "z": 0
           },
           "point": {
-            "x": -23.2512,
-            "y": 1.203,
-            "z": 0.375937
+            "x": -25.0387,
+            "y": 5.28439,
+            "z": 0.325
           }
         }
       },
-      "stepped": "#1228"
+      "geometrySource": "occt",
+      "stableId": "occt:v1:face:0f24a1113394da83",
+      "stepped": "#1226"
     },
     {
       "nodeType": "face",
-      "id": "BRepFace-37",
-      "surfaceType": "curved",
-      "areaMm2": 0.124255,
-      "stepped": "#1229"
+      "id": "BRepFace-35",
+      "surfaceType": "cylinder",
+      "areaMm2": 0.291556,
+      "convexity": "concave",
+      "analytic": {
+        "cylinder": {
+          "axis": {
+            "x": 0,
+            "y": 0,
+            "z": 1
+          },
+          "center": {
+            "x": -24.1437,
+            "y": 0.244373,
+            "z": 0.325
+          },
+          "radius": 0.895024,
+          "lengthMm": 0.105
+        }
+      },
+      "geometrySource": "occt",
+      "stableId": "occt:v1:face:aaede5d90769947e",
+      "stepped": "#1227"
     },
     {
       "nodeType": "face",
-      "id": "BRepFace-38",
+      "id": "BRepFace-36",
       "surfaceType": "plane",
-      "areaMm2": 0.295026,
+      "areaMm2": 0.187095,
       "analytic": {
         "plane": {
           "normal": {
@@ -722,68 +840,145 @@
             "z": 0
           },
           "point": {
-            "x": -22.6968,
-            "y": 0.657272,
-            "z": 0.375937
+            "x": -23.2512,
+            "y": 0.312075,
+            "z": 0.325
           }
         }
       },
+      "geometrySource": "occt",
+      "stableId": "occt:v1:face:fcb9d7de8e12401b",
+      "stepped": "#1228"
+    },
+    {
+      "nodeType": "face",
+      "id": "BRepFace-37",
+      "surfaceType": "cylinder",
+      "areaMm2": 0.0836722,
+      "convexity": "convex",
+      "analytic": {
+        "cylinder": {
+          "axis": {
+            "x": 0,
+            "y": 0,
+            "z": 1
+          },
+          "center": {
+            "x": -22.9734,
+            "y": 2.06978,
+            "z": 0.325
+          },
+          "radius": 0.278862,
+          "lengthMm": 0.1025
+        }
+      },
+      "geometrySource": "occt",
+      "stableId": "occt:v1:face:7101cc5672fba316",
+      "stepped": "#1229"
+    },
+    {
+      "nodeType": "face",
+      "id": "BRepFace-38",
+      "surfaceType": "plane",
+      "areaMm2": 0.304076,
+      "analytic": {
+        "plane": {
+          "normal": {
+            "x": -1,
+            "y": 0,
+            "z": 0
+          },
+          "point": {
+            "x": -22.6968,
+            "y": 2.10525,
+            "z": 0.325
+          }
+        }
+      },
+      "geometrySource": "occt",
+      "stableId": "occt:v1:face:2b31de4e986d3c3e",
       "stepped": "#1230"
     },
     {
       "nodeType": "face",
       "id": "BRepFace-39",
-      "surfaceType": "plane",
-      "areaMm2": 0.0356421,
+      "surfaceType": "cylinder",
+      "areaMm2": 0.0346279,
+      "convexity": "convex",
       "analytic": {
-        "plane": {
-          "normal": {
-            "x": 0.66297,
-            "y": -0.662969,
-            "z": 0.347767
+        "cylinder": {
+          "axis": {
+            "x": 0,
+            "y": 0,
+            "z": 1
           },
-          "point": {
-            "x": -22.7912,
-            "y": -0.911362,
-            "z": 0.359167
-          }
+          "center": {
+            "x": -22.9119,
+            "y": -0.790707,
+            "z": 0.325
+          },
+          "radius": 0.215071,
+          "lengthMm": 0.1025
         }
       },
+      "geometrySource": "occt",
+      "stableId": "occt:v1:face:f8eeae1c6fb2c824",
       "stepped": "#1231"
     },
     {
       "nodeType": "face",
       "id": "BRepFace-4",
-      "surfaceType": "curved",
-      "areaMm2": 452.652,
+      "surfaceType": "torus",
+      "areaMm2": 457.785,
+      "convexity": "unknown",
+      "analytic": {
+        "torus": {
+          "center": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "axis": {
+            "x": 0,
+            "y": 0,
+            "z": -1
+          },
+          "majorRadius": 17.5,
+          "minorRadius": 1.5
+        }
+      },
+      "geometrySource": "occt",
+      "stableId": "occt:v1:face:8cb13f6fd3b03302",
       "stepped": "#1196"
     },
     {
       "nodeType": "face",
       "id": "BRepFace-40",
       "surfaceType": "plane",
-      "areaMm2": 0.220658,
+      "areaMm2": 0.223316,
       "analytic": {
         "plane": {
           "normal": {
             "x": 0,
-            "y": -1,
+            "y": 1,
             "z": 0
           },
           "point": {
-            "x": -23.9753,
+            "x": -22.9119,
             "y": -1.00578,
-            "z": 0.376875
+            "z": 0.325
           }
         }
       },
+      "geometrySource": "occt",
+      "stableId": "occt:v1:face:8d82d14019815009",
       "stepped": "#1232"
     },
     {
       "nodeType": "face",
       "id": "BRepFace-41",
       "surfaceType": "plane",
-      "areaMm2": 11.4554,
+      "areaMm2": 11.5248,
       "analytic": {
         "plane": {
           "normal": {
@@ -792,19 +987,21 @@
             "z": 1
           },
           "point": {
-            "x": -23.4789,
-            "y": 1.02489,
+            "x": -22.9119,
+            "y": -0.796433,
             "z": 0.325
           }
         }
       },
+      "geometrySource": "occt",
+      "stableId": "occt:v1:face:facfa0b2d810ce4c",
       "stepped": "#1233"
     },
     {
       "nodeType": "face",
       "id": "BRepFace-5",
       "surfaceType": "cylinder",
-      "areaMm2": 150.781,
+      "areaMm2": 150.796,
       "convexity": "concave",
       "analytic": {
         "cylinder": {
@@ -814,35 +1011,75 @@
             "z": -1
           },
           "center": {
-            "x": -7.00997e-10,
-            "y": 4.95195e-16,
+            "x": 0,
+            "y": 0,
             "z": 0
           },
           "radius": 16,
           "lengthMm": 1.5
         }
       },
+      "geometrySource": "occt",
+      "stableId": "occt:v1:face:f847b167947808b3",
       "stepped": "#1197"
     },
     {
       "nodeType": "face",
       "id": "BRepFace-6",
-      "surfaceType": "curved",
-      "areaMm2": 20.7304,
+      "surfaceType": "torus",
+      "areaMm2": 22.117,
+      "convexity": "unknown",
+      "analytic": {
+        "torus": {
+          "center": {
+            "x": 0,
+            "y": 0,
+            "z": 0.53
+          },
+          "axis": {
+            "x": 0,
+            "y": 0,
+            "z": -1
+          },
+          "majorRadius": 28.4903,
+          "minorRadius": 0.1
+        }
+      },
+      "geometrySource": "occt",
+      "stableId": "occt:v1:face:c8be0864ae648374",
       "stepped": "#1198"
     },
     {
       "nodeType": "face",
       "id": "BRepFace-7",
-      "surfaceType": "curved",
-      "areaMm2": 13.7749,
+      "surfaceType": "torus",
+      "areaMm2": 14.6871,
+      "convexity": "unknown",
+      "analytic": {
+        "torus": {
+          "center": {
+            "x": 0,
+            "y": 0,
+            "z": 0.53
+          },
+          "axis": {
+            "x": 0,
+            "y": 0,
+            "z": 1
+          },
+          "majorRadius": 19.0097,
+          "minorRadius": 0.1
+        }
+      },
+      "geometrySource": "occt",
+      "stableId": "occt:v1:face:6a41b553ceddf6e2",
       "stepped": "#1199"
     },
     {
       "nodeType": "face",
       "id": "BRepFace-8",
       "surfaceType": "plane",
-      "areaMm2": 0.229628,
+      "areaMm2": 0.232395,
       "analytic": {
         "plane": {
           "normal": {
@@ -851,12 +1088,14 @@
             "z": 0
           },
           "point": {
-            "x": -23.1926,
+            "x": -24.2992,
             "y": -5.29926,
-            "z": 0.376875
+            "z": 0.325
           }
         }
       },
+      "geometrySource": "occt",
+      "stableId": "occt:v1:face:1bb8b9661e003f00",
       "stepped": "#1200"
     },
     {
@@ -873,11 +1112,13 @@
           },
           "point": {
             "x": -22.0859,
-            "y": -5.60462,
-            "z": 0.3775
+            "y": -5.29926,
+            "z": 0.325
           }
         }
       },
+      "geometrySource": "occt",
+      "stableId": "occt:v1:face:603d07ab9a17199a",
       "stepped": "#1201"
     },
     {
@@ -891,8 +1132,8 @@
         "z": -1
       },
       "center": {
-        "x": -7.00997e-10,
-        "y": 4.95195e-16,
+        "x": 0,
+        "y": 0,
         "z": 0
       },
       "diameter": 32,
@@ -907,17 +1148,17 @@
       "kind": "hole",
       "provenance": "geometry",
       "axis": {
-        "x": 0.484198,
-        "y": 0.235862,
-        "z": 0.842569
+        "x": 0,
+        "y": 0,
+        "z": 1
       },
       "center": {
-        "x": -18.1804,
-        "y": -2.20295,
-        "z": 11.0644
+        "x": -24.48,
+        "y": -5.26806,
+        "z": 0.325
       },
-      "diameter": 1.36955,
-      "depth": 0.330598,
+      "diameter": 1.28385,
+      "depth": 0.105,
       "memberFaces": [
         "BRepFace-11"
       ]
@@ -928,17 +1169,17 @@
       "kind": "hole",
       "provenance": "geometry",
       "axis": {
-        "x": -0.537358,
-        "y": -0.237151,
-        "z": 0.809324
+        "x": 0,
+        "y": 0,
+        "z": 1
       },
       "center": {
-        "x": -15.8343,
-        "y": 0.358655,
-        "z": -10.4082
+        "x": -22.7783,
+        "y": -2.71062,
+        "z": 0.325
       },
-      "diameter": 1.49758,
-      "depth": 0.384093,
+      "diameter": 1.3847,
+      "depth": 0.105,
       "memberFaces": [
         "BRepFace-17"
       ]
@@ -949,19 +1190,19 @@
       "kind": "hole",
       "provenance": "geometry",
       "axis": {
-        "x": -0.0295118,
-        "y": -0.305128,
-        "z": 0.951854
+        "x": 0,
+        "y": 0,
+        "z": 1
       },
       "center": {
-        "x": -22.9651,
-        "y": 2.13058,
-        "z": -0.0290406
+        "x": -22.9119,
+        "y": -0.796433,
+        "z": 0.325
       },
-      "diameter": 1.81414,
-      "depth": 0.353826,
+      "diameter": 1.65187,
+      "depth": 0.105,
       "memberFaces": [
-        "BRepFace-25"
+        "BRepFace-23"
       ]
     },
     {
@@ -970,17 +1211,38 @@
       "kind": "hole",
       "provenance": "geometry",
       "axis": {
-        "x": -0.0501264,
-        "y": 0.482852,
-        "z": 0.874266
+        "x": 0,
+        "y": 0,
+        "z": 1
       },
       "center": {
-        "x": -24.0681,
-        "y": -0.457374,
-        "z": -1.12735
+        "x": -22.974,
+        "y": 2.05437,
+        "z": 0.325
       },
-      "diameter": 1.8052,
-      "depth": 0.563118,
+      "diameter": 1.79855,
+      "depth": 0.105,
+      "memberFaces": [
+        "BRepFace-25"
+      ]
+    },
+    {
+      "nodeType": "feature",
+      "id": "feat-6",
+      "kind": "hole",
+      "provenance": "geometry",
+      "axis": {
+        "x": 0,
+        "y": 0,
+        "z": 1
+      },
+      "center": {
+        "x": -24.1437,
+        "y": 0.244373,
+        "z": 0.325
+      },
+      "diameter": 1.79005,
+      "depth": 0.105,
       "memberFaces": [
         "BRepFace-35"
       ]
@@ -997,11 +1259,11 @@
         "z": 2.99529
       },
       "featureCounts": {
-        "hole": 5
+        "hole": 6
       },
       "pmiResolution": {
-        "resolved": 0,
-        "missing": 17,
+        "resolved": 17,
+        "missing": 0,
         "ambiguous": 0
       },
       "entityCounts": {
@@ -1148,8 +1410,9 @@
       "edgeType": "line",
       "convexity": "concave",
       "dihedralDeg": 270,
-      "sharedEdgeId": "B-Rep Edge #3",
-      "sharedEdgeStableId": "step:v1:0xbcb7a057"
+      "sharedEdgeId": "BRepEdge-29",
+      "sharedEdgeStableId": "occt:v1:edge:173f1c7a74a76509",
+      "geometrySource": "occt"
     },
     {
       "nodeType": "adjacency",
@@ -1158,9 +1421,10 @@
       "targetId": "BRepFace-11",
       "edgeType": "line",
       "convexity": "concave",
-      "dihedralDeg": 302.495,
-      "sharedEdgeId": "B-Rep Edge #2",
-      "sharedEdgeStableId": "step:v1:0x855221c3"
+      "dihedralDeg": 270,
+      "sharedEdgeId": "BRepEdge-30",
+      "sharedEdgeStableId": "occt:v1:edge:33ada2cc88107d41",
+      "geometrySource": "occt"
     },
     {
       "nodeType": "adjacency",
@@ -1170,8 +1434,9 @@
       "edgeType": "line",
       "convexity": "concave",
       "dihedralDeg": 270,
-      "sharedEdgeId": "B-Rep Edge #10",
-      "sharedEdgeStableId": "step:v1:0x19475241"
+      "sharedEdgeId": "BRepEdge-31",
+      "sharedEdgeStableId": "occt:v1:edge:a5742a39c83da123",
+      "geometrySource": "occt"
     },
     {
       "nodeType": "adjacency",
@@ -1179,9 +1444,11 @@
       "sourceId": "BRepFace-0",
       "targetId": "BRepFace-13",
       "edgeType": "line",
-      "convexity": "unknown",
-      "sharedEdgeId": "B-Rep Edge #12",
-      "sharedEdgeStableId": "step:v1:0x6220eb40"
+      "convexity": "concave",
+      "dihedralDeg": 270,
+      "sharedEdgeId": "BRepEdge-32",
+      "sharedEdgeStableId": "occt:v1:edge:025b3016ac0426c7",
+      "geometrySource": "occt"
     },
     {
       "nodeType": "adjacency",
@@ -1191,8 +1458,9 @@
       "edgeType": "line",
       "convexity": "concave",
       "dihedralDeg": 270,
-      "sharedEdgeId": "B-Rep Edge #11",
-      "sharedEdgeStableId": "step:v1:0xba5ddf9b"
+      "sharedEdgeId": "BRepEdge-33",
+      "sharedEdgeStableId": "occt:v1:edge:245df4641d6bd6a0",
+      "geometrySource": "occt"
     },
     {
       "nodeType": "adjacency",
@@ -1202,8 +1470,9 @@
       "edgeType": "line",
       "convexity": "concave",
       "dihedralDeg": 270,
-      "sharedEdgeId": "B-Rep Edge #6",
-      "sharedEdgeStableId": "step:v1:0x4534f2d7"
+      "sharedEdgeId": "BRepEdge-34",
+      "sharedEdgeStableId": "occt:v1:edge:8b9dad3cb68d862f",
+      "geometrySource": "occt"
     },
     {
       "nodeType": "adjacency",
@@ -1213,8 +1482,9 @@
       "edgeType": "line",
       "convexity": "convex",
       "dihedralDeg": 90,
-      "sharedEdgeId": "B-Rep Edge #15",
-      "sharedEdgeStableId": "step:v1:0xd307b065"
+      "sharedEdgeId": "BRepEdge-23",
+      "sharedEdgeStableId": "occt:v1:edge:46fc704920e70b67",
+      "geometrySource": "occt"
     },
     {
       "nodeType": "adjacency",
@@ -1223,9 +1493,10 @@
       "targetId": "BRepFace-17",
       "edgeType": "line",
       "convexity": "convex",
-      "dihedralDeg": 54.1255,
-      "sharedEdgeId": "B-Rep Edge #17",
-      "sharedEdgeStableId": "step:v1:0x05568454"
+      "dihedralDeg": 90,
+      "sharedEdgeId": "BRepEdge-24",
+      "sharedEdgeStableId": "occt:v1:edge:780562c972216333",
+      "geometrySource": "occt"
     },
     {
       "nodeType": "adjacency",
@@ -1235,8 +1506,9 @@
       "edgeType": "line",
       "convexity": "convex",
       "dihedralDeg": 90,
-      "sharedEdgeId": "B-Rep Edge #9",
-      "sharedEdgeStableId": "step:v1:0xedba2e44"
+      "sharedEdgeId": "BRepEdge-25",
+      "sharedEdgeStableId": "occt:v1:edge:1fd2e14242ee0e64",
+      "geometrySource": "occt"
     },
     {
       "nodeType": "adjacency",
@@ -1244,9 +1516,11 @@
       "sourceId": "BRepFace-0",
       "targetId": "BRepFace-19",
       "edgeType": "line",
-      "convexity": "unknown",
-      "sharedEdgeId": "B-Rep Edge #4",
-      "sharedEdgeStableId": "step:v1:0xd0c70cab"
+      "convexity": "convex",
+      "dihedralDeg": 90,
+      "sharedEdgeId": "BRepEdge-26",
+      "sharedEdgeStableId": "occt:v1:edge:ac2b86294adb4970",
+      "geometrySource": "occt"
     },
     {
       "nodeType": "adjacency",
@@ -1256,8 +1530,9 @@
       "edgeType": "line",
       "convexity": "concave",
       "dihedralDeg": 270,
-      "sharedEdgeId": "B-Rep Edge #8",
-      "sharedEdgeStableId": "step:v1:0x2ed9ea1d"
+      "sharedEdgeId": "BRepEdge-18",
+      "sharedEdgeStableId": "occt:v1:edge:e898fa5b417d3c64",
+      "geometrySource": "occt"
     },
     {
       "nodeType": "adjacency",
@@ -1267,8 +1542,9 @@
       "edgeType": "line",
       "convexity": "concave",
       "dihedralDeg": 270,
-      "sharedEdgeId": "B-Rep Edge #14",
-      "sharedEdgeStableId": "step:v1:0xe3e42ec2"
+      "sharedEdgeId": "BRepEdge-17",
+      "sharedEdgeStableId": "occt:v1:edge:cf1ced78144d37b5",
+      "geometrySource": "occt"
     },
     {
       "nodeType": "adjacency",
@@ -1276,9 +1552,11 @@
       "sourceId": "BRepFace-0",
       "targetId": "BRepFace-23",
       "edgeType": "line",
-      "convexity": "unknown",
-      "sharedEdgeId": "B-Rep Edge #16",
-      "sharedEdgeStableId": "step:v1:0x4f5bfed8"
+      "convexity": "convex",
+      "dihedralDeg": 90,
+      "sharedEdgeId": "BRepEdge-16",
+      "sharedEdgeStableId": "occt:v1:edge:55bfe83808e430e9",
+      "geometrySource": "occt"
     },
     {
       "nodeType": "adjacency",
@@ -1287,9 +1565,10 @@
       "targetId": "BRepFace-24",
       "edgeType": "line",
       "convexity": "convex",
-      "dihedralDeg": 89.9999,
-      "sharedEdgeId": "B-Rep Edge #28",
-      "sharedEdgeStableId": "step:v1:0x0014f747"
+      "dihedralDeg": 90,
+      "sharedEdgeId": "BRepEdge-15",
+      "sharedEdgeStableId": "occt:v1:edge:ac91cac8b29b6bfd",
+      "geometrySource": "occt"
     },
     {
       "nodeType": "adjacency",
@@ -1298,9 +1577,10 @@
       "targetId": "BRepFace-25",
       "edgeType": "line",
       "convexity": "concave",
-      "dihedralDeg": 287.772,
-      "sharedEdgeId": "B-Rep Edge #22",
-      "sharedEdgeStableId": "step:v1:0xcbb6a29f"
+      "dihedralDeg": 270,
+      "sharedEdgeId": "BRepEdge-14",
+      "sharedEdgeStableId": "occt:v1:edge:67e59c5c263bdc93",
+      "geometrySource": "occt"
     },
     {
       "nodeType": "adjacency",
@@ -1310,8 +1590,9 @@
       "edgeType": "line",
       "convexity": "concave",
       "dihedralDeg": 270,
-      "sharedEdgeId": "B-Rep Edge #21",
-      "sharedEdgeStableId": "step:v1:0x8a590464"
+      "sharedEdgeId": "BRepEdge-13",
+      "sharedEdgeStableId": "occt:v1:edge:6edf18cd895f4155",
+      "geometrySource": "occt"
     },
     {
       "nodeType": "adjacency",
@@ -1319,9 +1600,11 @@
       "sourceId": "BRepFace-0",
       "targetId": "BRepFace-27",
       "edgeType": "line",
-      "convexity": "unknown",
-      "sharedEdgeId": "B-Rep Edge #20",
-      "sharedEdgeStableId": "step:v1:0x8b8618f8"
+      "convexity": "convex",
+      "dihedralDeg": 90,
+      "sharedEdgeId": "BRepEdge-12",
+      "sharedEdgeStableId": "occt:v1:edge:fcd4690e8fe83003",
+      "geometrySource": "occt"
     },
     {
       "nodeType": "adjacency",
@@ -1330,9 +1613,10 @@
       "targetId": "BRepFace-28",
       "edgeType": "line",
       "convexity": "convex",
-      "dihedralDeg": 89.9999,
-      "sharedEdgeId": "B-Rep Edge #33",
-      "sharedEdgeStableId": "step:v1:0x0c65b5bd"
+      "dihedralDeg": 90,
+      "sharedEdgeId": "BRepEdge-11",
+      "sharedEdgeStableId": "occt:v1:edge:f9d1257a3a4f20cf",
+      "geometrySource": "occt"
     },
     {
       "nodeType": "adjacency",
@@ -1342,8 +1626,9 @@
       "edgeType": "line",
       "convexity": "convex",
       "dihedralDeg": 90,
-      "sharedEdgeId": "B-Rep Edge #32",
-      "sharedEdgeStableId": "step:v1:0x348c8dd6"
+      "sharedEdgeId": "BRepEdge-10",
+      "sharedEdgeStableId": "occt:v1:edge:326ddff7869c9717",
+      "geometrySource": "occt"
     },
     {
       "nodeType": "adjacency",
@@ -1352,9 +1637,10 @@
       "targetId": "BRepFace-30",
       "edgeType": "line",
       "convexity": "convex",
-      "dihedralDeg": 89.9999,
-      "sharedEdgeId": "B-Rep Edge #29",
-      "sharedEdgeStableId": "step:v1:0xf851874b"
+      "dihedralDeg": 90,
+      "sharedEdgeId": "BRepEdge-9",
+      "sharedEdgeStableId": "occt:v1:edge:4ff476b1bc9024c5",
+      "geometrySource": "occt"
     },
     {
       "nodeType": "adjacency",
@@ -1364,8 +1650,9 @@
       "edgeType": "line",
       "convexity": "concave",
       "dihedralDeg": 270,
-      "sharedEdgeId": "B-Rep Edge #27",
-      "sharedEdgeStableId": "step:v1:0xb3960530"
+      "sharedEdgeId": "BRepEdge-8",
+      "sharedEdgeStableId": "occt:v1:edge:8d40a3d333ee4189",
+      "geometrySource": "occt"
     },
     {
       "nodeType": "adjacency",
@@ -1374,9 +1661,10 @@
       "targetId": "BRepFace-32",
       "edgeType": "line",
       "convexity": "convex",
-      "dihedralDeg": 89.9999,
-      "sharedEdgeId": "B-Rep Edge #26",
-      "sharedEdgeStableId": "step:v1:0x1d0aeb14"
+      "dihedralDeg": 90,
+      "sharedEdgeId": "BRepEdge-7",
+      "sharedEdgeStableId": "occt:v1:edge:92ca5caa391b615a",
+      "geometrySource": "occt"
     },
     {
       "nodeType": "adjacency",
@@ -1386,8 +1674,9 @@
       "edgeType": "line",
       "convexity": "concave",
       "dihedralDeg": 270,
-      "sharedEdgeId": "B-Rep Edge #25",
-      "sharedEdgeStableId": "step:v1:0x946b11b6"
+      "sharedEdgeId": "BRepEdge-6",
+      "sharedEdgeStableId": "occt:v1:edge:492de0c84e48172f",
+      "geometrySource": "occt"
     },
     {
       "nodeType": "adjacency",
@@ -1397,8 +1686,9 @@
       "edgeType": "line",
       "convexity": "concave",
       "dihedralDeg": 270,
-      "sharedEdgeId": "B-Rep Edge #31",
-      "sharedEdgeStableId": "step:v1:0xca1cf78e"
+      "sharedEdgeId": "BRepEdge-5",
+      "sharedEdgeStableId": "occt:v1:edge:70ecf723f2e7c73e",
+      "geometrySource": "occt"
     },
     {
       "nodeType": "adjacency",
@@ -1407,9 +1697,10 @@
       "targetId": "BRepFace-35",
       "edgeType": "line",
       "convexity": "convex",
-      "dihedralDeg": 61.0189,
-      "sharedEdgeId": "B-Rep Edge #13",
-      "sharedEdgeStableId": "step:v1:0x7b5509e0"
+      "dihedralDeg": 90,
+      "sharedEdgeId": "BRepEdge-4",
+      "sharedEdgeStableId": "occt:v1:edge:1e861ba136e06b30",
+      "geometrySource": "occt"
     },
     {
       "nodeType": "adjacency",
@@ -1418,9 +1709,10 @@
       "targetId": "BRepFace-36",
       "edgeType": "line",
       "convexity": "convex",
-      "dihedralDeg": 89.9999,
-      "sharedEdgeId": "B-Rep Edge #24",
-      "sharedEdgeStableId": "step:v1:0x431f4faa"
+      "dihedralDeg": 90,
+      "sharedEdgeId": "BRepEdge-3",
+      "sharedEdgeStableId": "occt:v1:edge:55ebebb485d9ecb0",
+      "geometrySource": "occt"
     },
     {
       "nodeType": "adjacency",
@@ -1428,9 +1720,11 @@
       "sourceId": "BRepFace-0",
       "targetId": "BRepFace-37",
       "edgeType": "line",
-      "convexity": "unknown",
-      "sharedEdgeId": "B-Rep Edge #23",
-      "sharedEdgeStableId": "step:v1:0x2f5d908f"
+      "convexity": "convex",
+      "dihedralDeg": 90,
+      "sharedEdgeId": "BRepEdge-2",
+      "sharedEdgeStableId": "occt:v1:edge:652d2248d69f481c",
+      "geometrySource": "occt"
     },
     {
       "nodeType": "adjacency",
@@ -1440,8 +1734,9 @@
       "edgeType": "line",
       "convexity": "concave",
       "dihedralDeg": 270,
-      "sharedEdgeId": "B-Rep Edge #30",
-      "sharedEdgeStableId": "step:v1:0xaec708a5"
+      "sharedEdgeId": "BRepEdge-1",
+      "sharedEdgeStableId": "occt:v1:edge:889ca17eeca691f1",
+      "geometrySource": "occt"
     },
     {
       "nodeType": "adjacency",
@@ -1450,9 +1745,10 @@
       "targetId": "BRepFace-39",
       "edgeType": "line",
       "convexity": "concave",
-      "dihedralDeg": 249.649,
-      "sharedEdgeId": "B-Rep Edge #18",
-      "sharedEdgeStableId": "step:v1:0xe2d905d9"
+      "dihedralDeg": 270,
+      "sharedEdgeId": "BRepEdge-0",
+      "sharedEdgeStableId": "occt:v1:edge:271b8298d684bf03",
+      "geometrySource": "occt"
     },
     {
       "nodeType": "adjacency",
@@ -1462,8 +1758,9 @@
       "edgeType": "line",
       "convexity": "convex",
       "dihedralDeg": 90,
-      "sharedEdgeId": "B-Rep Edge #34",
-      "sharedEdgeStableId": "step:v1:0x317063fa"
+      "sharedEdgeId": "BRepEdge-19",
+      "sharedEdgeStableId": "occt:v1:edge:d1a9045d32b95f77",
+      "geometrySource": "occt"
     },
     {
       "nodeType": "adjacency",
@@ -1471,9 +1768,23 @@
       "sourceId": "BRepFace-0",
       "targetId": "BRepFace-6",
       "edgeType": "circle",
-      "convexity": "unknown",
-      "sharedEdgeId": "B-Rep Edge #1",
-      "sharedEdgeStableId": "step:v1:0x87b63fc3"
+      "convexity": "convex",
+      "dihedralDeg": 180,
+      "sharedEdgeId": "BRepEdge-20",
+      "sharedEdgeStableId": "occt:v1:edge:ff57315b31b6e67c",
+      "geometrySource": "occt"
+    },
+    {
+      "nodeType": "adjacency",
+      "id": "adj-BRepFace-0-BRepFace-6",
+      "sourceId": "BRepFace-0",
+      "targetId": "BRepFace-6",
+      "edgeType": "circle",
+      "convexity": "convex",
+      "dihedralDeg": 180,
+      "sharedEdgeId": "BRepEdge-21",
+      "sharedEdgeStableId": "occt:v1:edge:83087389368d3770",
+      "geometrySource": "occt"
     },
     {
       "nodeType": "adjacency",
@@ -1481,9 +1792,11 @@
       "sourceId": "BRepFace-0",
       "targetId": "BRepFace-7",
       "edgeType": "circle",
-      "convexity": "unknown",
-      "sharedEdgeId": "B-Rep Edge #7",
-      "sharedEdgeStableId": "step:v1:0x1b48b4ac"
+      "convexity": "convex",
+      "dihedralDeg": 180,
+      "sharedEdgeId": "BRepEdge-22",
+      "sharedEdgeStableId": "occt:v1:edge:77c8a419c97996c8",
+      "geometrySource": "occt"
     },
     {
       "nodeType": "adjacency",
@@ -1493,8 +1806,9 @@
       "edgeType": "line",
       "convexity": "convex",
       "dihedralDeg": 90,
-      "sharedEdgeId": "B-Rep Edge #5",
-      "sharedEdgeStableId": "step:v1:0xb5719b9f"
+      "sharedEdgeId": "BRepEdge-27",
+      "sharedEdgeStableId": "occt:v1:edge:849e7a2c505f0f30",
+      "geometrySource": "occt"
     },
     {
       "nodeType": "adjacency",
@@ -1503,9 +1817,10 @@
       "targetId": "BRepFace-9",
       "edgeType": "line",
       "convexity": "convex",
-      "dihedralDeg": 89.9999,
-      "sharedEdgeId": "B-Rep Edge #19",
-      "sharedEdgeStableId": "step:v1:0xd192c094"
+      "dihedralDeg": 90,
+      "sharedEdgeId": "BRepEdge-28",
+      "sharedEdgeStableId": "occt:v1:edge:c8c10ea94441de9b",
+      "geometrySource": "occt"
     },
     {
       "nodeType": "adjacency",
@@ -1513,10 +1828,11 @@
       "sourceId": "BRepFace-10",
       "targetId": "BRepFace-11",
       "edgeType": "line",
-      "convexity": "concave",
-      "dihedralDeg": 197.701,
-      "sharedEdgeId": "B-Rep Edge #47",
-      "sharedEdgeStableId": "step:v1:0xd1181f37"
+      "convexity": "convex",
+      "dihedralDeg": 180,
+      "sharedEdgeId": "BRepEdge-54",
+      "sharedEdgeStableId": "occt:v1:edge:fb5630066073a0bf",
+      "geometrySource": "occt"
     },
     {
       "nodeType": "adjacency",
@@ -1526,8 +1842,9 @@
       "edgeType": "line",
       "convexity": "concave",
       "dihedralDeg": 270,
-      "sharedEdgeId": "B-Rep Edge #46",
-      "sharedEdgeStableId": "step:v1:0xea2286c8"
+      "sharedEdgeId": "BRepEdge-53",
+      "sharedEdgeStableId": "occt:v1:edge:f8186680723b1b17",
+      "geometrySource": "occt"
     },
     {
       "nodeType": "adjacency",
@@ -1537,8 +1854,9 @@
       "edgeType": "line",
       "convexity": "concave",
       "dihedralDeg": 270,
-      "sharedEdgeId": "B-Rep Edge #45",
-      "sharedEdgeStableId": "step:v1:0x80938e87"
+      "sharedEdgeId": "BRepEdge-52",
+      "sharedEdgeStableId": "occt:v1:edge:d7a9e0db124e99d1",
+      "geometrySource": "occt"
     },
     {
       "nodeType": "adjacency",
@@ -1547,20 +1865,22 @@
       "targetId": "BRepFace-12",
       "edgeType": "line",
       "convexity": "concave",
-      "dihedralDeg": 194.782,
-      "sharedEdgeId": "B-Rep Edge #49",
-      "sharedEdgeStableId": "step:v1:0x8bb3565e"
+      "dihedralDeg": 180,
+      "sharedEdgeId": "BRepEdge-55",
+      "sharedEdgeStableId": "occt:v1:edge:97aac0cd56b386ca",
+      "geometrySource": "occt"
     },
     {
       "nodeType": "adjacency",
       "id": "adj-BRepFace-11-BRepFace-20",
       "sourceId": "BRepFace-11",
       "targetId": "BRepFace-20",
-      "edgeType": "line",
+      "edgeType": "circle",
       "convexity": "concave",
-      "dihedralDeg": 302.472,
-      "sharedEdgeId": "B-Rep Edge #48",
-      "sharedEdgeStableId": "step:v1:0x5d558b70"
+      "dihedralDeg": 270,
+      "sharedEdgeId": "BRepEdge-56",
+      "sharedEdgeStableId": "occt:v1:edge:207e8187efed12ec",
+      "geometrySource": "occt"
     },
     {
       "nodeType": "adjacency",
@@ -1568,9 +1888,11 @@
       "sourceId": "BRepFace-12",
       "targetId": "BRepFace-13",
       "edgeType": "line",
-      "convexity": "unknown",
-      "sharedEdgeId": "B-Rep Edge #51",
-      "sharedEdgeStableId": "step:v1:0x85747ca4"
+      "convexity": "convex",
+      "dihedralDeg": 180,
+      "sharedEdgeId": "BRepEdge-58",
+      "sharedEdgeStableId": "occt:v1:edge:b8de7a3c48f67d9d",
+      "geometrySource": "occt"
     },
     {
       "nodeType": "adjacency",
@@ -1580,8 +1902,9 @@
       "edgeType": "line",
       "convexity": "concave",
       "dihedralDeg": 270,
-      "sharedEdgeId": "B-Rep Edge #50",
-      "sharedEdgeStableId": "step:v1:0xc7b71b24"
+      "sharedEdgeId": "BRepEdge-57",
+      "sharedEdgeStableId": "occt:v1:edge:ef6d509c73d6e247",
+      "geometrySource": "occt"
     },
     {
       "nodeType": "adjacency",
@@ -1589,19 +1912,23 @@
       "sourceId": "BRepFace-13",
       "targetId": "BRepFace-14",
       "edgeType": "line",
-      "convexity": "unknown",
-      "sharedEdgeId": "B-Rep Edge #53",
-      "sharedEdgeStableId": "step:v1:0xa9de7104"
+      "convexity": "convex",
+      "dihedralDeg": 175.201,
+      "sharedEdgeId": "BRepEdge-60",
+      "sharedEdgeStableId": "occt:v1:edge:66f948f0e8cc185f",
+      "geometrySource": "occt"
     },
     {
       "nodeType": "adjacency",
       "id": "adj-BRepFace-13-BRepFace-20",
       "sourceId": "BRepFace-13",
       "targetId": "BRepFace-20",
-      "edgeType": "line",
-      "convexity": "unknown",
-      "sharedEdgeId": "B-Rep Edge #52",
-      "sharedEdgeStableId": "step:v1:0x10e6ecd2"
+      "edgeType": "circle",
+      "convexity": "concave",
+      "dihedralDeg": 270,
+      "sharedEdgeId": "BRepEdge-59",
+      "sharedEdgeStableId": "occt:v1:edge:2f30d9b54d8d92f7",
+      "geometrySource": "occt"
     },
     {
       "nodeType": "adjacency",
@@ -1611,8 +1938,9 @@
       "edgeType": "line",
       "convexity": "concave",
       "dihedralDeg": 270,
-      "sharedEdgeId": "B-Rep Edge #55",
-      "sharedEdgeStableId": "step:v1:0xeda4e0cd"
+      "sharedEdgeId": "BRepEdge-62",
+      "sharedEdgeStableId": "occt:v1:edge:8074989ed90c5137",
+      "geometrySource": "occt"
     },
     {
       "nodeType": "adjacency",
@@ -1622,8 +1950,9 @@
       "edgeType": "line",
       "convexity": "concave",
       "dihedralDeg": 270,
-      "sharedEdgeId": "B-Rep Edge #54",
-      "sharedEdgeStableId": "step:v1:0x5f17d871"
+      "sharedEdgeId": "BRepEdge-61",
+      "sharedEdgeStableId": "occt:v1:edge:040d782d3d92b450",
+      "geometrySource": "occt"
     },
     {
       "nodeType": "adjacency",
@@ -1633,8 +1962,9 @@
       "edgeType": "line",
       "convexity": "concave",
       "dihedralDeg": 270,
-      "sharedEdgeId": "B-Rep Edge #56",
-      "sharedEdgeStableId": "step:v1:0xcf3e9aaf"
+      "sharedEdgeId": "BRepEdge-64",
+      "sharedEdgeStableId": "occt:v1:edge:e8d6eec6b18efafe",
+      "geometrySource": "occt"
     },
     {
       "nodeType": "adjacency",
@@ -1644,8 +1974,9 @@
       "edgeType": "line",
       "convexity": "concave",
       "dihedralDeg": 270,
-      "sharedEdgeId": "B-Rep Edge #57",
-      "sharedEdgeStableId": "step:v1:0x7367c662"
+      "sharedEdgeId": "BRepEdge-63",
+      "sharedEdgeStableId": "occt:v1:edge:2d3ce43f53eae898",
+      "geometrySource": "occt"
     },
     {
       "nodeType": "adjacency",
@@ -1653,10 +1984,11 @@
       "sourceId": "BRepFace-16",
       "targetId": "BRepFace-17",
       "edgeType": "line",
-      "convexity": "concave",
-      "dihedralDeg": 199.385,
-      "sharedEdgeId": "B-Rep Edge #58",
-      "sharedEdgeStableId": "step:v1:0x1db5932a"
+      "convexity": "convex",
+      "dihedralDeg": 180,
+      "sharedEdgeId": "BRepEdge-66",
+      "sharedEdgeStableId": "occt:v1:edge:5dea6be5f5977edc",
+      "geometrySource": "occt"
     },
     {
       "nodeType": "adjacency",
@@ -1666,8 +1998,9 @@
       "edgeType": "line",
       "convexity": "concave",
       "dihedralDeg": 270,
-      "sharedEdgeId": "B-Rep Edge #59",
-      "sharedEdgeStableId": "step:v1:0x8f23977b"
+      "sharedEdgeId": "BRepEdge-65",
+      "sharedEdgeStableId": "occt:v1:edge:6727e45fbdcd303d",
+      "geometrySource": "occt"
     },
     {
       "nodeType": "adjacency",
@@ -1676,20 +2009,22 @@
       "targetId": "BRepFace-18",
       "edgeType": "line",
       "convexity": "concave",
-      "dihedralDeg": 195.41,
-      "sharedEdgeId": "B-Rep Edge #61",
-      "sharedEdgeStableId": "step:v1:0x242fa5af"
+      "dihedralDeg": 183.944,
+      "sharedEdgeId": "BRepEdge-67",
+      "sharedEdgeStableId": "occt:v1:edge:7fb235292b60d867",
+      "geometrySource": "occt"
     },
     {
       "nodeType": "adjacency",
       "id": "adj-BRepFace-17-BRepFace-20",
       "sourceId": "BRepFace-17",
       "targetId": "BRepFace-20",
-      "edgeType": "line",
+      "edgeType": "circle",
       "convexity": "concave",
-      "dihedralDeg": 305.847,
-      "sharedEdgeId": "B-Rep Edge #60",
-      "sharedEdgeStableId": "step:v1:0x964b0990"
+      "dihedralDeg": 270,
+      "sharedEdgeId": "BRepEdge-68",
+      "sharedEdgeStableId": "occt:v1:edge:2d6cdc0bd5348be5",
+      "geometrySource": "occt"
     },
     {
       "nodeType": "adjacency",
@@ -1697,9 +2032,11 @@
       "sourceId": "BRepFace-18",
       "targetId": "BRepFace-19",
       "edgeType": "line",
-      "convexity": "unknown",
-      "sharedEdgeId": "B-Rep Edge #63",
-      "sharedEdgeStableId": "step:v1:0xda6b2cc3"
+      "convexity": "convex",
+      "dihedralDeg": 180,
+      "sharedEdgeId": "BRepEdge-70",
+      "sharedEdgeStableId": "occt:v1:edge:799e25f911f696cd",
+      "geometrySource": "occt"
     },
     {
       "nodeType": "adjacency",
@@ -1709,18 +2046,21 @@
       "edgeType": "line",
       "convexity": "concave",
       "dihedralDeg": 270,
-      "sharedEdgeId": "B-Rep Edge #62",
-      "sharedEdgeStableId": "step:v1:0x519c7850"
+      "sharedEdgeId": "BRepEdge-69",
+      "sharedEdgeStableId": "occt:v1:edge:f12604f0c65d81a5",
+      "geometrySource": "occt"
     },
     {
       "nodeType": "adjacency",
       "id": "adj-BRepFace-19-BRepFace-20",
       "sourceId": "BRepFace-19",
       "targetId": "BRepFace-20",
-      "edgeType": "line",
-      "convexity": "unknown",
-      "sharedEdgeId": "B-Rep Edge #64",
-      "sharedEdgeStableId": "step:v1:0xe9bacd76"
+      "edgeType": "circle",
+      "convexity": "concave",
+      "dihedralDeg": 270,
+      "sharedEdgeId": "BRepEdge-71",
+      "sharedEdgeStableId": "occt:v1:edge:fb8fca18b2e335dc",
+      "geometrySource": "occt"
     },
     {
       "nodeType": "adjacency",
@@ -1728,9 +2068,11 @@
       "sourceId": "BRepFace-19",
       "targetId": "BRepFace-8",
       "edgeType": "line",
-      "convexity": "unknown",
-      "sharedEdgeId": "B-Rep Edge #41",
-      "sharedEdgeStableId": "step:v1:0x2e71e5e7"
+      "convexity": "convex",
+      "dihedralDeg": 180,
+      "sharedEdgeId": "BRepEdge-48",
+      "sharedEdgeStableId": "occt:v1:edge:2551d6374b4e297e",
+      "geometrySource": "occt"
     },
     {
       "nodeType": "adjacency",
@@ -1740,8 +2082,9 @@
       "edgeType": "circle",
       "convexity": "convex",
       "dihedralDeg": 90,
-      "sharedEdgeId": "B-Rep Edge #35",
-      "sharedEdgeStableId": "step:v1:0x0ac13b24"
+      "sharedEdgeId": "BRepEdge-35",
+      "sharedEdgeStableId": "occt:v1:edge:538e36f8d971f9b1",
+      "geometrySource": "occt"
     },
     {
       "nodeType": "adjacency",
@@ -1751,8 +2094,9 @@
       "edgeType": "circle",
       "convexity": "concave",
       "dihedralDeg": 270,
-      "sharedEdgeId": "B-Rep Edge #36",
-      "sharedEdgeStableId": "step:v1:0x2f82812d"
+      "sharedEdgeId": "BRepEdge-36",
+      "sharedEdgeStableId": "occt:v1:edge:f9d695c3d8d7f992",
+      "geometrySource": "occt"
     },
     {
       "nodeType": "adjacency",
@@ -1760,10 +2104,11 @@
       "sourceId": "BRepFace-20",
       "targetId": "BRepFace-8",
       "edgeType": "line",
-      "convexity": "convex",
-      "dihedralDeg": 90,
-      "sharedEdgeId": "B-Rep Edge #42",
-      "sharedEdgeStableId": "step:v1:0x3fdc7bc5"
+      "convexity": "concave",
+      "dihedralDeg": 270,
+      "sharedEdgeId": "BRepEdge-49",
+      "sharedEdgeStableId": "occt:v1:edge:dce9e52e0c79c746",
+      "geometrySource": "occt"
     },
     {
       "nodeType": "adjacency",
@@ -1773,8 +2118,9 @@
       "edgeType": "line",
       "convexity": "concave",
       "dihedralDeg": 270,
-      "sharedEdgeId": "B-Rep Edge #44",
-      "sharedEdgeStableId": "step:v1:0xe9165e7d"
+      "sharedEdgeId": "BRepEdge-51",
+      "sharedEdgeStableId": "occt:v1:edge:a86945e76c7d1a27",
+      "geometrySource": "occt"
     },
     {
       "nodeType": "adjacency",
@@ -1784,8 +2130,9 @@
       "edgeType": "line",
       "convexity": "concave",
       "dihedralDeg": 270,
-      "sharedEdgeId": "B-Rep Edge #65",
-      "sharedEdgeStableId": "step:v1:0x3c0e394b"
+      "sharedEdgeId": "BRepEdge-72",
+      "sharedEdgeStableId": "occt:v1:edge:1f586b19ef8c760a",
+      "geometrySource": "occt"
     },
     {
       "nodeType": "adjacency",
@@ -1795,8 +2142,9 @@
       "edgeType": "line",
       "convexity": "concave",
       "dihedralDeg": 270,
-      "sharedEdgeId": "B-Rep Edge #67",
-      "sharedEdgeStableId": "step:v1:0x02fe147b"
+      "sharedEdgeId": "BRepEdge-74",
+      "sharedEdgeStableId": "occt:v1:edge:3fe5b31a66b42aa8",
+      "geometrySource": "occt"
     },
     {
       "nodeType": "adjacency",
@@ -1806,8 +2154,9 @@
       "edgeType": "line",
       "convexity": "concave",
       "dihedralDeg": 270,
-      "sharedEdgeId": "B-Rep Edge #66",
-      "sharedEdgeStableId": "step:v1:0x8ed0002d"
+      "sharedEdgeId": "BRepEdge-73",
+      "sharedEdgeStableId": "occt:v1:edge:bc98883d949bf086",
+      "geometrySource": "occt"
     },
     {
       "nodeType": "adjacency",
@@ -1815,9 +2164,11 @@
       "sourceId": "BRepFace-22",
       "targetId": "BRepFace-23",
       "edgeType": "line",
-      "convexity": "unknown",
-      "sharedEdgeId": "B-Rep Edge #69",
-      "sharedEdgeStableId": "step:v1:0x6c0ee12e"
+      "convexity": "convex",
+      "dihedralDeg": 180,
+      "sharedEdgeId": "BRepEdge-75",
+      "sharedEdgeStableId": "occt:v1:edge:946febde314594c5",
+      "geometrySource": "occt"
     },
     {
       "nodeType": "adjacency",
@@ -1827,8 +2178,9 @@
       "edgeType": "line",
       "convexity": "concave",
       "dihedralDeg": 270,
-      "sharedEdgeId": "B-Rep Edge #68",
-      "sharedEdgeStableId": "step:v1:0xbaa11fdd"
+      "sharedEdgeId": "BRepEdge-76",
+      "sharedEdgeStableId": "occt:v1:edge:bc58051a2aa6fa41",
+      "geometrySource": "occt"
     },
     {
       "nodeType": "adjacency",
@@ -1836,19 +2188,23 @@
       "sourceId": "BRepFace-23",
       "targetId": "BRepFace-24",
       "edgeType": "line",
-      "convexity": "unknown",
-      "sharedEdgeId": "B-Rep Edge #71",
-      "sharedEdgeStableId": "step:v1:0x40472f59"
+      "convexity": "concave",
+      "dihedralDeg": 180,
+      "sharedEdgeId": "BRepEdge-78",
+      "sharedEdgeStableId": "occt:v1:edge:731b526b0b1943ee",
+      "geometrySource": "occt"
     },
     {
       "nodeType": "adjacency",
       "id": "adj-BRepFace-23-BRepFace-41",
       "sourceId": "BRepFace-23",
       "targetId": "BRepFace-41",
-      "edgeType": "line",
-      "convexity": "unknown",
-      "sharedEdgeId": "B-Rep Edge #70",
-      "sharedEdgeStableId": "step:v1:0xd072fb12"
+      "edgeType": "circle",
+      "convexity": "concave",
+      "dihedralDeg": 270,
+      "sharedEdgeId": "BRepEdge-77",
+      "sharedEdgeStableId": "occt:v1:edge:58633e61cc68ab35",
+      "geometrySource": "occt"
     },
     {
       "nodeType": "adjacency",
@@ -1857,9 +2213,10 @@
       "targetId": "BRepFace-25",
       "edgeType": "line",
       "convexity": "concave",
-      "dihedralDeg": 191.917,
-      "sharedEdgeId": "B-Rep Edge #73",
-      "sharedEdgeStableId": "step:v1:0x9be2d096"
+      "dihedralDeg": 189.048,
+      "sharedEdgeId": "BRepEdge-79",
+      "sharedEdgeStableId": "occt:v1:edge:2aa17188df8a3c28",
+      "geometrySource": "occt"
     },
     {
       "nodeType": "adjacency",
@@ -1869,8 +2226,9 @@
       "edgeType": "line",
       "convexity": "concave",
       "dihedralDeg": 270,
-      "sharedEdgeId": "B-Rep Edge #72",
-      "sharedEdgeStableId": "step:v1:0x0d14f34c"
+      "sharedEdgeId": "BRepEdge-80",
+      "sharedEdgeStableId": "occt:v1:edge:69b61cce0be0d5de",
+      "geometrySource": "occt"
     },
     {
       "nodeType": "adjacency",
@@ -1879,20 +2237,22 @@
       "targetId": "BRepFace-26",
       "edgeType": "line",
       "convexity": "concave",
-      "dihedralDeg": 191.954,
-      "sharedEdgeId": "B-Rep Edge #75",
-      "sharedEdgeStableId": "step:v1:0x836a8a65"
+      "dihedralDeg": 189.048,
+      "sharedEdgeId": "BRepEdge-82",
+      "sharedEdgeStableId": "occt:v1:edge:9ca7c59aac6f023e",
+      "geometrySource": "occt"
     },
     {
       "nodeType": "adjacency",
       "id": "adj-BRepFace-25-BRepFace-41",
       "sourceId": "BRepFace-25",
       "targetId": "BRepFace-41",
-      "edgeType": "line",
+      "edgeType": "circle",
       "convexity": "concave",
-      "dihedralDeg": 287.763,
-      "sharedEdgeId": "B-Rep Edge #74",
-      "sharedEdgeStableId": "step:v1:0x040f5af3"
+      "dihedralDeg": 270,
+      "sharedEdgeId": "BRepEdge-81",
+      "sharedEdgeStableId": "occt:v1:edge:a191374a63cbd4d7",
+      "geometrySource": "occt"
     },
     {
       "nodeType": "adjacency",
@@ -1900,9 +2260,11 @@
       "sourceId": "BRepFace-26",
       "targetId": "BRepFace-27",
       "edgeType": "line",
-      "convexity": "unknown",
-      "sharedEdgeId": "B-Rep Edge #77",
-      "sharedEdgeStableId": "step:v1:0xd0646f2e"
+      "convexity": "convex",
+      "dihedralDeg": 180,
+      "sharedEdgeId": "BRepEdge-83",
+      "sharedEdgeStableId": "occt:v1:edge:d0974f56a9b9e244",
+      "geometrySource": "occt"
     },
     {
       "nodeType": "adjacency",
@@ -1912,8 +2274,9 @@
       "edgeType": "line",
       "convexity": "concave",
       "dihedralDeg": 270,
-      "sharedEdgeId": "B-Rep Edge #76",
-      "sharedEdgeStableId": "step:v1:0x8dcf5f71"
+      "sharedEdgeId": "BRepEdge-84",
+      "sharedEdgeStableId": "occt:v1:edge:04794b0bceddf6b5",
+      "geometrySource": "occt"
     },
     {
       "nodeType": "adjacency",
@@ -1921,19 +2284,23 @@
       "sourceId": "BRepFace-27",
       "targetId": "BRepFace-28",
       "edgeType": "line",
-      "convexity": "unknown",
-      "sharedEdgeId": "B-Rep Edge #78",
-      "sharedEdgeStableId": "step:v1:0x9638d238"
+      "convexity": "convex",
+      "dihedralDeg": 175.324,
+      "sharedEdgeId": "BRepEdge-85",
+      "sharedEdgeStableId": "occt:v1:edge:c60a6ceebc1479d0",
+      "geometrySource": "occt"
     },
     {
       "nodeType": "adjacency",
       "id": "adj-BRepFace-27-BRepFace-41",
       "sourceId": "BRepFace-27",
       "targetId": "BRepFace-41",
-      "edgeType": "line",
-      "convexity": "unknown",
-      "sharedEdgeId": "B-Rep Edge #79",
-      "sharedEdgeStableId": "step:v1:0x2393a9bc"
+      "edgeType": "circle",
+      "convexity": "concave",
+      "dihedralDeg": 270,
+      "sharedEdgeId": "BRepEdge-86",
+      "sharedEdgeStableId": "occt:v1:edge:2a90e08f6126bcdc",
+      "geometrySource": "occt"
     },
     {
       "nodeType": "adjacency",
@@ -1943,8 +2310,9 @@
       "edgeType": "line",
       "convexity": "convex",
       "dihedralDeg": 90,
-      "sharedEdgeId": "B-Rep Edge #81",
-      "sharedEdgeStableId": "step:v1:0x2446dfa1"
+      "sharedEdgeId": "BRepEdge-87",
+      "sharedEdgeStableId": "occt:v1:edge:a163d2e9f649f977",
+      "geometrySource": "occt"
     },
     {
       "nodeType": "adjacency",
@@ -1954,8 +2322,9 @@
       "edgeType": "line",
       "convexity": "concave",
       "dihedralDeg": 270,
-      "sharedEdgeId": "B-Rep Edge #80",
-      "sharedEdgeStableId": "step:v1:0x593c5de9"
+      "sharedEdgeId": "BRepEdge-88",
+      "sharedEdgeStableId": "occt:v1:edge:a815437797e2900a",
+      "geometrySource": "occt"
     },
     {
       "nodeType": "adjacency",
@@ -1965,8 +2334,9 @@
       "edgeType": "line",
       "convexity": "concave",
       "dihedralDeg": 270,
-      "sharedEdgeId": "B-Rep Edge #83",
-      "sharedEdgeStableId": "step:v1:0x66c643ef"
+      "sharedEdgeId": "BRepEdge-89",
+      "sharedEdgeStableId": "occt:v1:edge:27e228504f20cd9c",
+      "geometrySource": "occt"
     },
     {
       "nodeType": "adjacency",
@@ -1976,8 +2346,9 @@
       "edgeType": "line",
       "convexity": "concave",
       "dihedralDeg": 270,
-      "sharedEdgeId": "B-Rep Edge #82",
-      "sharedEdgeStableId": "step:v1:0xba801e34"
+      "sharedEdgeId": "BRepEdge-90",
+      "sharedEdgeStableId": "occt:v1:edge:1c35dc61db94378b",
+      "geometrySource": "occt"
     },
     {
       "nodeType": "adjacency",
@@ -1986,8 +2357,9 @@
       "targetId": "BRepFace-3",
       "edgeType": "circle",
       "convexity": "unknown",
-      "sharedEdgeId": "B-Rep Edge #37",
-      "sharedEdgeStableId": "step:v1:0x83ff5d10"
+      "sharedEdgeId": "BRepEdge-37",
+      "sharedEdgeStableId": "occt:v1:edge:55c8dd28ea7d1b4c",
+      "geometrySource": "ts"
     },
     {
       "nodeType": "adjacency",
@@ -1997,8 +2369,9 @@
       "edgeType": "line",
       "convexity": "concave",
       "dihedralDeg": 270,
-      "sharedEdgeId": "B-Rep Edge #85",
-      "sharedEdgeStableId": "step:v1:0xbc2ce7e1"
+      "sharedEdgeId": "BRepEdge-91",
+      "sharedEdgeStableId": "occt:v1:edge:a9208236b0829f8e",
+      "geometrySource": "occt"
     },
     {
       "nodeType": "adjacency",
@@ -2008,8 +2381,9 @@
       "edgeType": "line",
       "convexity": "concave",
       "dihedralDeg": 270,
-      "sharedEdgeId": "B-Rep Edge #84",
-      "sharedEdgeStableId": "step:v1:0xc52ab3d1"
+      "sharedEdgeId": "BRepEdge-92",
+      "sharedEdgeStableId": "occt:v1:edge:d8ac4f0afb8634b1",
+      "geometrySource": "occt"
     },
     {
       "nodeType": "adjacency",
@@ -2019,8 +2393,9 @@
       "edgeType": "line",
       "convexity": "convex",
       "dihedralDeg": 90,
-      "sharedEdgeId": "B-Rep Edge #87",
-      "sharedEdgeStableId": "step:v1:0xba01079b"
+      "sharedEdgeId": "BRepEdge-93",
+      "sharedEdgeStableId": "occt:v1:edge:d9ed094d90e3b096",
+      "geometrySource": "occt"
     },
     {
       "nodeType": "adjacency",
@@ -2030,8 +2405,9 @@
       "edgeType": "line",
       "convexity": "concave",
       "dihedralDeg": 270,
-      "sharedEdgeId": "B-Rep Edge #86",
-      "sharedEdgeStableId": "step:v1:0xd08fe832"
+      "sharedEdgeId": "BRepEdge-94",
+      "sharedEdgeStableId": "occt:v1:edge:edb46eb899838354",
+      "geometrySource": "occt"
     },
     {
       "nodeType": "adjacency",
@@ -2041,8 +2417,9 @@
       "edgeType": "line",
       "convexity": "concave",
       "dihedralDeg": 270,
-      "sharedEdgeId": "B-Rep Edge #89",
-      "sharedEdgeStableId": "step:v1:0x7c5d6def"
+      "sharedEdgeId": "BRepEdge-95",
+      "sharedEdgeStableId": "occt:v1:edge:8c6385f1e9b473fb",
+      "geometrySource": "occt"
     },
     {
       "nodeType": "adjacency",
@@ -2052,8 +2429,9 @@
       "edgeType": "line",
       "convexity": "concave",
       "dihedralDeg": 270,
-      "sharedEdgeId": "B-Rep Edge #88",
-      "sharedEdgeStableId": "step:v1:0x698b2992"
+      "sharedEdgeId": "BRepEdge-96",
+      "sharedEdgeStableId": "occt:v1:edge:b24c6bb243f87f29",
+      "geometrySource": "occt"
     },
     {
       "nodeType": "adjacency",
@@ -2063,8 +2441,9 @@
       "edgeType": "line",
       "convexity": "concave",
       "dihedralDeg": 270,
-      "sharedEdgeId": "B-Rep Edge #90",
-      "sharedEdgeStableId": "step:v1:0x6661ae8d"
+      "sharedEdgeId": "BRepEdge-97",
+      "sharedEdgeStableId": "occt:v1:edge:9071da840d4ad336",
+      "geometrySource": "occt"
     },
     {
       "nodeType": "adjacency",
@@ -2074,8 +2453,9 @@
       "edgeType": "line",
       "convexity": "concave",
       "dihedralDeg": 270,
-      "sharedEdgeId": "B-Rep Edge #91",
-      "sharedEdgeStableId": "step:v1:0x18501a20"
+      "sharedEdgeId": "BRepEdge-98",
+      "sharedEdgeStableId": "occt:v1:edge:92979ce5e7c04a82",
+      "geometrySource": "occt"
     },
     {
       "nodeType": "adjacency",
@@ -2083,10 +2463,11 @@
       "sourceId": "BRepFace-34",
       "targetId": "BRepFace-35",
       "edgeType": "line",
-      "convexity": "concave",
-      "dihedralDeg": 187.788,
-      "sharedEdgeId": "B-Rep Edge #92",
-      "sharedEdgeStableId": "step:v1:0x47bd4502"
+      "convexity": "convex",
+      "dihedralDeg": 180,
+      "sharedEdgeId": "BRepEdge-99",
+      "sharedEdgeStableId": "occt:v1:edge:d975097895dfaf55",
+      "geometrySource": "occt"
     },
     {
       "nodeType": "adjacency",
@@ -2096,8 +2477,9 @@
       "edgeType": "line",
       "convexity": "concave",
       "dihedralDeg": 270,
-      "sharedEdgeId": "B-Rep Edge #93",
-      "sharedEdgeStableId": "step:v1:0xec8650f5"
+      "sharedEdgeId": "BRepEdge-100",
+      "sharedEdgeStableId": "occt:v1:edge:00d4ae02c59e8514",
+      "geometrySource": "occt"
     },
     {
       "nodeType": "adjacency",
@@ -2106,20 +2488,22 @@
       "targetId": "BRepFace-36",
       "edgeType": "line",
       "convexity": "concave",
-      "dihedralDeg": 184.43,
-      "sharedEdgeId": "B-Rep Edge #95",
-      "sharedEdgeStableId": "step:v1:0xc1dd1789"
+      "dihedralDeg": 184.338,
+      "sharedEdgeId": "BRepEdge-102",
+      "sharedEdgeStableId": "occt:v1:edge:e62f64873b6ec569",
+      "geometrySource": "occt"
     },
     {
       "nodeType": "adjacency",
       "id": "adj-BRepFace-35-BRepFace-41",
       "sourceId": "BRepFace-35",
       "targetId": "BRepFace-41",
-      "edgeType": "line",
+      "edgeType": "circle",
       "convexity": "concave",
-      "dihedralDeg": 298.968,
-      "sharedEdgeId": "B-Rep Edge #94",
-      "sharedEdgeStableId": "step:v1:0x139e56fc"
+      "dihedralDeg": 270,
+      "sharedEdgeId": "BRepEdge-101",
+      "sharedEdgeStableId": "occt:v1:edge:47ed6cb1bced6932",
+      "geometrySource": "occt"
     },
     {
       "nodeType": "adjacency",
@@ -2127,9 +2511,11 @@
       "sourceId": "BRepFace-36",
       "targetId": "BRepFace-37",
       "edgeType": "line",
-      "convexity": "unknown",
-      "sharedEdgeId": "B-Rep Edge #97",
-      "sharedEdgeStableId": "step:v1:0xf2685a80"
+      "convexity": "convex",
+      "dihedralDeg": 175.031,
+      "sharedEdgeId": "BRepEdge-103",
+      "sharedEdgeStableId": "occt:v1:edge:b41a6db908f0ab9e",
+      "geometrySource": "occt"
     },
     {
       "nodeType": "adjacency",
@@ -2139,8 +2525,9 @@
       "edgeType": "line",
       "convexity": "concave",
       "dihedralDeg": 270,
-      "sharedEdgeId": "B-Rep Edge #96",
-      "sharedEdgeStableId": "step:v1:0x9b84cb75"
+      "sharedEdgeId": "BRepEdge-104",
+      "sharedEdgeStableId": "occt:v1:edge:fd2a5cb95e1d2dda",
+      "geometrySource": "occt"
     },
     {
       "nodeType": "adjacency",
@@ -2148,19 +2535,23 @@
       "sourceId": "BRepFace-37",
       "targetId": "BRepFace-38",
       "edgeType": "line",
-      "convexity": "unknown",
-      "sharedEdgeId": "B-Rep Edge #98",
-      "sharedEdgeStableId": "step:v1:0x970b863a"
+      "convexity": "convex",
+      "dihedralDeg": 172.692,
+      "sharedEdgeId": "BRepEdge-105",
+      "sharedEdgeStableId": "occt:v1:edge:e39b7725c12abb26",
+      "geometrySource": "occt"
     },
     {
       "nodeType": "adjacency",
       "id": "adj-BRepFace-37-BRepFace-41",
       "sourceId": "BRepFace-37",
       "targetId": "BRepFace-41",
-      "edgeType": "line",
-      "convexity": "unknown",
-      "sharedEdgeId": "B-Rep Edge #99",
-      "sharedEdgeStableId": "step:v1:0xc2939f6d"
+      "edgeType": "circle",
+      "convexity": "concave",
+      "dihedralDeg": 270,
+      "sharedEdgeId": "BRepEdge-106",
+      "sharedEdgeStableId": "occt:v1:edge:d5a0dab0b791a997",
+      "geometrySource": "occt"
     },
     {
       "nodeType": "adjacency",
@@ -2169,9 +2560,10 @@
       "targetId": "BRepFace-39",
       "edgeType": "line",
       "convexity": "convex",
-      "dihedralDeg": 131.527,
-      "sharedEdgeId": "B-Rep Edge #101",
-      "sharedEdgeStableId": "step:v1:0xeab193e2"
+      "dihedralDeg": 180,
+      "sharedEdgeId": "BRepEdge-107",
+      "sharedEdgeStableId": "occt:v1:edge:7f6b8bba12d2dec6",
+      "geometrySource": "occt"
     },
     {
       "nodeType": "adjacency",
@@ -2181,8 +2573,9 @@
       "edgeType": "line",
       "convexity": "concave",
       "dihedralDeg": 270,
-      "sharedEdgeId": "B-Rep Edge #100",
-      "sharedEdgeStableId": "step:v1:0xe8d5a080"
+      "sharedEdgeId": "BRepEdge-108",
+      "sharedEdgeStableId": "occt:v1:edge:e2b96d95cb00c6fa",
+      "geometrySource": "occt"
     },
     {
       "nodeType": "adjacency",
@@ -2191,20 +2584,22 @@
       "targetId": "BRepFace-40",
       "edgeType": "line",
       "convexity": "convex",
-      "dihedralDeg": 131.527,
-      "sharedEdgeId": "B-Rep Edge #102",
-      "sharedEdgeStableId": "step:v1:0x8c6ab1e8"
+      "dihedralDeg": 180,
+      "sharedEdgeId": "BRepEdge-109",
+      "sharedEdgeStableId": "occt:v1:edge:c23d3696c117b438",
+      "geometrySource": "occt"
     },
     {
       "nodeType": "adjacency",
       "id": "adj-BRepFace-39-BRepFace-41",
       "sourceId": "BRepFace-39",
       "targetId": "BRepFace-41",
-      "edgeType": "line",
+      "edgeType": "circle",
       "convexity": "concave",
-      "dihedralDeg": 249.649,
-      "sharedEdgeId": "B-Rep Edge #103",
-      "sharedEdgeStableId": "step:v1:0xcdee33e2"
+      "dihedralDeg": 270,
+      "sharedEdgeId": "BRepEdge-110",
+      "sharedEdgeStableId": "occt:v1:edge:aa6e33317d71b64f",
+      "geometrySource": "occt"
     },
     {
       "nodeType": "adjacency",
@@ -2213,8 +2608,9 @@
       "targetId": "BRepFace-6",
       "edgeType": "circle",
       "convexity": "unknown",
-      "sharedEdgeId": "B-Rep Edge #38",
-      "sharedEdgeStableId": "step:v1:0x54255882"
+      "sharedEdgeId": "BRepEdge-39",
+      "sharedEdgeStableId": "occt:v1:edge:0d8b13c0a0d8883e",
+      "geometrySource": "ts"
     },
     {
       "nodeType": "adjacency",
@@ -2224,8 +2620,9 @@
       "edgeType": "line",
       "convexity": "concave",
       "dihedralDeg": 270,
-      "sharedEdgeId": "B-Rep Edge #104",
-      "sharedEdgeStableId": "step:v1:0x3cf26c15"
+      "sharedEdgeId": "BRepEdge-111",
+      "sharedEdgeStableId": "occt:v1:edge:8bcb30c914272d46",
+      "geometrySource": "occt"
     },
     {
       "nodeType": "adjacency",
@@ -2234,8 +2631,9 @@
       "targetId": "BRepFace-5",
       "edgeType": "circle",
       "convexity": "unknown",
-      "sharedEdgeId": "B-Rep Edge #39",
-      "sharedEdgeStableId": "step:v1:0x733ce992"
+      "sharedEdgeId": "BRepEdge-44",
+      "sharedEdgeStableId": "occt:v1:edge:b869a317ee52e8c3",
+      "geometrySource": "ts"
     },
     {
       "nodeType": "adjacency",
@@ -2244,8 +2642,20 @@
       "targetId": "BRepFace-7",
       "edgeType": "circle",
       "convexity": "unknown",
-      "sharedEdgeId": "B-Rep Edge #40",
-      "sharedEdgeStableId": "step:v1:0x9a1e8906"
+      "sharedEdgeId": "BRepEdge-41",
+      "sharedEdgeStableId": "occt:v1:edge:4fdc8b085e7b2558",
+      "geometrySource": "ts"
+    },
+    {
+      "nodeType": "adjacency",
+      "id": "adj-BRepFace-4-BRepFace-7",
+      "sourceId": "BRepFace-4",
+      "targetId": "BRepFace-7",
+      "edgeType": "circle",
+      "convexity": "unknown",
+      "sharedEdgeId": "BRepEdge-42",
+      "sharedEdgeStableId": "occt:v1:edge:0d6b5e71821e789b",
+      "geometrySource": "ts"
     },
     {
       "nodeType": "adjacency",
@@ -2255,128 +2665,129 @@
       "edgeType": "line",
       "convexity": "concave",
       "dihedralDeg": 270,
-      "sharedEdgeId": "B-Rep Edge #43",
-      "sharedEdgeStableId": "step:v1:0x7ca0dee9"
+      "sharedEdgeId": "BRepEdge-50",
+      "sharedEdgeStableId": "occt:v1:edge:8ed7f136b75aecc2",
+      "geometrySource": "occt"
     },
     {
       "nodeType": "appliesTo",
-      "id": "applies-dim-10-#1198-0",
+      "id": "applies-dim-10-BRepFace-6-0",
       "sourceId": "dim-10",
-      "targetId": "#1198",
-      "resolution": "missing",
-      "resolutionReason": "stable-signature-unavailable"
+      "targetId": "BRepFace-6",
+      "resolution": "resolved",
+      "resolutionReason": "unique-stable-signature"
     },
     {
       "nodeType": "appliesTo",
-      "id": "applies-dim-10-#1199-1",
+      "id": "applies-dim-10-BRepFace-7-1",
       "sourceId": "dim-10",
-      "targetId": "#1199",
-      "resolution": "missing",
-      "resolutionReason": "stable-signature-unavailable"
+      "targetId": "BRepFace-7",
+      "resolution": "resolved",
+      "resolutionReason": "unique-stable-signature"
     },
     {
       "nodeType": "appliesTo",
-      "id": "applies-dim-5-#1197-0",
+      "id": "applies-dim-5-BRepFace-5-0",
       "sourceId": "dim-5",
-      "targetId": "#1197",
-      "resolution": "missing",
-      "resolutionReason": "stable-signature-unavailable"
+      "targetId": "BRepFace-5",
+      "resolution": "resolved",
+      "resolutionReason": "unique-stable-signature"
     },
     {
       "nodeType": "appliesTo",
-      "id": "applies-dim-6-#1194-0",
+      "id": "applies-dim-6-BRepFace-2-0",
       "sourceId": "dim-6",
-      "targetId": "#1194",
-      "resolution": "missing",
-      "resolutionReason": "stable-signature-unavailable"
+      "targetId": "BRepFace-2",
+      "resolution": "resolved",
+      "resolutionReason": "unique-stable-signature"
     },
     {
       "nodeType": "appliesTo",
-      "id": "applies-dim-7-#1195-1",
+      "id": "applies-dim-7-BRepFace-3-1",
       "sourceId": "dim-7",
-      "targetId": "#1195",
-      "resolution": "missing",
-      "resolutionReason": "stable-signature-unavailable"
+      "targetId": "BRepFace-3",
+      "resolution": "resolved",
+      "resolutionReason": "unique-stable-signature"
     },
     {
       "nodeType": "appliesTo",
-      "id": "applies-dim-7-#1196-0",
+      "id": "applies-dim-7-BRepFace-4-0",
       "sourceId": "dim-7",
-      "targetId": "#1196",
-      "resolution": "missing",
-      "resolutionReason": "stable-signature-unavailable"
+      "targetId": "BRepFace-4",
+      "resolution": "resolved",
+      "resolutionReason": "unique-stable-signature"
     },
     {
       "nodeType": "appliesTo",
-      "id": "applies-dim-8-#1192-1",
+      "id": "applies-dim-8-BRepFace-0-1",
       "sourceId": "dim-8",
-      "targetId": "#1192",
-      "resolution": "missing",
-      "resolutionReason": "stable-signature-unavailable"
+      "targetId": "BRepFace-0",
+      "resolution": "resolved",
+      "resolutionReason": "unique-stable-signature"
     },
     {
       "nodeType": "appliesTo",
-      "id": "applies-dim-8-#1193-0",
+      "id": "applies-dim-8-BRepFace-1-0",
       "sourceId": "dim-8",
-      "targetId": "#1193",
-      "resolution": "missing",
-      "resolutionReason": "stable-signature-unavailable"
+      "targetId": "BRepFace-1",
+      "resolution": "resolved",
+      "resolutionReason": "unique-stable-signature"
     },
     {
       "nodeType": "appliesTo",
-      "id": "applies-dim-9-#1194-0",
+      "id": "applies-dim-9-BRepFace-2-0",
       "sourceId": "dim-9",
-      "targetId": "#1194",
-      "resolution": "missing",
-      "resolutionReason": "stable-signature-unavailable"
+      "targetId": "BRepFace-2",
+      "resolution": "resolved",
+      "resolutionReason": "unique-stable-signature"
     },
     {
       "nodeType": "appliesTo",
-      "id": "applies-tv-1-#1193-0",
+      "id": "applies-tv-1-BRepFace-1-0",
       "sourceId": "tv-1",
-      "targetId": "#1193",
-      "resolution": "missing",
-      "resolutionReason": "stable-signature-unavailable"
+      "targetId": "BRepFace-1",
+      "resolution": "resolved",
+      "resolutionReason": "unique-stable-signature"
     },
     {
       "nodeType": "appliesTo",
-      "id": "applies-tv-2-#1192-0",
+      "id": "applies-tv-2-BRepFace-0-0",
       "sourceId": "tv-2",
-      "targetId": "#1192",
-      "resolution": "missing",
-      "resolutionReason": "stable-signature-unavailable"
+      "targetId": "BRepFace-0",
+      "resolution": "resolved",
+      "resolutionReason": "unique-stable-signature"
     },
     {
       "nodeType": "appliesTo",
-      "id": "applies-tv-3-#1194-0",
+      "id": "applies-tv-3-BRepFace-2-0",
       "sourceId": "tv-3",
-      "targetId": "#1194",
-      "resolution": "missing",
-      "resolutionReason": "stable-signature-unavailable"
+      "targetId": "BRepFace-2",
+      "resolution": "resolved",
+      "resolutionReason": "unique-stable-signature"
     },
     {
       "nodeType": "appliesTo",
-      "id": "applies-tv-4-#1197-0",
+      "id": "applies-tv-4-BRepFace-5-0",
       "sourceId": "tv-4",
-      "targetId": "#1197",
-      "resolution": "missing",
-      "resolutionReason": "stable-signature-unavailable"
+      "targetId": "BRepFace-5",
+      "resolution": "resolved",
+      "resolutionReason": "unique-stable-signature"
     },
     {
       "nodeType": "datumOf",
-      "id": "datumOf-d-A-#1193-0",
+      "id": "datumOf-d-A-BRepFace-1-0",
       "sourceId": "d-A",
-      "targetId": "#1193",
-      "resolution": "missing",
-      "resolutionReason": "stable-signature-unavailable"
+      "targetId": "BRepFace-1",
+      "resolution": "resolved",
+      "resolutionReason": "unique-stable-signature"
     },
     {
       "nodeType": "datumOf",
-      "id": "datumOf-d-B-#1197-0",
+      "id": "datumOf-d-B-BRepFace-5-0",
       "sourceId": "d-B",
-      "targetId": "#1197",
-      "resolution": "missing",
-      "resolutionReason": "stable-signature-unavailable"
+      "targetId": "BRepFace-5",
+      "resolution": "resolved",
+      "resolutionReason": "unique-stable-signature"
     },
     {
       "nodeType": "defines",
@@ -2480,14 +2891,20 @@
     },
     {
       "nodeType": "memberFace",
-      "id": "member-feat-4-BRepFace-25",
+      "id": "member-feat-4-BRepFace-23",
       "sourceId": "feat-4",
+      "targetId": "BRepFace-23"
+    },
+    {
+      "nodeType": "memberFace",
+      "id": "member-feat-5-BRepFace-25",
+      "sourceId": "feat-5",
       "targetId": "BRepFace-25"
     },
     {
       "nodeType": "memberFace",
-      "id": "member-feat-5-BRepFace-35",
-      "sourceId": "feat-5",
+      "id": "member-feat-6-BRepFace-35",
+      "sourceId": "feat-6",
       "targetId": "BRepFace-35"
     },
     {

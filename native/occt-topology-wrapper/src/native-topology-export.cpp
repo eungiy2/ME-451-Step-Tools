@@ -229,13 +229,16 @@ bool NearestSurfacePoint (
         return false;
     }
     try {
-        GeomAPI_ProjectPointOnSurf projection (reference, surface);
+        GeomAPI_ProjectPointOnSurf projection (
+            reference,
+            surface,
+            Precision::Confusion ()
+        );
         if (!projection.IsDone () || projection.NbPoints () < 1) {
             return false;
         }
         nearest = projection.NearestPoint ();
-        u = projection.LowerDistanceParameter ();
-        v = projection.UpperDistanceParameter ();
+        projection.LowerDistanceParameters (u, v);
         return true;
     } catch (const Standard_Failure&) {
         return false;
@@ -260,7 +263,7 @@ std::string FaceConvexityLabel (const TopoDS_Face& face)
         gp_Pnt center;
         Standard_Boolean radialFromCenter = Standard_False;
         if (type == GeomAbs_Cylinder) {
-            const gp_Cyl& cylinder = surface.Cylinder ();
+            const gp_Cylinder cylinder = surface.Cylinder ();
             axisDirection = cylinder.Axis ().Direction ().XYZ ();
             center = cylinder.Location ();
         } else if (type == GeomAbs_Sphere) {
@@ -355,7 +358,7 @@ emscripten::val BuildAnalyticSurface (const TopoDS_Face& face)
                 break;
             }
             case GeomAbs_Cylinder: {
-                const gp_Cyl& cylinder = surface.Cylinder ();
+                const gp_Cylinder cylinder = surface.Cylinder ();
                 emscripten::val params (emscripten::val::object ());
                 emscripten::val axisValue (emscripten::val::array ());
                 emscripten::val centerValue (emscripten::val::array ());
@@ -458,7 +461,12 @@ bool EdgeMidpointFaceNormal (
         Handle(Geom2d_Curve) pcurve;
         Standard_Real firstParameter;
         Standard_Real lastParameter;
-        BRep_Tool::CurveOnSurface (edge, face, pcurve, firstParameter, lastParameter);
+        pcurve = BRep_Tool::CurveOnSurface (
+            edge,
+            face,
+            firstParameter,
+            lastParameter
+        );
         if (!pcurve.IsNull () &&
             !Precision::IsInfinite (firstParameter) &&
             !Precision::IsInfinite (lastParameter)) {
