@@ -46,6 +46,20 @@ try {
   assert.match(exporter, /meshObject\.set \("brep_edges", edges\)/);
   assert.match(exporter, /meshObject\.set \("brep_loops", loops\)/);
   assert.match(exporter, /meshObject\.set \("topology_source", "occt"\)/);
+  assert.match(exporter, /meshObject\.set \("brep_face_descriptors", faceDescriptors\)/);
+
+  // Kernel graph attributes: the OCCT kernel must emit the exact surface
+  // parameters, outward normals at edge midpoints, face convexity, and the
+  // per-contact dihedral classification consumed by the graph exporter.
+  assert.match(exporter, /faceObject\.set \("convexity", FaceConvexityLabel \(face\)\)/);
+  assert.match(exporter, /faceObject\.set \("centroid_point"/);
+  assert.match(exporter, /faceObject\.set \("centroid_normal"/);
+  assert.match(exporter, /faceObject\.set \("analytic", BuildAnalyticSurface \(face\)\)/);
+  assert.match(exporter, /edgeObject\.set \("midpoint", midpointValue\)/);
+  assert.match(exporter, /edgeObject\.set \("normals", normalsValue\)/);
+  assert.match(exporter, /edgeObject\.set \("contacts", contacts\)/);
+  assert.match(exporter, /GeomAPI_ProjectPointOnSurf/);
+  assert.match(exporter, /GeomLProp_SLProps/);
 
   console.log("OCCT native-topology wrapper preparation verified.");
 } finally {

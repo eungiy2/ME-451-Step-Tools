@@ -13,12 +13,14 @@ import {
   Sliders,
   Ruler,
   GripVertical,
+  Download,
 } from "lucide-react";
 import { parseStepFile, generateSampleStepText, StepParseResult } from "./utils/stepParser";
 import { parseStepWithOcct } from "./utils/stepOcctParser";
 import { loadOcct } from "./utils/occtLoader";
 import { autoGenerateFaceMapping } from "./utils/geometryClassifier";
 import { enrichPmiTopologyReferences } from "./utils/pmiTopologyReferences";
+import { exportGraph, type ExportGraphResult } from "./utils/graphExporter";
 import CadCanvas3D from "./components/CadCanvas3D";
 import * as THREE from "three";
 
@@ -827,6 +829,34 @@ export default function App() {
     }
   };
 
+  // Export the loaded part as a versioned graph (docs/EXPORT_GRAPH_PLAN.md)
+  const handleExportGraph = () => {
+    if (!parsedMetadata || !occtParsedResult) {
+      setErrorMsg("Load a STEP part before exporting a graph.");
+      return;
+    }
+    try {
+      const graph: ExportGraphResult = exportGraph({
+        parsed: parsedMetadata,
+        occtResult: occtParsedResult,
+        faceMapping: customFaceMapping,
+      });
+      const fileName = `${parsedMetadata.fileName.replace(/\.stp$/i, "")}.graph.json`;
+      const blob = new Blob([JSON.stringify(graph, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = fileName;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+    } catch (err: any) {
+      console.error("Graph export failure:", err);
+      setErrorMsg(err.message || "Graph export failed.");
+    }
+  };
+
   const handleNistSampleSelection = async (sampleName: string) => {
     setSelectedNistSample(sampleName);
     if (!sampleName) return;
@@ -908,6 +938,20 @@ export default function App() {
                   ))}
                 </select>
               </label>
+              <button
+                type="button"
+                onClick={handleExportGraph}
+                disabled={!parsedMetadata || !occtParsedResult}
+                title={parsedMetadata && occtParsedResult
+                  ? "Export the loaded part as a versioned graph JSON"
+                  : "Load a STEP part before exporting a graph"}
+                className="bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 px-3 sm:px-4 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 sm:gap-2 cursor-pointer shadow-sm font-sans disabled:opacity-40 disabled:cursor-not-allowed"
+                id="header_export_graph_button"
+              >
+                <Download className="w-3.5 h-3.5" />
+                Export Graph
+              </button>
+
             </div>
           )}
         </div>

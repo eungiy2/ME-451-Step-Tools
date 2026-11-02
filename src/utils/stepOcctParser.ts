@@ -15,6 +15,12 @@ export interface OcctTessellationParams {
   angularDeflection?: number;
   topologyMode?: OcctTopologyMode;
   nativeWrapperUrl?: string;
+  /**
+   * Pre-constructed OCCT instance (e.g. a Node script that loads the local
+   * `occt-import-js` wasm with a filesystem locateFile because the CDN/global
+   * wrapper is unavailable). When provided, the loader is not invoked.
+   */
+  occtInstance?: any;
 }
 
 /**
@@ -27,10 +33,10 @@ export async function parseStepWithOcct(
   params: OcctTessellationParams = {}
 ): Promise<any> {
   const loadOptions = resolveOcctLoadOptions({
-    topologyMode: params.topologyMode,
+    topologyMode: params.occtInstance ? "tessellation" : params.topologyMode,
     nativeWrapperUrl: params.nativeWrapperUrl,
   });
-  const occt = await loadOcct(loadOptions);
+  const occt = params.occtInstance || await loadOcct(loadOptions);
   
   // Gather linear and angular deflection bounds
   const linearDeflection = params.linearDeflection ?? 0.1;
@@ -206,6 +212,13 @@ export async function parseStepWithOcct(
               nativeBounds: face.bounds,
               nativeLoopIds: face.loopIds,
               nativeEdgeIds: face.edgeIds,
+              // Kernel graph attributes (exact analytic surface parameters,
+              // face convexity, and the surface point/normal nearest the
+              // center of gravity) consumed by the graph exporter.
+              kernelConvexity: face.convexity,
+              analytic: face.analytic,
+              kernelCentroidPoint: face.centroidPoint,
+              kernelCentroidNormal: face.centroidNormal,
             });
           });
 
